@@ -5,6 +5,8 @@ import os.path as op
 import logging
 from astropy.table import Table
 from lumfuncmcmc import LumFuncMCMC
+import VmaxLumFunc as V
+from scipy.optimize import fsolve
 import configLF
 from distutils.dir_util import mkpath
 
@@ -80,13 +82,17 @@ def parse_args(argv=None):
                         help='''Effective survey area in square arcseconds''',
                         type=float, default=None)
 
+    parser.add_argument("-mcf", "--min_comp_frac",
+                        help='''Minimum completeness fraction considered''',
+                        type=float, default=None)                    
+
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
     args.log = setup_logging()
 
     # Use config values if none are set in the input
     arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh',
-    'param_percentiles', 'output_dict']
+    'min_comp_frac', 'param_percentiles', 'output_dict']
 
     for arg_i in arg_inputs:
         try:
@@ -100,25 +106,31 @@ def parse_args(argv=None):
 def read_input_file(args):
     datfile = Table.read(args.filename,format='ascii')
     z = datfile['z']
+    root = fsolve(lambda x: V.p(x,args.Flim,args.alpha)-args.min_comp_frac,[args.Flim])[0]
     try:
         flux = datfile['%s_flux'%(args.line_name)]
-        cond = flux>0.0
+        if max(flux)>1.0e-5: 
+            cond = flux>1.0e17*root
+        else:
+            cond = flux>root
         flux_e = datfile['%s_flux_e'%(args.line_name)]
         flux, flux_e = flux[cond], flux_e[cond]
     except:
         flux, flux_e = None, None
-    try: 
+    if '%s_lum'%(args.line_name) in datfile.columns: 
         lum = datfile['%s_lum'%(args.line_name)]
-        cond = lum>0.0
+        DL = np.zeros(len(z))
+        for i,zi in enumerate(z):
+            DL[i] = V.dLz(zi)
+        lumflux = 10**lum/(4.0*np.pi*(DL*3.086e24)**2)
+        cond = lumflux>root
         lum = lum[cond]
-    except: 
-        lum = None
-    try: 
-        lum_e = datfile['%s_lum_e'%(args.line_name)]
-        cond = lum_e>0.0
-        lum_e = lum_e[cond]
-    except: 
-        lum_e = None
+        if '%s_lum_e'%(args.line_name) in datfile.columns:
+            lum_e = datfile['%s_lum'%(args.line_name)][cond]
+        else:
+            lum_e = None
+    else: 
+        lum, lum_e = None, None
     z = z[cond]
     return z, flux, flux_e, lum, lum_e
 
@@ -164,7 +176,7 @@ def main(argv=None):
     print "Finished fitting model and about to create outputs"
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
-        LFmod.triangle_plot('LFMCMCOut/triangle_%s_%d_%d' % (args.line_name, args.nbins, args.nboot), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('LFMCMCOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
         print "Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)"
     else:
         LFmod.set_median_fit()
@@ -172,19 +184,19 @@ def main(argv=None):
     names.append('Ln Prob')
     if args.output_dict['fitposterior']: 
         T = Table(LFmod.samples, names=names)
-        T.write('LFMCMCOut/fitposterior_%s_%d_%d.dat' % (args.line_name, args.nbins, args.nboot),
+        T.write('LFMCMCOut/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print "Finished writing fitposterior file"
     if args.output_dict['bestfitLF']:
         T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
                     names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
-        T.write('LFMCMCOut/bestfitLF_%s_%d_%d.dat' % (args.line_name, args.nbins, args.nboot),
+        T.write('LFMCMCOut/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print "Finished writing bestfitLF file"
     if args.output_dict['VeffLF']:
         T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                     names=['Luminosity', 'BinLF', 'BinLFErr'])
-        T.write('LFMCMCOut/VeffLF_%s_%d_%d.dat' % (args.line_name, args.nbins, args.nboot),
+        T.write('LFMCMCOut/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print "Finished writing VeffLF file"
 

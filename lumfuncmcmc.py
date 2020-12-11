@@ -459,8 +459,8 @@ class LumFuncMCMC:
         w = fig.get_figwidth()
         fig.set_figwidth(w-(len(indarr)-13)*0.025*w)
         ax1 = fig.add_subplot(3, 1, 1)
-        ax1.set_position([0.38-0.008*(len(indarr)-4), 0.82-0.001*(len(indarr)-4), 
-                          0.60+0.008*(len(indarr)-4), 0.15+0.001*(len(indarr)-4)])
+        ax1.set_position([0.50-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 
+                          0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)])
         self.add_LumFunc_plot(ax1)
         self.add_subplots(ax1,nsamples)
         fig.savefig("%s.%s" % (outname,imgtype), dpi=200)
