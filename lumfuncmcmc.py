@@ -69,9 +69,9 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha):
 class LumFuncMCMC:
     def __init__(self,z,flux=None,flux_e=None,Flim=2.7e-17,alpha=-2.06,
                  line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
-                 lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,
-                 sch_al=-1.6,sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
-                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000):
+                 lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
+                 sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],phistar=-3.0,
+                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -118,6 +118,8 @@ class LumFuncMCMC:
             The number of walkers for emcee when fitting a model
         nsteps : int
             The number of steps each walker will make when fitting a model
+        root: Float
+        Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
         '''
         if flux is not None: 
             self.flux = 1.0e-17*flux
@@ -129,6 +131,7 @@ class LumFuncMCMC:
         self.zmin, self.zmax = min(self.z), max(self.z)
         self.Flim = Flim
         self.alpha = alpha
+        self.root = root
         self.line_name = line_name
         self.line_plot_name = line_plot_name
         self.setDLdVdz()
@@ -147,16 +150,18 @@ class LumFuncMCMC:
         self.setup_logging()
 
     def setDLdVdz(self):
-        ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3) '''
+        ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = np.zeros(len(self.z))
         zint = np.linspace(0.95*self.zmin,1.05*self.zmax,len(self.z))
-        dVdzarr, DLarr = np.zeros(len(zint)), np.zeros(len(zint))
+        dVdzarr, DLarr, minlum = np.zeros(len(zint)), np.zeros(len(zint)), np.zeros(len(zint))
         for i,zi in enumerate(self.z):
             self.DL[i] = V.dLz(zi) # In Mpc
             DLarr[i] = V.dLz(zint[i])
             dVdzarr[i] = V.dVdz(zint[i])
+            minlum[i] = np.log10(4.0*np.pi*(DLarr[i]*3.086e24)**2 * self.root)
         self.DLf = interp1d(zint,DLarr)
         self.dVdzf = interp1d(zint,dVdzarr)
+        self.minlumf = interp1d(zint,minlum)
 
     def setOmegaLz(self):
         ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
@@ -252,12 +257,13 @@ class LumFuncMCMC:
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
-        logL = np.linspace(self.Lc,self.Lh,101)
+        # logL = np.linspace(self.Lc,self.Lh,101)
         zarr = np.linspace(self.zmin,self.zmax,101)
         dz = zarr[1]-zarr[0]
         zmid = np.linspace(self.zmin+dz/2.0,self.zmin-dz/2.0,len(zarr)-1)
         fullint = 0.0
         for i, zi in enumerate(zmid):
+            logL = np.linspace(self.minlumf(zi),self.Lh,101)
             integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
             fullint += trapz(integ,logL)*dz
         return lnpart - fullint
@@ -354,7 +360,7 @@ class LumFuncMCMC:
         self.phifunc = np.zeros(len(self.lum))
         for i in range(len(self.lum)):
             self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,self.Flim,self.alpha)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,self.root)
 
     def calcModLumFunc(self):
         ''' Calculate modeled ("observed") luminosity function given class Schechter parameters
@@ -406,8 +412,8 @@ class LumFuncMCMC:
     def add_LumFunc_plot(self,ax1):
         """ Set up the plot for the luminosity function """
         ax1.set_yscale('log')
-        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)")
-        ax1.set_ylabel(r"$\phi_{\rm{obs}}$ (Number Mpc$^{-3}$ dex$^{-1}$)")
+        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)",fontsize='x-small')
+        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)",fontsize='xx-small')
         ax1.minorticks_on()
 
     def add_subplots(self,ax1,nsamples,rndsamples=200):

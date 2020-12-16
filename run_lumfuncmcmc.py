@@ -104,9 +104,39 @@ def parse_args(argv=None):
     return args
 
 def read_input_file(args):
+    """ Function to read in input ascii file with properly named columns.
+    Columns should include redshifts (header 'z') and a (linear) flux (header 
+    'LineorBandName_flux') in 1.0e-17 erg/cm^2/s or log luminosity (header 
+    'LineorBandName_lum') in log erg/s. Errors can be included with headers
+    'LineorBandName_flux_e' or 'LineorBandName_lum_e', with the same units.
+
+    Input
+    -----
+    args : class
+        The args class is carried from function to function with information
+        from command line input and config.py
+
+    Return
+    ------
+    z: Numpy 1-D Array
+        Source redshifts
+    flux: Numpy 1-D Array
+        Source fluxes (1.0e-17 erg/cm^2/s or None if not in input file)
+    flux_e: Numpy 1-D Array
+        Source flux errors (1.0e-17 erg/cm^2/s or None if not in input file)
+    lum: Numpy 1-D Array
+        Source log luminosities (log erg/s or None if not in input file)
+    lum_e: Numpy 1-D Array
+        Source log luminosity errors (log erg/s or oNone if not in input file)
+    root: Float
+        Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
+    """
     datfile = Table.read(args.filename,format='ascii')
     z = datfile['z']
-    root = fsolve(lambda x: V.p(x,args.Flim,args.alpha)-args.min_comp_frac,[args.Flim])[0]
+    if abs(args.min_comp_frac-0.0)<1.0e-6:
+        root = 0.0
+    else:
+        root = fsolve(lambda x: V.p(x,args.Flim,args.alpha)-args.min_comp_frac,[args.Flim])[0]
     try:
         flux = datfile['%s_flux'%(args.line_name)]
         if max(flux)>1.0e-5: 
@@ -132,10 +162,10 @@ def read_input_file(args):
     else: 
         lum, lum_e = None, None
     z = z[cond]
-    return z, flux, flux_e, lum, lum_e
+    return z, flux, flux_e, lum, lum_e, root
 
 def main(argv=None):
-
+    """ Read input file, run luminosity function routine, and create the appropriate output """
     # Make output folder if it doesn't exist
     mkpath('LFMCMCOut')
     # Get Inputs
@@ -145,7 +175,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     # Read input file into arrays
-    z, flux, flux_e, lum, lum_e = read_input_file(args)
+    z, flux, flux_e, lum, lum_e, root = read_input_file(args)
     print "Read Input File"
 
     # Initialize LumFuncMCMC class
@@ -156,7 +186,7 @@ def main(argv=None):
                         sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, 
                         Lstar_lims=args.Lstar_lims, phistar=args.phistar, 
                         phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, 
-                        nwalkers=args.nwalkers, nsteps=args.nsteps)
+                        nwalkers=args.nwalkers, nsteps=args.nsteps, root=root)
     print "Initialized LumFuncMCMC class"
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
