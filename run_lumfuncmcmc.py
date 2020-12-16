@@ -84,7 +84,11 @@ def parse_args(argv=None):
 
     parser.add_argument("-mcf", "--min_comp_frac",
                         help='''Minimum completeness fraction considered''',
-                        type=float, default=None)                    
+                        type=float, default=None)     
+
+    parser.add_argument("-ln", "--line_name",
+                         help='''Name of line or band for LF measurement''',
+                         type=str, default=None)               
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
@@ -100,6 +104,11 @@ def parse_args(argv=None):
                 setattr(args, arg_i, getattr(configLF, arg_i))
         except AttributeError:
             setattr(args, arg_i, getattr(configLF, arg_i))
+
+    if args.line_name=='OIII':
+        args.line_plot_name = r'[OIII] $\lambda 5007$'
+    if args.line_name=='Ha':
+        args.line_plot_name = r'${\rm{H\alpha}}$'
 
     return args
 

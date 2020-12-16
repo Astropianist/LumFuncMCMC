@@ -263,7 +263,7 @@ class LumFuncMCMC:
         zmid = np.linspace(self.zmin+dz/2.0,self.zmin-dz/2.0,len(zarr)-1)
         fullint = 0.0
         for i, zi in enumerate(zmid):
-            logL = np.linspace(self.minlumf(zi),self.Lh,101)
+            logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lh,101)
             integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
             fullint += trapz(integ,logL)*dz
         return lnpart - fullint
@@ -360,7 +360,7 @@ class LumFuncMCMC:
         self.phifunc = np.zeros(len(self.lum))
         for i in range(len(self.lum)):
             self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,self.Flim,self.alpha)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,self.root)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
 
     def calcModLumFunc(self):
         ''' Calculate modeled ("observed") luminosity function given class Schechter parameters
@@ -375,7 +375,7 @@ class LumFuncMCMC:
             Omegavals[i] = self.Omegaf(Li,zi)
         return TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omegavals
 
-    def set_median_fit(self,rndsamples=200,lnprobcut=100.0):
+    def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
         set attributes
         median modeled ("observed") luminosity function for rndsamples random samples
@@ -398,8 +398,10 @@ class LumFuncMCMC:
         '''
         chi2sel = (self.samples[:, -1] >
                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        # nsamples = self.samples[chi2sel, :]
-        nsamples = self.samples
+        nsamples = self.samples[chi2sel, :]
+        # nsamples = self.samples
+        self.log.info("Shape of nsamples (with a lnprobcut applied)")
+        self.log.info(nsamples.shape)
         lf = []
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
@@ -431,7 +433,7 @@ class LumFuncMCMC:
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
         ax1.errorbar(self.Lavg,self.lfbinorig,yerr=np.sqrt(self.var),fmt='b^')
         
-    def triangle_plot(self, outname, lnprobcut=100.0, imgtype='png'):
+    def triangle_plot(self, outname, lnprobcut=7.5, imgtype='png'):
         ''' Make a triangle corner plot for samples from fit
 
         Input
@@ -449,10 +451,10 @@ class LumFuncMCMC:
         # Make selection for three sigma sample
         chi2sel = (self.samples[:, -1] >
                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        # nsamples = self.samples[chi2sel, :]
-        nsamples = self.samples
-        # self.log.info("Shape of nsamples (with a lnprobcut applied)")
-        # self.log.info(nsamples.shape)
+        nsamples = self.samples[chi2sel, :]
+        # nsamples = self.samples
+        self.log.info("Shape of nsamples (with a lnprobcut applied)")
+        self.log.info(nsamples.shape)
         names = self.get_param_names()
         indarr = np.arange(len(nsamples[0]))
         fsgrad = 11+int(round(0.75*len(indarr)))

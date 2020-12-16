@@ -9,6 +9,8 @@ from lmfit import Model
 from astropy.table import Table
 from HaHbStacking_even import get_bins
 from itertools import cycle
+from scipy.optimize import fsolve
+from mpmath import gammainc
 import sys
 import os
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
@@ -39,7 +41,32 @@ def schechter(L, al, phistar, Lstar):
     """ Schechter function """
     return phistar * (L/Lstar)**al * np.exp(-L/Lstar)
 
-def p(F,Flim=3.0e-17,alpha=-3.5):
+def schechter_log(L,al,phistar,Lstar):
+    """ Schechter function for logL space; also log params """
+    return np.log(10.0) * 10**phistar * 10**((L-Lstar)*(al+1))*np.exp(-10**(L-Lstar))
+
+def schechter_integ(L,al,integ,Lstar):
+    """ Schechter function with the integral over the function as a parameter instead of phi* """
+    # integ_nophi, err = quad(schechter,1.0e36/Lstar,1.0e50/Lstar,args=(al,1.0,1.0))
+    integ_nophi = float(gammainc(al+1,1.0e36/Lstar))
+    phistar = integ/integ_nophi
+    return schechter(L,al,phistar,Lstar)
+
+def schechter_integ_log(L,al,integ,Lstar):
+    """ Schechter function with the integral over the function as a parameter instead of phi* using logL, log(integral), and log(Lstar) values """
+    # integ_nophi, err = quad(schechter_log,36.0,50.0,args=(al,0.0,Lstar))
+    # integ_nophi = np.log10(integ_nophi)
+    integ_nophi = float(gammainc(al+1,10**(36.0-Lstar)))
+    # if integ_nophi<0.0: print "Negative integ_nophi for schechter_integ_log given params %f, %f, %f"%(al,integ,Lstar)
+    integ_nophi = np.log10(integ_nophi)
+    phistar = integ - integ_nophi
+    sch = schechter_log(L,al,phistar,Lstar)
+    # if np.isnan(sch).any() or np.isinf(sch).any():
+    #     print "NaN value gotten for schechter_integ_log given params %.3f, %.2f, %.2f"%(al,integ,Lstar)
+    #     for s in sch: print s
+    return sch
+
+def p(F,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     """ Completeness (Fleming) curve as function of Flim and alpha """
     return 0.5*(1.0 - (2.5*alpha*np.log10(F/Flim))/np.sqrt(1.0+ (2.5*alpha*np.log10(F/Flim))**2))
 
@@ -72,7 +99,7 @@ def dVdz(z,w=-1.0):
     """ Volume differential--does not include the area multiplication--just the lengthwise (along z-change) component; unit is Mpc^3 """
     return 4.0*np.pi*dAz(z,w)**2/(a0*Hz(z,w))
 
-def lumfuncint(z,F,Omega_0,Flim,alpha): 
+def lumfuncint(z,F,Omega_0,Flim,alpha,Fmin): 
     """ Integrand of luminosity function MLE
     
     Input
@@ -86,9 +113,9 @@ def lumfuncint(z,F,Omega_0,Flim,alpha):
     alpha: Float
         Fleming curve alpha (slope) parameter
     """
-    return Omega_0/sqarcsec * p(F,Flim,alpha)*dVdz(z)
+    return Omega_0/sqarcsec * p(F,Flim,alpha,Fmin)*dVdz(z)
 
-def lumfuncintv2(z,F,Omega_0,func,Flim,alpha):
+def lumfuncintv2(z,F,Omega_0,func,Flim,alpha,Fmin):
     """ Integrand of luminosity function MLE for faster computation
     
     Input
@@ -104,10 +131,10 @@ def lumfuncintv2(z,F,Omega_0,func,Flim,alpha):
     alpha: Float
         Fleming curve alpha (slope) parameter
     """
-    return Omega_0/sqarcsec * p(F,Flim,alpha)*func(z)
+    return Omega_0/sqarcsec * p(F,Flim,alpha,Fmin)*func(z)
 
 #phi(L)--1/Veff estimator
-def lumfunc(F,func,Omega_0=100.0,minz=1.16,maxz=1.9,Flim=3.0e-17,alpha=-3.5):
+def lumfunc(F,func,Omega_0=100.0,minz=1.16,maxz=1.9,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     """ Luminosity function volume^-1 weights for a given flux
 
     Input
@@ -127,10 +154,10 @@ def lumfunc(F,func,Omega_0=100.0,minz=1.16,maxz=1.9,Flim=3.0e-17,alpha=-3.5):
     alpha: Float
         Fleming curve alpha (slope) parameter
     """
-    ans, err = quad(lumfuncintv2, minz, maxz, args=(F,Omega_0,func,Flim,alpha))
+    ans, err = quad(lumfuncintv2, minz, maxz, args=(F,Omega_0,func,Flim,alpha,Fmin))
     return 1.0/ans
 
-def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5):
+def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     """ Computation of luminosities and effective volume weights given fluxes and redshifts in sample 
 
     Input
@@ -145,6 +172,8 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5):
         Flux at which there's 50% completeness (according to Fleming curve) in erg/cm^2/s
     alpha: Float
         Fleming curve alpha (slope) parameter
+    Fmin: Float
+        Minimum flux considered in the Veff method (erg/cm^2/s)
 
     Return
     ------
@@ -152,6 +181,10 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5):
         Array of luminosities pertaining to fluxes in erg/s
     phifunc: 1-D Numpy Array
         Array of volume^-1 weights for each flux
+    minz: Float
+        Minimum z value in data set
+    maxz: Float
+        Maximum z value in data set
     """
     minz, maxz = min(z), max(z)
     zint = np.linspace(0.95*minz,1.05*maxz,1001)
@@ -164,10 +197,10 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5):
     Lfunc, phifunc = np.zeros(len(F)), np.zeros(len(F))
     for i in range(len(F)):
         Lfunc[i] = 4.0*np.pi*(dLz(z[i])*3.086e24)**2*F[i]
-        phifunc[i] = lumfunc(F[i],dVdzf,Omega_0,minz,maxz,Flim,alpha)
-    return Lfunc, phifunc
+        phifunc[i] = lumfunc(F[i],dVdzf,Omega_0,minz,maxz,Flim,alpha,Fmin)
+    return Lfunc, phifunc, minz, maxz
 
-def getBootErrLog(L,phi,nboot=100,nbin=25):
+def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20):
     """ Estimate true luminosity function and errors on the "measurements" using bootstrap method
     This function is for log luminosities and is used with a Schechter function with log quantities (not in this code)
 
@@ -177,10 +210,16 @@ def getBootErrLog(L,phi,nboot=100,nbin=25):
         Array of log luminosities in log(erg/s)
     phi: 1-D Numpy Array
         Array of volume^-1 weights using V_eff method
+    minz: Float
+        Minimum z value in data set
+    maxz: Float
+        Maximum z value in data set
     nboot: Int
         Number of iterations to use for bootstrap method
     nbin: Int
         Number of bins for creating luminosity function
+    Fmin: Float
+        Minimum flux considered in the Veff method (erg/cm^2/s)
 
     Return
     ------
@@ -215,9 +254,23 @@ def getBootErrLog(L,phi,nboot=100,nbin=25):
     binavg = np.average(lfbin,axis=0)
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
+    ########### Correct for luminosity bins that are only partially included #########
+    zarr = np.linspace(0.9*minz,1.1*maxz,201)
+    Lminarr = np.zeros_like(zarr)
+    for i,zi in enumerate(zarr):
+        Lminarr[i] = get_L_constF(Fmin,zi)
+    Lminarr = np.log10(Lminarr)
+    Lminzf = interp1d(zarr,Lminarr,kind='cubic')
+    for j in range(len(lfbinorig)):
+        mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
+        # print "mult[%d]=%.2f"%(j,mult)
+        if abs(mult-1.0)<1.0e-8:
+            break
+        lfbinorig[j]*=mult
+        var[j]*=mult**2
     return Lavg, lfbinorig, var
 
-def getBootErr(L,phi,nboot=100,nbin=25):
+def getBootErr(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=0.0):
     """ Estimate true luminosity function and errors on the "measurements" using bootstrap method
     This function is for linear luminosities 
 
@@ -227,10 +280,16 @@ def getBootErr(L,phi,nboot=100,nbin=25):
         Array of luminosities in erg/s
     phi: 1-D Numpy Array
         Array of volume^-1 weights using V_eff method
+    minz: Float
+        Minimum z value in data set
+    maxz: Float
+        Maximum z value in data set
     nboot: Int
         Number of iterations to use for bootstrap method
     nbin: Int
         Number of bins for creating luminosity function
+    Fmin: Float
+        Minimum flux considered in the Veff method (erg/cm^2/s)
     
     Return
     ------
@@ -265,9 +324,22 @@ def getBootErr(L,phi,nboot=100,nbin=25):
     binavg = np.average(lfbin,axis=0)
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
+    ########### Correct for luminosity bins that are only partially included #########
+    zarr = np.linspace(0.9*minz,1.1*maxz,201)
+    Lminarr = np.zeros_like(zarr)
+    for i,zi in enumerate(zarr):
+        Lminarr[i] = get_L_constF(Fmin,zi)
+    Lminzf = interp1d(zarr,Lminarr,kind='cubic')
+    for j in range(len(lfbinorig)):
+        mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
+        # print "mult[%d]=%.2f"%(j,mult)
+        if abs(mult-1.0)<1.0e-8:
+            break
+        lfbinorig[j]*=mult
+        var[j]*=mult**2
     return Lavg, lfbinorig, var
 
-def fit_Schechter(Lavg,lfbinorig,var,name='OIII',alpha_value=None):
+def fit_Schechter(Lavg,lfbinorig,var,name='OIII',alpha_value=None,log=False,integ=False):
     """ Using lmfit to fit Schechter function to the measured (true) luminosity function 
     
     Input
@@ -282,13 +354,25 @@ def fit_Schechter(Lavg,lfbinorig,var,name='OIII',alpha_value=None):
         Name of line or monochromatic luminosity quantity
     alpha_value: Float
         Value for alpha parameter if one wants it fixed
+    log: Bool
+        Whether the log form of the Schechter Equation should be fit or not
+    integ: Bool
+        Whether the integrated parameter should be used instead of phistar
 
     Return
     ------
     schfit: LMFIT fit result object
     """
-    schmod = Model(schechter)
+    if log and integ:
+        schmod = Model(schechter_integ_log)
+    elif log and (not integ):
+        schmod = Model(schechter_log)
+    elif integ and (not log):
+        schmod = Model(schechter_integ)
+    else:
+        schmod = Model(schechter)
     pars = schmod.make_params()
+    # print "List of parameters:", pars
     if alpha_value is not None:
         al_val = alpha_value
         pars['al'].set(value=al_val, vary=False)
@@ -299,14 +383,25 @@ def fit_Schechter(Lavg,lfbinorig,var,name='OIII',alpha_value=None):
             al_val = -1.714
         pars['al'].set(value=al_val,max=0.0,min=-5.0)
 
-    pars['phistar'].set(value=1.0e-3,min=0.0)
-    pars['Lstar'].set(value=1.0e42,min=1.0e40,max=1.0e45)
+    if not log: 
+        if not integ:
+            pars['phistar'].set(value=1.0e-3,min=0.0)
+        else:
+            pars['integ'].set(value=0.1,min=0.0)
+        pars['Lstar'].set(value=1.0e42,min=1.0e40,max=1.0e45)
+    else:
+        if not integ:
+            pars['phistar'].set(value=-3.0,min=-8.0)
+        else:
+            pars['integ'].set(value=-1.0,min=-7.0,max=5.0)
+        pars['Lstar'].set(value=42.5,min=40.0,max=45.0)
+    
     cond = lfbinorig>0.0
     schfit = schmod.fit(lfbinorig,pars,L=Lavg,weights=1.0/np.sqrt(var))
-    # print schfit.fit_report()
+    print schfit.fit_report()
     return schfit
 
-def plotSchechter(Lavg,lfbinorig,var,schfit,name,img_dir="ImageFiles"):
+def plotSchechter(Lavg,lfbinorig,var,schfit,name,img_dir="ImageFiles",log=False,integ=False):
     """ Plotting best-fit Schechter function over true luminosity function measurements 
     Note: Here, we divide the dn values of luminosity function by the interval Delta(L)/L* to get a real LF
     
@@ -323,45 +418,90 @@ def plotSchechter(Lavg,lfbinorig,var,schfit,name,img_dir="ImageFiles"):
         Name of line or monochromatic luminosity quantity
     img_dir: String
         Directory for placing produced figure
+    log: Bool
+        Whether things are log or not
+    integ: Bool
+        Whether the integrated parameter should be used instead of phistar
     """
     pars = schfit.params
-    dL = Lavg[1]-Lavg[0]
-    ratio = pars['Lstar']/dL
     fig, ax = plt.subplots()
-    ax.set_xscale("log")
+    if not log:
+        ax.set_xscale("log")
     ax.set_yscale("log")
+    if not log:
+        dL = Lavg[1]-Lavg[0]
+        ratio = pars['Lstar']/dL
+        if not integ:
+            ax.plot(Lavg, schfit.best_fit*ratio, 'r-', label=r'Fit: $\alpha=%.3f$, $\phi_*=%.1e$, $L_*=%.1e$' % (pars['al'],pars['phistar']*ratio,pars['Lstar']))
+        else:
+            ax.plot(Lavg, schfit.best_fit*ratio, 'r-', label=r'Fit: $\alpha=%.3f$, ${\rm{I}}=%.1e$, $L_*=%.1e$' % (pars['al'],pars['integ']*ratio,pars['Lstar']))
+    else:
+        ratio = 1.0
+        if not integ:
+            ax.plot(Lavg, schfit.best_fit*ratio, 'r-', label=r'Fit: $\alpha=%.3f$, $\log \phi_*=%.2f$, $\log {\rm{L}}_*=%.2f$' % (pars['al'],pars['phistar']*ratio,pars['Lstar']))
+        else:
+            ax.plot(Lavg, schfit.best_fit*ratio, 'r-', label=r'Fit: $\alpha=%.3f$, $\log {\rm{I}}=%.2f$, $\log {\rm{L}}_*=%.2f$' % (pars['al'],pars['integ']*ratio,pars['Lstar']))
+    
     ax.errorbar(Lavg,lfbinorig*ratio,yerr=np.sqrt(var)*ratio,fmt='b^',label='Measured LF')
-    ax.plot(Lavg, schfit.best_fit*ratio, 'r-', label=r'Fit: $\alpha=%.3f$, $\phi_*=%.1e$, $L_*=%.1e$' % (pars['al'],pars['phistar']*ratio,pars['Lstar']))
     try:
         dely = schfit.eval_uncertainty(sigma=3)
         ax.fill_between(Lavg,ratio*(schfit.best_fit-dely),ratio*(schfit.best_fit+dely),color='r',alpha=0.2,label=r'$3 \sigma$ Uncertainty Band')
     except: pass
-    plt.xlabel("Luminosity (erg/s)")
-    plt.ylabel(r"$dn/d(L/L_*)$")
+    if not log:
+        plt.xlabel(r"L (erg s$^{-1}$)")
+        plt.ylabel(r"$dn/d({\rm{L/L_*}})$ (Number Mpc$^{-3}$)")
+    else:
+        plt.xlabel(r"$\log$ L (erg s$^{-1}$)")
+        plt.ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)")
+    
     plt.legend(loc='best')
-    fn = op.join(img_dir,name)
+    plt.minorticks_on()
+    if not log:
+        if not integ:
+            fn = op.join(img_dir,"Lin",name)
+        else:
+            fn = op.join(img_dir,"Lin","%s_integ.png"%(name.split('.')[0]))
+    else:
+        if not integ:
+            fn = op.join(img_dir,"Log","%s_log.png"%(name.split('.')[0]))
+        else:
+            fn = op.join(img_dir,"Log","%s_log_integ.png"%(name.split('.')[0]))
     plt.savefig(fn,bbox_inches='tight',dpi=300)
     plt.close()
 
-def combineSteps(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbin=25,img_dir='ImageFiles'):
+def combineSteps(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbin=25,img_dir='../LuminosityFunction/Veff',Fmin=0.0,integ=False):
     """ Basically perform multiple functions to simplify necessary commands; see other functions for detailed input and output descriptions """
     print "About to start Veff process for", name
     print "Length of arrays:", len(F), len(z)
-    Lfunc, phifunc = getlumfunc(F,z,Omega_0,Flim,alpha)
+    Lfunc, phifunc, minz, maxz = getlumfunc(F,z,Omega_0,Flim,alpha,Fmin)
     print "Finished calculating true luminosity function"
-    Lavg, lfbinorig, var = getBootErr(Lfunc,phifunc,nboot,nbin)
+    Lavg, lfbinorig, var = getBootErr(Lfunc,phifunc,minz,maxz,nboot,nbin,Fmin)
     print "Finished getting bootstrap-based errors"
-    schfit = fit_Schechter(Lavg,lfbinorig,var)
+    schfit = fit_Schechter(Lavg,lfbinorig,var,integ=integ)
     print "Fit Schechter function to true luminosity function"
-    plotSchechter(Lavg,lfbinorig,var,schfit,name,img_dir)
+    plotSchechter(Lavg,lfbinorig,var,schfit,name,img_dir,integ=integ)
     print "Finished plotting true luminosity and best-fit Schechter fit"
 
-def zEvolSteps(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbins=25,img_dir='../LuminosityFunction/Veff',zbins=5):
+def combineStepsLog(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbin=25,img_dir='../LuminosityFunction/Veff',Fmin=0.0,integ=False):
+    """ Basically perform multiple functions to simplify necessary commands in log case; see other functions for detailed input and output descriptions """
+    print "About to start Veff process for", name
+    print "Length of arrays:", len(F), len(z)
+    Lfunc, phifunc, minz, maxz = getlumfunc(F,z,Omega_0,Flim,alpha,Fmin)
+    print "Finished calculating true luminosity function"
+    Lavg, lfbinorig, var = getBootErrLog(np.log10(Lfunc),phifunc,minz,maxz,nboot,nbin,Fmin)
+    print "Finished getting bootstrap-based errors"
+    schfit = fit_Schechter(Lavg,lfbinorig,var,log=True,integ=integ)
+    print "Fit Schechter function to true luminosity function"
+    plotSchechter(Lavg,lfbinorig,var,schfit,name,img_dir,log=True,integ=integ)
+    print "Finished plotting true luminosity and best-fit Schechter fit"
+
+def zEvolSteps(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbins=25,img_dir='../LuminosityFunction/Veff',zbins=5,Fmin=0.0,log=False,integ=False):
     """ Perform multiple functions to simplify necessary commands; in addition, bin overall sample by redshift and compute luminosity function for each bin, keeping alpha constant for additional redshift bins. See other functions for detailed descriptions of inputs and outputs """
     print "About to start Veff process for", name
     print "Length of arrays:", len(F), len(z)
     fig, ax = plt.subplots()
-    ax.set_xscale("log")
+    if not log:
+        ax.set_xscale("log")
     ax.set_yscale("log")
     indhist = get_bins(z,zbins)
     bin_edges = min(z)*np.ones(zbins+1)
@@ -378,48 +518,143 @@ def zEvolSteps(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbins=25
             if i==0: zlabel = r"$%.2f \leq z<%.2f$"%(bin_edges[i],bin_edges[i+1])
             else: zlabel = r"$%.2f<z<%.2f$"%(bin_edges[i],bin_edges[i+1])
         # print "Length of binned arrays:", len(F[condhist]),len(z[condhist])
-        Lfunc, phifunc = getlumfunc(F[condhist],z[condhist],Omega_0,Flim,alpha)
+        Lfunc, phifunc, minz, maxz = getlumfunc(F[condhist],z[condhist],Omega_0,Flim,alpha,Fmin=Fmin)
         # print "Finished calculating true luminosity function for bin number", i+1
-        Lavg, lfbinorig, var = getBootErr(Lfunc,phifunc,nboot,nbins)
-        dL = Lavg[1]-Lavg[0]
-        # print "Lavg:", Lavg
-        # print "lfbinorig:", lfbinorig
-        # print "Finished getting bootstrap-based errors for bin number", i+1
-        schfit = fit_Schechter(Lavg,lfbinorig,var,name=name.split('_')[0],alpha_value=alpha_value)
-        pars = schfit.params
-        if i==0: 
-            alpha_value = pars['al']
-        ratio = pars['Lstar']/dL
-        # ratio = 1.0
+        if not log:
+            Lavg, lfbinorig, var = getBootErr(Lfunc,phifunc,minz,maxz,nboot,nbins,Fmin=Fmin)
+            # print "Finished getting bootstrap-based errors for bin number", i+1
+            schfit = fit_Schechter(Lavg,lfbinorig,var,name=name.split('_')[0],alpha_value=alpha_value,integ=integ)
+            pars = schfit.params
+            # if i==0: 
+                # alpha_value = pars['al']
+            dL = Lavg[1]-Lavg[0]
+            ratio = pars['Lstar']/dL
+            if not integ:
+                label = r'%s: $\alpha=%.2f$, $\phi_*=%.1e$, ${\rm{L}}_*=%.1e$' % (zlabel,pars['al'],pars['phistar']*ratio,pars['Lstar'])
+            else:
+                label = r'%s: $\alpha=%.2f$, ${\rm{I}}=%.1e$, ${\rm{L}}_*=%.1e$' % (zlabel,pars['al'],pars['integ']*ratio,pars['Lstar'])
+        else:
+            Lavg, lfbinorig, var = getBootErrLog(np.log10(Lfunc),phifunc,minz,maxz,nboot,nbins,Fmin=Fmin)
+            # print "Finished getting bootstrap-based errors for bin number", i+1
+            schfit = fit_Schechter(Lavg,lfbinorig,var,name=name.split('_')[0],alpha_value=alpha_value,log=True,integ=integ)
+            pars = schfit.params
+            # if i==0: 
+                # alpha_value = pars['al']
+            ratio = 1.0
+            if not integ:
+                label = r'%s: $\alpha=%.2f$, $\log \phi_*=%.2f$, $\log {\rm{L}}_*=%.2f$' % (zlabel,pars['al'],pars['phistar']*ratio,pars['Lstar'])
+            else:
+                label = r'%s: $\alpha=%.2f$, $\log {\rm{I}}=%.2f$, $\log {\rm{L}}_*=%.2f$' % (zlabel,pars['al'],pars['integ']*ratio,pars['Lstar'])
+        
         # print "Fit Schechter function to true luminosity function for bin number", i+1
         ax.errorbar(Lavg,lfbinorig*ratio,yerr=np.sqrt(var)*ratio,color=orig_palette.next(),marker=markers.next(),linestyle='none',label='')
-        if i==0: label = r'%s: $\alpha=%.2f$, $\phi_*=%.1e$, $L_*=%.1e$' % (zlabel,pars['al'],pars['phistar']*ratio,pars['Lstar'])
-        else: label = r'%s: $\phi_*=%.1e$, $L_*=%.1e$' % (zlabel,pars['phistar']*ratio,pars['Lstar'])
         ax.plot(Lavg, schfit.best_fit*ratio, color=ax.lines[-1].get_color(), label=label)
         try:
             dely = schfit.eval_uncertainty(sigma=3)
             ax.fill_between(Lavg,ratio*(schfit.best_fit-dely),ratio*(schfit.best_fit+dely),color=ax.lines[-1].get_color(),alpha=0.2,label='')
         except: pass
-    plt.xlabel("Luminosity (erg/s)")
-    plt.ylabel(r"$dn/d(L/L_*)$")
-    plt.legend(loc='best',fontsize='small')
-    fn = op.join(img_dir,name)
+    if not log:
+        plt.xlabel(r"L (erg s$^{-1}$)")
+        plt.ylabel(r"$dn/d({\rm{L/L_*}})$ (Number Mpc$^{-3}$)")
+    else:
+        plt.xlabel(r"$\log$ L (erg s$^{-1}$)")
+        plt.ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)")
+    plt.legend(loc='best',fontsize='x-small')
+    plt.minorticks_on()
+    if not log:
+        if not integ:
+            fn = op.join(img_dir,"Lin",name)
+        else:
+            fn = op.join(img_dir,"Lin","%s_integ.png"%(name.split('.')[0]))
+    else:
+        if not integ:
+            fn = op.join(img_dir,"Log","%s_log.png"%(name.split('.')[0]))
+        else:
+            fn = op.join(img_dir,"Log","%s_log_integ.png"%(name.split('.')[0]))
     plt.savefig(fn,bbox_inches='tight',dpi=300)
     plt.close()
     print "Finished plotting true luminosity and best-fit Schechter fit"
 
+def get_min_flux(min_comp_frac,Flim,alpha):
+    """ Get flux corresponding to the minimum completeness fraction allowed
+    
+    Input
+    -----
+    min_comp_frac: Float
+        Minimum completeness fraction considered
+    Flim: Float
+        Flim (F50) parameter for the Fleming completeness curve
+    alpha: Float
+        alpha parameter for the Fleming completeness curve
+        
+    Return
+    ------
+    min_flux: Float
+        Minimum flux considered in erg/cm^2/s """
+    if abs(min_comp_frac-0.0)<1.0e-6:
+        return 0.0
+    else:
+        return fsolve(lambda x: p(x,Flim,alpha)-min_comp_frac,[Flim])[0]
+
+def get_L_constF(F,z):
+    """ Get the luminosity at a given flux value
+    
+    Input
+    -----
+    F: Float
+        Flux in erg/cm^2/s
+    z: Float
+        Redshift
+        
+    Return
+    ------
+    L: Float
+        Luminosity (erg/s) """
+    return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
+
+def get_mult_factor(lum0,lum1,Lminzf,zmin,zmax):
+    """ Factor to multiply counts by when a luminosity bin has values not considered at some redhshifts
+    Input
+    -----
+    lum0, lum1: Floats
+        Bin edges for luminosity
+    Lminzf: Interp1d Function
+        Function for getting min luminosity considered at a given redshift
+    zmin, zmax: Floats
+        Min and max redshifts in the sample
+        
+    Return
+    ------
+    mult_factor: Float
+        Value to multiply counts by for the given bin """
+    # print "lum0, Lminzf(zmin), Lminzf(zmax), lum1: %.2e, %.2e, %.2e, %.2e"%(lum0,Lminzf(zmin),Lminzf(zmax),lum1)
+    if Lminzf(zmin)>=lum1: 
+        return np.inf
+    elif Lminzf(zmax)<=lum0:
+        return 1.0
+    else:
+        denom, err = quad(lambda x: min(max(lum1-Lminzf(x),0.0),lum1-lum0), zmin, zmax)
+        return (zmax-zmin)*(lum1-lum0) / denom
+
 def main():
     dat = Table.read("../AllTextFiles/combined_all_Swift_AEB_515_NoAGN.dat",format='ascii')
     oiii = dat['OIII5007']; ha = dat['Ha']; z = dat['z']
-    condoiii = oiii>0.1; condha = ha>0.1
-    # zbin_list = [1,2,3,4,5,6]
-    zbins = 1
-    nbin_list = [10,50,80]
-    # combineSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF.png",Flim=2.7e-17,alpha=-2.06)
-    # combineSteps(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF.png",Flim=2.7e-17,alpha=-2.06)
-    for nbins in nbin_list:
-        zEvolSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_zbin_%d_nbin_%d_const_alpha.png"%(zbins,nbins),Flim=4.0e-17,alpha=-2.12,nbins=nbins,zbins=zbins)
-        zEvolSteps(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_zbin_%d_nbin_%d_const_alpha.png"%(zbins,nbins),Flim=3.1e-17,alpha=-2.20,nbins=nbins,zbins=zbins)
+    min_comp_frac = 0.5
+    Flim_OIII, Flim_Ha = 4.0e-17, 3.1e-17
+    alpha_OIII, alpha_Ha = -2.12, -2.20
+    rootoiii = get_min_flux(min_comp_frac,Flim_OIII,alpha_OIII)
+    rootha = get_min_flux(min_comp_frac,Flim_Ha,alpha_Ha)
+    condoiii = oiii>1.0e17*rootoiii; condha = ha>1.0e17*rootha
+    nbin = 50
+    Omega_0 = 1.0e6
+    zbin_list = [1,3,5]
+    # zbins = 1
+    # nbin_list = [10,50,80]
+    combineStepsLog(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_OIII,alpha=alpha_OIII,nbin=nbin,Omega_0=Omega_0,Fmin=rootoiii,integ=True)
+    combineStepsLog(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_Ha,alpha=alpha_Ha,nbin=nbin,Omega_0=Omega_0,Fmin=rootha,integ=True)
+    for zbins in zbin_list:
+        zEvolSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_OIII,alpha=alpha_OIII,nbins=nbin,zbins=zbins,Fmin=rootoiii,Omega_0=Omega_0,log=True,integ=True)
+        zEvolSteps(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_Ha,alpha=alpha_Ha,nbins=nbin,zbins=zbins,Fmin=rootha,Omega_0=Omega_0,log=True,integ=True)
 
 if __name__=='__main__': 
     main()
