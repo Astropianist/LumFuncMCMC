@@ -121,24 +121,23 @@ class LumFuncMCMC:
         root: Float
         Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
         '''
+        self.z = z
+        self.zmin, self.zmax = min(self.z), max(self.z)
+        self.root = root
+        self.setDLdVdz()
         if flux is not None: 
             self.flux = 1.0e-17*flux
             if flux_e is not None:
                 self.flux_e = 1.0e-17*flux_e
         else:
+            self.lum, self.lum_e = lum, lum_e
             self.getFluxes()
-        self.z = z
-        self.zmin, self.zmax = min(self.z), max(self.z)
         self.Flim = Flim
         self.alpha = alpha
-        self.root = root
         self.line_name = line_name
         self.line_plot_name = line_plot_name
-        self.setDLdVdz()
         if lum is None: 
             self.getLumin()
-        else:
-            self.lum, self.lum_e = lum, lum_e
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
         self.setOmegaLz()
@@ -478,8 +477,8 @@ class LumFuncMCMC:
         ''' Assumes that "Ln Prob" is the last column in self.samples'''
         chi2sel = (self.samples[:, -1] >
                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        # nsamples = self.samples[chi2sel, :-1]
-        nsamples = self.samples[:,:-1]
+        nsamples = self.samples[chi2sel, :-1]
+        # nsamples = self.samples[:,:-1]
         self.log.info("Number of table entries: %d"%(len(self.table[0])))
         self.log.info("Len(percentiles): %d; len(other axis): %d"%(len(percentiles), len(np.percentile(nsamples,percentiles[0],axis=0))))
         n = len(percentiles)

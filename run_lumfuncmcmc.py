@@ -84,6 +84,14 @@ def parse_args(argv=None):
 
     parser.add_argument("-mcf", "--min_comp_frac",
                         help='''Minimum completeness fraction considered''',
+                        type=float, default=None)  
+
+    parser.add_argument("-al", "--alpha",
+                        help='''Minimum completeness fraction considered''',
+                        type=float, default=None)
+
+    parser.add_argument("-fl", "--Flim",
+                        help='''Minimum completeness fraction considered''',
                         type=float, default=None)     
 
     parser.add_argument("-ln", "--line_name",

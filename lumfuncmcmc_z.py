@@ -168,29 +168,28 @@ class LumFuncMCMC:
         z1,z2,z3: Floats
         The three pivot points (redshifts)
         '''
+        self.z = z
+        self.zmin, self.zmax = min(self.z), max(self.z)
+        self.root = root
+        self.setDLdVdz()
         if flux is not None: 
             self.flux = 1.0e-17*flux
             if flux_e is not None:
                 self.flux_e = 1.0e-17*flux_e
         else:
+            self.lum, self.lum_e = lum, lum_e
             self.getFluxes()
-        self.z = z
-        self.zmin, self.zmax = min(self.z), max(self.z)
-        self.z1, self.z2, self.z3 = z1, z2, z3
         self.Flim = Flim
         self.alpha = alpha
-        self.root = root
         self.line_name = line_name
         self.line_plot_name = line_plot_name
-        self.setDLdVdz()
         if lum is None: 
             self.getLumin()
-        else:
-            self.lum, self.lum_e = lum, lum_e
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
         self.setOmegaLz()
         self.nbins, self.nboot = nbins, nboot
+        self.z1, self.z2, self.z3 = z1, z2, z3
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         rngL, rngphi = Lstar_lims[1]-Lstar_lims[0], phistar_lims[1]-phistar_lims[0]
         for i in range(1,4):

@@ -84,6 +84,14 @@ def parse_args(argv=None):
 
     parser.add_argument("-mcf", "--min_comp_frac",
                         help='''Minimum completeness fraction considered''',
+                        type=float, default=None)
+
+    parser.add_argument("-al", "--alpha",
+                        help='''Minimum completeness fraction considered''',
+                        type=float, default=None)
+
+    parser.add_argument("-fl", "--Flim",
+                        help='''Minimum completeness fraction considered''',
                         type=float, default=None)     
 
     parser.add_argument("-ln", "--line_name",
@@ -109,6 +117,10 @@ def parse_args(argv=None):
         args.line_plot_name = r'[OIII] $\lambda 5007$'
     if args.line_name=='Ha':
         args.line_plot_name = r'${\rm{H\alpha}}$'
+    if args.line_name=='UV':
+        args.line_plot_name = r'${\rm{L}}_{1700\ \AA}$'
+    if args.line_name=='IR':
+        args.line_plot_name = r'${\rm{L}}_{8000\ {\rm{\mu m}}}$'
 
     return args
 
