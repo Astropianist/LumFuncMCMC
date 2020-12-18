@@ -9,6 +9,7 @@ import time
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import corner
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import VmaxLumFunc as V
 import seaborn as sns
 sns.set_context("talk") # options include: talk, poster, paper
@@ -18,6 +19,19 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                "xtick.major.size":12, "xtick.minor.size":4,
                "ytick.major.size":12, "ytick.minor.size":4,
                })
+
+def getQuadCoef(y1,y2,y3,z1,z2,z3):
+    a =((y3-y1) + (y2-y1)*(z1-z3)/(z2-z1)) / (z3**2-z1**2 + (z2**2-z1**2)*(z1-z3)/(z2-z1))
+    b = (y2-y1 - a*(z2**2-z1**2)) / (z2-z1)
+    c = y1 - a*z1**2 - b*z1
+    return a,b,c
+
+def schechter_z(L,z,al,L1,L2,L3,phi1,phi2,phi3,z1,z2,z3):
+    aphi,bphi,cphi = getQuadCoef(phi1,phi2,phi3,z1,z2,z3)
+    alum,blum,clum = getQuadCoef(L1,L2,L3,z1,z2,z3)
+    phistar = aphi*z**2 + bphi*z + cphi
+    Lstar = alum*z**2 + blum*z + clum
+    return TrueLumFunc(L,al,Lstar,phistar)
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -71,7 +85,8 @@ class LumFuncMCMC:
                  line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
                  lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
                  sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],phistar=-3.0,
-                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0):
+                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0,
+                 z1=1.20,z2=1.53,z3=1.86):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -129,6 +144,7 @@ class LumFuncMCMC:
             self.getFluxes()
         self.z = z
         self.zmin, self.zmax = min(self.z), max(self.z)
+        self.z1, self.z2, self.z3 = z1, z2, z3
         self.Flim = Flim
         self.alpha = alpha
         self.root = root
@@ -144,8 +160,12 @@ class LumFuncMCMC:
         self.setOmegaLz()
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
-        self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
-        self.phistar, self.phistar_lims = phistar, phistar_lims
+        rngL, rngphi = Lstar_lims[1]-Lstar_lims[0], phistar_lims[1]-phistar_lims[0]
+        for i in range(1,4):
+            setattr(self,'L'+str(i),Lstar + 0.45*rngL*(2.0*np.random.rand()-1.0))
+            setattr(self,'L'+str(i)+'_lims',np.copy(Lstar_lims))
+            setattr(self,'phi'+str(i),phistar + 0.45*rngphi*(2.0*np.random.rand()-1.0))
+            setattr(self,'phi'+str(i)+'_lims',np.copy(phistar_lims))
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.setup_logging()
 
@@ -225,8 +245,8 @@ class LumFuncMCMC:
         theta : list
             list of input parameters for Schechter Fit'''
         self.sch_al = input_list[0]
-        self.Lstar = input_list[1]
-        self.phistar = input_list[2]
+        self.L1, self.L2, self.L3 = input_list[1], input_list[2], input_list[3]
+        self.phi1, self.phi2, self.phi3 = input_list[4], input_list[5], input_list[6]
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -235,14 +255,15 @@ class LumFuncMCMC:
         -------
         0.0 if all parameters are in bounds, -np.inf if any are out of bounds
         '''
-        sch_al_flag = ((self.sch_al >= self.sch_al_lims[0]) *
+        flag = ((self.sch_al >= self.sch_al_lims[0]) *
                      (self.sch_al <= self.sch_al_lims[1]))
-        Lstar_flag = ((self.Lstar >= self.Lstar_lims[0]) *
-                      (self.Lstar <= self.Lstar_lims[1]))
-        phistar_flag = ((self.phistar >= self.phistar_lims[0]) *
-                     (self.phistar <= self.phistar_lims[1]))
-
-        flag = sch_al_flag*Lstar_flag*phistar_flag
+        for i in range(1,4):
+            val = getattr(self, 'L' + str(i))
+            lims = getattr(self, 'L' + str(i) + '_lims')
+            flag *= ((val > lims[0]) * (val < lims[1]))
+            val = getattr(self, 'phi' + str(i))
+            lims = getattr(self, 'phi' + str(i) + '_lims')
+            flag *= ((val > lims[0]) * (val < lims[1]))
         if not flag: 
             return -np.inf
         else: 
@@ -256,15 +277,15 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
+        lnpart = sum(np.log(schechter_z(self.lum,self.z,self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3)))
         # logL = np.linspace(self.Lc,self.Lh,101)
         zarr = np.linspace(self.zmin,self.zmax,101)
         dz = zarr[1]-zarr[0]
         zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
         fullint = 0.0
         for i, zi in enumerate(zmid):
-            logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,101)
-            integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
+            logL = np.linspace(max(min(self.lum),self.minlumf(zi)),max(self.L1,self.L2,self.L3)+1.75,101)
+            integ = schechter_z(logL,zi,self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3)*self.dVdzf(zi)*self.Omegaf(logL,zi)
             fullint += trapz(integ,logL)*dz
         return lnpart - fullint
 
@@ -292,11 +313,11 @@ class LumFuncMCMC:
         pos : np.array (2 dim)
             Two dimensional array with Nwalker x Ndim values
         '''
-        theta = [self.sch_al, self.Lstar, self.phistar]
-        theta_lims = np.vstack((self.sch_al_lims,self.Lstar_lims,self.phistar_lims))
+        theta = [self.sch_al, self.L1, self.L2, self.L3, self.phi1, self.phi2, self.phi3]
+        theta_lims = np.vstack((self.sch_al_lims,self.L1_lims,self.L2_lims,self.L3_lims,self.phi1_lims,self.phi2_lims,self.phi3_lims))
         if num is None:
             num = self.nwalkers
-        pos = (np.random.rand(num)[:, np.newaxis] *
+        pos = (np.random.rand(num*len(theta)).reshape(num,len(theta)) *
               (theta_lims[:, 1]-theta_lims[:, 0]) + theta_lims[:, 0])
         return pos
 
@@ -308,7 +329,7 @@ class LumFuncMCMC:
         names : list
             list of all parameter names
         '''
-        return [r'$\alpha$',r'$\log L_*$',r'$\log \phi_*$']
+        return [r'$\alpha$',r'$\log {\rm{L}}1_*$',r'$\log {\rm{L}}2_*$',r'$\log {\rm{L}}3_*$',r'$\log \phi1_*$',r'$\log \phi2_*$',r'$\log \phi3_*$']
 
     def get_params(self):
         ''' Grab the the parameters in each class
@@ -318,7 +339,7 @@ class LumFuncMCMC:
         vals : list
             list of all parameter values
         '''
-        vals = [self.sch_al,self.Lstar,self.phistar]
+        vals = [self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3]
         self.nfreeparams = len(vals)
         return vals
 
@@ -362,20 +383,7 @@ class LumFuncMCMC:
             self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,self.Flim,self.alpha)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
 
-    def calcModLumFunc(self):
-        ''' Calculate modeled ("observed") luminosity function given class Schechter parameters
-
-        Returns
-        -------
-        ModLumFunc(self.lum) : 1-D Numpy Array
-            Array of values giving modeled "observed" luminosity function at luminosities in sample
-        '''
-        Omegavals = np.zeros(len(self.z))
-        for i,Li,zi in zip(np.arange(len(self.z)),self.lum,self.z): 
-            Omegavals[i] = self.Omegaf(Li,zi)
-        return TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omegavals
-
-    def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
+    def set_median_fit(self,lnprobcut=7.5,zlen=100,Llen=100):
         '''
         set attributes
         median modeled ("observed") luminosity function for rndsamples random samples
@@ -398,40 +406,40 @@ class LumFuncMCMC:
         '''
         chi2sel = (self.samples[:, -1] >
                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        nsamples = self.samples[chi2sel, :]
-        # nsamples = self.samples
+        nsamples = self.samples[chi2sel, :-1]
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
-        lf = []
-        for i in np.arange(rndsamples):
-            ind = np.random.randint(0, nsamples.shape[0])
-            self.set_parameters_from_list(nsamples[ind, :])
-            modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
-            lf.append(modlum)
-        self.medianLF = np.median(np.array(lf), axis=0)
+        self.Lout = np.linspace(min(self.lum)-0.2,max(self.lum)+0.2,Llen)
+        self.zout = np.linspace(self.zmin,self.zmax,zlen)
+        self.medianLF = np.zeros((zlen,Llen))
+        self.set_parameters_from_list(np.percentile(nsamples,50.0,axis=0))
+        for i in np.arange(zlen):
+            self.medianLF[i] = schechter_z(self.Lout,self.zout[i],self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3)
         self.VeffLF()
 
     def add_LumFunc_plot(self,ax1):
         """ Set up the plot for the luminosity function """
         ax1.set_yscale('log')
-        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)",fontsize='x-small')
-        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)",fontsize='xx-small')
+        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)",fontsize='medium')
+        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)",fontsize='small')
         ax1.minorticks_on()
 
-    def add_subplots(self,ax1,nsamples,rndsamples=200):
+    def add_subplots(self,ax1,nsamples,zlen=100,Llen=100):
         ''' Add Subplots to Triangle plot below '''
-        lf = []
-        indsort = np.argsort(self.lum)
-        for i in np.arange(rndsamples):
-            ind = np.random.randint(0, nsamples.shape[0])
-            self.set_parameters_from_list(nsamples[ind, :])
-            modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
-            lf.append(modlum)
-            ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
-        self.medianLF = np.median(np.array(lf), axis=0)
+        self.Lout = np.linspace(min(self.lum)-0.08,max(self.lum)+0.01,Llen)
+        self.zout = np.linspace(self.zmin,self.zmax,zlen)
+        LLout,zzout = np.meshgrid(self.Lout,self.zout)
+        self.medianLF = np.zeros((zlen,Llen))
+        self.set_parameters_from_list(np.percentile(nsamples,50.0,axis=0))
+        for i in np.arange(zlen):
+            self.medianLF[i] = schechter_z(self.Lout,self.zout[i],self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3)
         self.VeffLF()
-        ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
+        im = ax1.pcolormesh(LLout,self.medianLF,zzout,shading='auto',cmap='viridis')
         ax1.errorbar(self.Lavg,self.lfbinorig,yerr=np.sqrt(self.var),fmt='b^')
+        ax1.set_ylim(bottom=np.percentile(self.medianLF,5))
+        divider = make_axes_locatable(ax1)
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        plt.colorbar(im, cax=cax, orientation='vertical',label='Redshift')
         
     def triangle_plot(self, outname, lnprobcut=7.5, imgtype='png'):
         ''' Make a triangle corner plot for samples from fit
@@ -468,7 +476,7 @@ class LumFuncMCMC:
         fig.set_figwidth(w-(len(indarr)-13)*0.025*w)
         ax1 = fig.add_subplot(3, 1, 1)
         ax1.set_position([0.50-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 
-                          0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)])
+                          0.43+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)])
         self.add_LumFunc_plot(ax1)
         self.add_subplots(ax1,nsamples)
         fig.savefig("%s.%s" % (outname,imgtype), dpi=200)
@@ -478,8 +486,8 @@ class LumFuncMCMC:
         ''' Assumes that "Ln Prob" is the last column in self.samples'''
         chi2sel = (self.samples[:, -1] >
                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        # nsamples = self.samples[chi2sel, :-1]
-        nsamples = self.samples[:,:-1]
+        nsamples = self.samples[chi2sel, :-1]
+        # nsamples = self.samples[:,:-1]
         self.log.info("Number of table entries: %d"%(len(self.table[0])))
         self.log.info("Len(percentiles): %d; len(other axis): %d"%(len(percentiles), len(np.percentile(nsamples,percentiles[0],axis=0))))
         n = len(percentiles)
