@@ -21,12 +21,42 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                })
 
 def getQuadCoef(y1,y2,y3,z1,z2,z3):
+    ''' From Leja et al. 2020: Function to get quadratic coefficients based on quantity's values at 3 pivot points
+
+    Input
+    -----
+    y1,y2,y3: Floats or Numpy 1D Arrays (same size)
+        Value of a given quantity (i.e., L* or phi*) at 3 pivot points
+    z1,z2,z3: Floats
+        The three pivot points (redshifts)
+
+    Return
+    ------
+    a,b,c: Quadratic coefficients y=az^2+bz+c
+    '''
     a =((y3-y1) + (y2-y1)*(z1-z3)/(z2-z1)) / (z3**2-z1**2 + (z2**2-z1**2)*(z1-z3)/(z2-z1))
     b = (y2-y1 - a*(z2**2-z1**2)) / (z2-z1)
     c = y1 - a*z1**2 - b*z1
     return a,b,c
 
 def schechter_z(L,z,al,L1,L2,L3,phi1,phi2,phi3,z1,z2,z3):
+    ''' Inspired by Leja et al. 2020; function to calculate Schechter value at a given luminosity (or array) and redshift with certain L* and phi* values at 3 pivot points
+
+    Input
+    -----
+    L: float or 1D Numpy Array
+        Log luminosity (log erg/s)
+    z: float or 1D Numpy Array (if L is also an array, it must be the same size)
+        Redshift
+    al: float
+        Schechther alpha parameter
+    L1,L2,L3: floats
+        Schechther log(Lstar) parameter at 3 pivot redshifts
+    phi1,phi2,phi3: floats
+        Schechther log(phistar) parameter at 3 pivot redshifts
+    z1,z2,z3: Floats
+        The three pivot points (redshifts)
+    '''
     aphi,bphi,cphi = getQuadCoef(phi1,phi2,phi3,z1,z2,z3)
     alum,blum,clum = getQuadCoef(L1,L2,L3,z1,z2,z3)
     phistar = aphi*z**2 + bphi*z + cphi
@@ -134,7 +164,9 @@ class LumFuncMCMC:
         nsteps : int
             The number of steps each walker will make when fitting a model
         root: Float
-        Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
+            Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
+        z1,z2,z3: Floats
+        The three pivot points (redshifts)
         '''
         if flux is not None: 
             self.flux = 1.0e-17*flux
@@ -398,6 +430,8 @@ class LumFuncMCMC:
             a cut in log probability space with respect to the maximum
             probability.  For reference, a Gaussian 1-sigma is 2.5 in log prob
             space.
+        zlen, Llen: ints
+            Length of output array for redshift and luminosity (for LF reporting)
 
         Creates
         -------
