@@ -4,7 +4,7 @@ import numpy as np
 import os.path as op
 import logging
 from astropy.table import Table
-from lumfuncmcmc import LumFuncMCMC
+from lumfuncmcmc_z import LumFuncMCMC
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
 import configLF
@@ -176,11 +176,11 @@ def read_input_file(args):
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
     # Make output folder if it doesn't exist
-    mkpath('LFMCMCOut')
+    mkpath('LFMCMCzOut')
     # Get Inputs
     if argv == None:
         argv = sys.argv
-        argv.remove('run_lumfuncmcmc.py')
+        argv.remove('run_lumfuncmcmc_z.py')
 
     args = parse_args(argv)
     # Read input file into arrays
@@ -215,7 +215,7 @@ def main(argv=None):
     print "Finished fitting model and about to create outputs"
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
-        LFmod.triangle_plot('LFMCMCOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('LFMCMCzOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
         print "Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)"
     else:
         LFmod.set_median_fit()
@@ -223,19 +223,19 @@ def main(argv=None):
     names.append('Ln Prob')
     if args.output_dict['fitposterior']: 
         T = Table(LFmod.samples, names=names)
-        T.write('LFMCMCOut/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        T.write('LFMCMCzOut/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print "Finished writing fitposterior file"
     if args.output_dict['bestfitLF']:
-        T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
-                    names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
-        T.write('LFMCMCOut/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        T = Table([LFmod.Lout, LFmod.zout, LFmod.medianLF],
+                    names=['Luminosity_cols', 'Redshift_rows', 'MedianLFMatrix'])
+        T.write('LFMCMCzOut/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print "Finished writing bestfitLF file"
     if args.output_dict['VeffLF']:
         T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                     names=['Luminosity', 'BinLF', 'BinLFErr'])
-        T.write('LFMCMCOut/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        T.write('LFMCMCzOut/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print "Finished writing VeffLF file"
 
@@ -244,12 +244,12 @@ def main(argv=None):
     print(LFmod.table)
 
     if args.output_dict['parameters']:
-        LFmod.table.write('LFMCMCOut/%s' % args.output_filename,
+        LFmod.table.write('LFMCMCzOut/%s' % args.output_filename,
                           format='ascii.fixed_width_two_line',
                           formats=formats, overwrite=True)
         print "Finished writing LF main table"
     if args.output_dict['settings']:
-        filename = open('LFMCMCOut/%s.args' % args.output_filename, 'w')
+        filename = open('LFMCMCzOut/%s.args' % args.output_filename, 'w')
         del args.log
         filename.write( str( vars(args) ) )
         filename.close()
