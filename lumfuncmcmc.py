@@ -40,7 +40,6 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     '''
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
-# 
 def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
@@ -65,6 +64,9 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha):
     '''
     L = 10**logL
     return Omega_0/V.sqarcsec * V.p(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha)
+
+def normalFunc(x,mu,sig):
+    return 1.0/(np.sqrt(2.0*np.pi)*sig) * np.exp(-(x-mu)**2/(2.0*sig**2))
 
 class LumFuncMCMC:
     def __init__(self,z,flux=None,flux_e=None,Flim=2.7e-17,alpha=-2.06,
@@ -179,7 +181,7 @@ class LumFuncMCMC:
             self.lum, self.lum_e = unumpy.nominal_values(ulum), unumpy.std_devs(ulum)
         else:
             self.lum = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * self.flux)
-            self.lum_e = None
+            self.lum_e = 0.01*np.ones(len(self.lum))
 
     def getFluxes(self):
         ''' Set sample fluxes based on luminosities if not available '''
@@ -189,7 +191,7 @@ class LumFuncMCMC:
             self.flux, self.flux_e = unumpy.nominal_values(uflux), unumpy.std_devs(uflux)
         else:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
-            self.flux_e = None
+            self.flux_e = 0.1*self.flux
 
     def setup_logging(self):
         '''Setup Logging for MCSED
@@ -247,7 +249,7 @@ class LumFuncMCMC:
         else: 
             return 0.0
 
-    def lnlike(self):
+    def lnlike(self,arrlen=101):
         ''' Calculate the log likelihood and return the value and stellar mass
         of the model as well as other derived parameters
 
@@ -255,14 +257,21 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
-        # logL = np.linspace(self.Lc,self.Lh,101)
-        zarr = np.linspace(self.zmin,self.zmax,101)
+        # lnpart = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
+        modvals = np.zeros(len(self.lum))
+        for i in range(len(self.lum)):
+            logL = np.linspace(self.lum[i]-10.0*self.lum_e[i],self.lum[i]+10.0*self.lum_e[i],arrlen)
+            schvals = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(self.z[i])*self.Omegaf(logL,self.z[i])
+            normvals = normalFunc(logL,self.lum[i],self.lum_e[i])
+            modvals[i] = trapz(schvals*normvals,logL)
+        lnpart = sum(np.log(modvals))
+        # logL = np.linspace(self.Lc,self.Lh,arrlen)
+        zarr = np.linspace(self.zmin,self.zmax,arrlen)
         dz = zarr[1]-zarr[0]
         zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
         fullint = 0.0
         for i, zi in enumerate(zmid):
-            logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,101)
+            logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,arrlen)
             integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
             fullint += trapz(integ,logL)*dz
         return lnpart - fullint

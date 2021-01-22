@@ -87,11 +87,11 @@ def parse_args(argv=None):
                         type=float, default=None)  
 
     parser.add_argument("-al", "--alpha",
-                        help='''Minimum completeness fraction considered''',
+                        help='''Completeness alpha parameter''',
                         type=float, default=None)
 
     parser.add_argument("-fl", "--Flim",
-                        help='''Minimum completeness fraction considered''',
+                        help='''Completeness F50 parameter''',
                         type=float, default=None)     
 
     parser.add_argument("-ln", "--line_name",
@@ -150,6 +150,7 @@ def read_input_file(args):
     """
     datfile = Table.read(args.filename,format='ascii')
     z = datfile['z']
+    args.log.info("min_comp_frac used in run: %.2f"%(args.min_comp_frac))
     if abs(args.min_comp_frac-0.0)<1.0e-6:
         root = 0.0
     else:
@@ -162,8 +163,10 @@ def read_input_file(args):
             cond = flux>root
         flux_e = datfile['%s_flux_e'%(args.line_name)]
         flux, flux_e = flux[cond], flux_e[cond]
+        args.log.info("Read in fluxes and/or flux errors")
     except:
         flux, flux_e = None, None
+        args.log.info("No fluxes or flux errors to read in file")
     if '%s_lum'%(args.line_name) in datfile.columns: 
         lum = datfile['%s_lum'%(args.line_name)]
         DL = np.zeros(len(z))
@@ -176,8 +179,10 @@ def read_input_file(args):
             lum_e = datfile['%s_lum'%(args.line_name)][cond]
         else:
             lum_e = None
+        args.log.info("Read in luminosity and/or lum error info")
     else: 
         lum, lum_e = None, None
+        args.log.info("No luminosity or lum error info in file")
     z = z[cond]
     return z, flux, flux_e, lum, lum_e, root
 
@@ -191,9 +196,10 @@ def main(argv=None):
         argv.remove('run_lumfuncmcmc.py')
 
     args = parse_args(argv)
+    args.log.info("Got all args; now reading input file")
     # Read input file into arrays
     z, flux, flux_e, lum, lum_e, root = read_input_file(args)
-    print "Read Input File"
+    args.log.info("Read Input File; now initializing LumFuncMCMC class")
 
     # Initialize LumFuncMCMC class
     LFmod = LumFuncMCMC(z, flux=flux, flux_e=flux_e, lum=lum, lum_e=lum_e, 
@@ -204,7 +210,7 @@ def main(argv=None):
                         Lstar_lims=args.Lstar_lims, phistar=args.phistar, 
                         phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, 
                         nwalkers=args.nwalkers, nsteps=args.nsteps, root=root)
-    print "Initialized LumFuncMCMC class"
+    args.log.info("Initialized LumFuncMCMC class; now setting up names for table")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
     percentiles = args.param_percentiles
@@ -217,35 +223,35 @@ def main(argv=None):
     formats['Line'] = '%s'
     LFmod.table = Table(names=labels, dtype=['S10'] +
                               ['f8']*(len(labels)-1))
-    print "Finished making names and labels for LF table and about to start fitting the model!"
+    args.log.info("Finished making names and labels for LF table and about to start fitting the model!")
     #### Run the actual model!!! ####
     LFmod.fit_model()
-    print "Finished fitting model and about to create outputs"
+    args.log.info("Finished fitting model and about to create outputs")
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
         LFmod.triangle_plot('LFMCMCOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
-        print "Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)"
+        args.log.info("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
     else:
         LFmod.set_median_fit()
-        print "Finished setting median fit and V_eff parameters"
+        args.log.info("Finished setting median fit and V_eff parameters")
     names.append('Ln Prob')
     if args.output_dict['fitposterior']: 
         T = Table(LFmod.samples, names=names)
         T.write('LFMCMCOut/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
-        print "Finished writing fitposterior file"
+        args.log.info("Finished writing fitposterior file")
     if args.output_dict['bestfitLF']:
         T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
                     names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
         T.write('LFMCMCOut/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
-        print "Finished writing bestfitLF file"
+        args.log.info("Finished writing bestfitLF file")
     if args.output_dict['VeffLF']:
         T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                     names=['Luminosity', 'BinLF', 'BinLFErr'])
         T.write('LFMCMCOut/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
                 overwrite=True, format='ascii.fixed_width_two_line')
-        print "Finished writing VeffLF file"
+        args.log.info("Finished writing VeffLF file")
 
     LFmod.table.add_row([args.line_name] + [0.]*(len(labels)-1))
     LFmod.add_fitinfo_to_table(percentiles)
@@ -255,7 +261,7 @@ def main(argv=None):
         LFmod.table.write('LFMCMCOut/%s' % args.output_filename,
                           format='ascii.fixed_width_two_line',
                           formats=formats, overwrite=True)
-        print "Finished writing LF main table"
+        args.log.info("Finished writing LF main table")
     if args.output_dict['settings']:
         filename = open('LFMCMCOut/%s.args' % args.output_filename, 'w')
         del args.log
