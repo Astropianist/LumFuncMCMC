@@ -639,8 +639,11 @@ def get_mult_factor(lum0,lum1,Lminzf,zmin,zmax):
 def main():
     dat = Table.read("../AllTextFiles/combined_all_Swift_AEB_515_NoAGN.dat",format='ascii')
     oiii = dat['OIII5007']; ha = dat['Ha']; z = dat['z']
+    oiii *= 3.98/2.98 #All OIII
+    Ha *= 0.71 #NII correction
     min_comp_frac = 0.5
-    Flim_OIII, Flim_Ha = 4.0e-17, 3.1e-17
+    # Flim_OIII, Flim_Ha = 4.0e-17, 3.1e-17
+    Flim_OIII, Flim_Ha = 4.0e-17*3.98/2.98, 3.1e-17*0.71
     alpha_OIII, alpha_Ha = -2.12, -2.20
     rootoiii = get_min_flux(min_comp_frac,Flim_OIII,alpha_OIII)
     rootha = get_min_flux(min_comp_frac,Flim_Ha,alpha_Ha)
@@ -650,11 +653,11 @@ def main():
     zbin_list = [1,3,5]
     # zbins = 1
     # nbin_list = [10,50,80]
-    combineStepsLog(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_OIII,alpha=alpha_OIII,nbin=nbin,Omega_0=Omega_0,Fmin=rootoiii,integ=True)
-    combineStepsLog(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_Ha,alpha=alpha_Ha,nbin=nbin,Omega_0=Omega_0,Fmin=rootha,integ=True)
+    combineStepsLog(1.0e-17*oiii[condoiii],z[condoiii],"OIII_all_Vmax_LF_mcf_%d_bins_%d.png"%(int(100*min_comp_frac),nbin),Flim=Flim_OIII,alpha=alpha_OIII,nbin=nbin,Omega_0=Omega_0,Fmin=rootoiii,integ=True)
+    combineStepsLog(1.0e-17*ha[condha],z[condha],"Ha_corr_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_Ha,alpha=alpha_Ha,nbin=nbin,Omega_0=Omega_0,Fmin=rootha,integ=True)
     for zbins in zbin_list:
-        zEvolSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_OIII,alpha=alpha_OIII,nbins=nbin,zbins=zbins,Fmin=rootoiii,Omega_0=Omega_0,log=True,integ=True)
-        zEvolSteps(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_Ha,alpha=alpha_Ha,nbins=nbin,zbins=zbins,Fmin=rootha,Omega_0=Omega_0,log=True,integ=True)
+        zEvolSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_all_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_OIII,alpha=alpha_OIII,nbins=nbin,zbins=zbins,Fmin=rootoiii,Omega_0=Omega_0,log=True,integ=True)
+        zEvolSteps(1.0e-17*ha[condha],z[condha],"Ha_corr_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_Ha,alpha=alpha_Ha,nbins=nbin,zbins=zbins,Fmin=rootha,Omega_0=Omega_0,log=True,integ=True)
 
 if __name__=='__main__': 
     main()
