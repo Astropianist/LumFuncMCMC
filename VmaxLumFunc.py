@@ -231,7 +231,9 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20):
         Array of variances derived from bootstrap method
     """
     ##### Bin the data by luminosity to create a true luminosity function #####
-    Larr = np.linspace(min(L),max(L),nbin+1) #To establish bin boundaries
+    Lmin = np.log10(get_L_constF(Fmin,maxz))
+    print "Min Luminosity:", Lmin
+    Larr = np.linspace(Lmin,max(L),nbin+1) #To establish bin boundaries
     Lavg = np.linspace((Larr[0]+Larr[1])/2.0,(Larr[-1]+Larr[-2])/2.0,len(Larr)-1) #Centers of bins
     dL = Lavg[1]-Lavg[0]
     lfbin = np.zeros((nboot,len(Lavg)))
@@ -255,19 +257,19 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20):
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
     ########### Correct for luminosity bins that are only partially included #########
-    zarr = np.linspace(0.9*minz,1.1*maxz,201)
-    Lminarr = np.zeros_like(zarr)
-    for i,zi in enumerate(zarr):
-        Lminarr[i] = get_L_constF(Fmin,zi)
-    Lminarr = np.log10(Lminarr)
-    Lminzf = interp1d(zarr,Lminarr,kind='cubic')
-    for j in range(len(lfbinorig)):
-        mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
-        # print "mult[%d]=%.2f"%(j,mult)
-        if abs(mult-1.0)<1.0e-8:
-            break
-        lfbinorig[j]*=mult
-        var[j]*=mult**2
+    # zarr = np.linspace(0.9*minz,1.1*maxz,201)
+    # Lminarr = np.zeros_like(zarr)
+    # for i,zi in enumerate(zarr):
+    #     Lminarr[i] = get_L_constF(Fmin,zi)
+    # Lminarr = np.log10(Lminarr)
+    # Lminzf = interp1d(zarr,Lminarr,kind='cubic')
+    # for j in range(len(lfbinorig)):
+    #     mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
+    #     # print "mult[%d]=%.2f"%(j,mult)
+    #     if abs(mult-1.0)<1.0e-8:
+    #         break
+    #     lfbinorig[j]*=mult
+    #     var[j]*=mult**2
     return Lavg, lfbinorig, var
 
 def getBootErr(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=0.0):
@@ -301,7 +303,9 @@ def getBootErr(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=0.0):
         Array of variances derived from bootstrap method
     """
     ##### Bin the data by luminosity to create a true luminosity function #####
-    Larr = np.linspace(min(L),max(L),nbin+1) #To establish bin boundaries
+    Lmin = get_L_constF(Fmin,maxz)
+    print "min L:", Lmin
+    Larr = np.linspace(Lmin,max(L),nbin+1) #To establish bin boundaries
     Lavg = np.linspace((Larr[0]+Larr[1])/2.0,(Larr[-1]+Larr[-2])/2.0,len(Larr)-1) #Centers of bins
 
     lfbin = np.zeros((nboot,len(Lavg)))
@@ -325,18 +329,18 @@ def getBootErr(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=0.0):
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
     ########### Correct for luminosity bins that are only partially included #########
-    zarr = np.linspace(0.9*minz,1.1*maxz,201)
-    Lminarr = np.zeros_like(zarr)
-    for i,zi in enumerate(zarr):
-        Lminarr[i] = get_L_constF(Fmin,zi)
-    Lminzf = interp1d(zarr,Lminarr,kind='cubic')
-    for j in range(len(lfbinorig)):
-        mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
-        # print "mult[%d]=%.2f"%(j,mult)
-        if abs(mult-1.0)<1.0e-8:
-            break
-        lfbinorig[j]*=mult
-        var[j]*=mult**2
+    # zarr = np.linspace(0.9*minz,1.1*maxz,201)
+    # Lminarr = np.zeros_like(zarr)
+    # for i,zi in enumerate(zarr):
+    #     Lminarr[i] = get_L_constF(Fmin,zi)
+    # Lminzf = interp1d(zarr,Lminarr,kind='cubic')
+    # for j in range(len(lfbinorig)):
+    #     mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
+    #     # print "mult[%d]=%.2f"%(j,mult)
+    #     if abs(mult-1.0)<1.0e-8:
+    #         break
+    #     lfbinorig[j]*=mult
+    #     var[j]*=mult**2
     return Lavg, lfbinorig, var
 
 def fit_Schechter(Lavg,lfbinorig,var,name='OIII',alpha_value=None,log=False,integ=False):
@@ -489,6 +493,9 @@ def combineStepsLog(F,z,name,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,nboot=100,nbi
     Lfunc, phifunc, minz, maxz = getlumfunc(F,z,Omega_0,Flim,alpha,Fmin)
     print "Finished calculating true luminosity function"
     Lavg, lfbinorig, var = getBootErrLog(np.log10(Lfunc),phifunc,minz,maxz,nboot,nbin,Fmin)
+    T = Table([Lavg,lfbinorig,np.sqrt(var)],names=('Luminosity','BinLF','BinLFErr'))
+    fn = op.join(img_dir,"Log","%s_log.dat"%(name.split('.')[0]))
+    T.write(fn,format='ascii.fixed_width_two_line',overwrite=True)
     print "Finished getting bootstrap-based errors"
     schfit = fit_Schechter(Lavg,lfbinorig,var,log=True,integ=integ)
     print "Fit Schechter function to true luminosity function"
@@ -613,7 +620,7 @@ def get_L_constF(F,z):
     return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
 
 def get_mult_factor(lum0,lum1,Lminzf,zmin,zmax):
-    """ Factor to multiply counts by when a luminosity bin has values not considered at some redhshifts
+    """ Factor to multiply counts by when a luminosity bin has values not considered at some redshifts
     Input
     -----
     lum0, lum1: Floats
@@ -639,22 +646,26 @@ def get_mult_factor(lum0,lum1,Lminzf,zmin,zmax):
 def main():
     dat = Table.read("../AllTextFiles/combined_all_Swift_AEB_515_NoAGN.dat",format='ascii')
     oiii = dat['OIII5007']; ha = dat['Ha']; z = dat['z']
+    # oiii *= 3.98/2.98 #All OIII
+    # ha *= 0.71 #NII correction
     min_comp_frac = 0.5
     Flim_OIII, Flim_Ha = 4.0e-17, 3.1e-17
+    # Flim_OIII, Flim_Ha = 4.0e-17*3.98/2.98, 3.1e-17*0.71
     alpha_OIII, alpha_Ha = -2.12, -2.20
     rootoiii = get_min_flux(min_comp_frac,Flim_OIII,alpha_OIII)
     rootha = get_min_flux(min_comp_frac,Flim_Ha,alpha_Ha)
+    print "min OIII flux, min Ha flux:", rootoiii, rootha
     condoiii = oiii>1.0e17*rootoiii; condha = ha>1.0e17*rootha
     nbin = 50
     Omega_0 = 1.0e6
-    zbin_list = [1,3,5]
+    zbin_list = [5]
     # zbins = 1
     # nbin_list = [10,50,80]
-    combineStepsLog(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_OIII,alpha=alpha_OIII,nbin=nbin,Omega_0=Omega_0,Fmin=rootoiii,integ=True)
-    combineStepsLog(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_mcf_%d_bins_%d_new.png"%(int(100*min_comp_frac),nbin),Flim=Flim_Ha,alpha=alpha_Ha,nbin=nbin,Omega_0=Omega_0,Fmin=rootha,integ=True)
-    for zbins in zbin_list:
-        zEvolSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_OIII,alpha=alpha_OIII,nbins=nbin,zbins=zbins,Fmin=rootoiii,Omega_0=Omega_0,log=True,integ=True)
-        zEvolSteps(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_zbin_%d_nbin_%d_mcf_%d.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_Ha,alpha=alpha_Ha,nbins=nbin,zbins=zbins,Fmin=rootha,Omega_0=Omega_0,log=True,integ=True)
+    combineStepsLog(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_mcf_%d_bins_%d_phi.png"%(int(100*min_comp_frac),nbin),Flim=Flim_OIII,alpha=alpha_OIII,nbin=nbin,Omega_0=Omega_0,Fmin=rootoiii,integ=False)
+    combineStepsLog(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_mcf_%d_bins_%d_phi.png"%(int(100*min_comp_frac),nbin),Flim=Flim_Ha,alpha=alpha_Ha,nbin=nbin,Omega_0=Omega_0,Fmin=rootha,integ=False)
+    # for zbins in zbin_list:
+    #     zEvolSteps(1.0e-17*oiii[condoiii],z[condoiii],"OIII_Vmax_LF_zbin_%d_nbin_%d_mcf_%d_phi.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_OIII,alpha=alpha_OIII,nbins=nbin,zbins=zbins,Fmin=rootoiii,Omega_0=Omega_0,log=True,integ=False)
+    #     zEvolSteps(1.0e-17*ha[condha],z[condha],"Ha_Vmax_LF_zbin_%d_nbin_%d_mcf_%d_phi.png"%(zbins,nbin,int(100*min_comp_frac)),Flim=Flim_Ha,alpha=alpha_Ha,nbins=nbin,zbins=zbins,Fmin=rootha,Omega_0=Omega_0,log=True,integ=False)
 
 if __name__=='__main__': 
     main()
