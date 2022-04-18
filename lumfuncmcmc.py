@@ -69,11 +69,11 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
     return Omega_0/V.sqarcsec * V.fleming(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha,fcmin=fcmin)
 
 class LumFuncMCMC:
-    def __init__(self,z,flux=None,flux_e=None,Flim=2.7,Flim_lims=[1.0,5.0],alpha=-2.06,
-                 alpha_lims=[-6.0,0.0],line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
+    def __init__(self,z,flux=None,flux_e=None,Flim=2.7,Flim_lims=[1.0,5.0],alpha=3.5,
+                 alpha_lims=[0.0,6.0],line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
                  lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
                  sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],phistar=-3.0,
-                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0,fix_sch_al=False,fcmin=0.1):
+                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -126,8 +126,12 @@ class LumFuncMCMC:
             The number of steps each walker will make when fitting a model
         root: Float
             Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
+        fix_sch_al: Bool
+            Whether or not to fix the alpha parameter of true luminosity function
         fcmin: Float
             Completeness fraction below which the modification to the Fleming curve becomes important
+        fix_comp: Bool
+            Whether or not to fix the completeness parameters
         '''
         self.z = z
         self.zmin, self.zmax = min(self.z), max(self.z)
@@ -154,7 +158,7 @@ class LumFuncMCMC:
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
         self.phistar, self.phistar_lims = phistar, phistar_lims
         self.nwalkers, self.nsteps = nwalkers, nsteps
-        self.fix_sch_al = fix_sch_al
+        self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
         self.all_param_names = ['Lstar','phistar','Flim','alpha','sch_al']
         self.setup_logging()
 
@@ -235,10 +239,12 @@ class LumFuncMCMC:
             list of input parameters for Schechter Fit'''
         self.Lstar = input_list[0]
         self.phistar = input_list[1]
-        self.Flim = input_list[2]
-        self.alpha = input_list[3]
-        if not self.fix_sch_al:
-            self.sch_al = input_list[4]
+        if self.fix_comp:
+            if self.fix_sch_al: pass
+            else: self.sch_al = input_list[2]
+        else:
+            self.Flim, self.alpha = input_list[2], input_list[3]
+            if not self.fix_sch_al: input_list[4]
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -303,9 +309,11 @@ class LumFuncMCMC:
         '''
         # theta = [self.sch_al, self.Lstar, self.phistar]
         if self.fix_sch_al:
-            theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.Flim_lims,self.alpha_lims))
+            if self.fix_comp: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims))
+            else: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.Flim_lims,self.alpha_lims))
         else:
-            theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.Flim_lims,self.alpha_lims,self.sch_al_lims))
+            if self.fix_comp: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.sch_al_lims))
+            else: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.Flim_lims,self.alpha_lims,self.sch_al_lims))
         if num is None:
             num = self.nwalkers
         pos = (np.random.rand(num)[:, np.newaxis] *
@@ -321,9 +329,11 @@ class LumFuncMCMC:
             list of all parameter names
         '''
         if self.fix_sch_al:
-            return [r'$\log L_*$',r'$\log \phi_*$',r'$F_{\rm lim}$',r'$\alpha_C$']
+            if self.fix_comp: return [r'$\log L_*$',r'$\log \phi_*$']
+            else: return [r'$\log L_*$',r'$\log \phi_*$',r'$F_{\rm lim}$',r'$\alpha_C$']
         else:
-            return [r'$\log L_*$',r'$\log \phi_*$',r'$F_{\rm lim}$',r'$\alpha_C$',r'$\alpha$']
+            if self.fix_comp: return [r'$\log L_*$',r'$\log \phi_*$',r'$\alpha$']
+            else: return [r'$\log L_*$',r'$\log \phi_*$',r'$F_{\rm lim}$',r'$\alpha_C$',r'$\alpha$']
 
     def get_params(self):
         ''' Grab the the parameters in each class
@@ -334,9 +344,11 @@ class LumFuncMCMC:
             list of all parameter values
         '''
         if self.fix_sch_al:
-            vals = [self.Lstar,self.phistar,self.Flim,self.alpha]
+            if self.fix_comp: vals = [self.Lstar,self.phistar]
+            else: vals = [self.Lstar,self.phistar,self.Flim,self.alpha]
         else:
-            vals = [self.Lstar,self.phistar,self.Flim,self.alpha,self.sch_al]
+            if self.fix_comp: vals = [self.Lstar,self.phistar,self.sch_al]
+            else: vals = [self.Lstar,self.phistar,self.Flim,self.alpha,self.sch_al]
         self.nfreeparams = len(vals)
         return vals
 
@@ -421,13 +433,16 @@ class LumFuncMCMC:
         # nsamples = self.samples
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
+        Flims, alphas = np.zeros(rndsamples), np.zeros(rndsamples)
         lf = []
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
+            Flims[i], alphas[i] = self.Flim, self.alpha
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
         self.medianLF = np.median(np.array(lf), axis=0)
+        self.Flim, self.alpha = np.median(Flims), np.median(alphas)
         self.VeffLF()
 
     def add_LumFunc_plot(self,ax1):
@@ -441,13 +456,16 @@ class LumFuncMCMC:
         ''' Add Subplots to Triangle plot below '''
         lf = []
         indsort = np.argsort(self.lum)
+        Flims, alphas = np.zeros(rndsamples), np.zeros(rndsamples)
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
+            Flims[i], alphas[i] = self.Flim, self.alpha
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
             ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
         self.medianLF = np.median(np.array(lf), axis=0)
+        self.Flim, self.alpha = np.median(Flims), np.median(alphas)
         self.VeffLF()
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
         ax1.errorbar(self.Lavg,self.lfbinorig,yerr=np.sqrt(self.var),fmt='b^')

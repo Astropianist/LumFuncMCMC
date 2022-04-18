@@ -70,7 +70,7 @@ def p(F,Flim=3.0e-17,alpha=-3.5):
     """ Completeness (Fleming) curve as function of Flim and alpha """
     return 0.5*(1.0 - (alpha*np.log10(F/Flim))/np.sqrt(1.0+ (alpha*np.log10(F/Flim))**2))
 
-def fleming(f, Flim=3.0e-17, alpha=-3.5, fcmin=0.1):
+def fleming(f, Flim=3.0e-17, alpha=3.5, fcmin=0.1):
     '''
     The original Fleming completeness function
 
