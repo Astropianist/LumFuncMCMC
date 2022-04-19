@@ -3,13 +3,14 @@ import logging
 import emcee
 from uncertainties import unumpy, ufloat
 import matplotlib
-from scipy.interpolate import interp1d, interp2d
+from scipy.interpolate import interp1d, interp2d, RectBivariateSpline
 from scipy.integrate import trapz
 import time
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import corner
 import VmaxLumFunc as V
+from scipy.optimize import fsolve
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -69,25 +70,26 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
     return Omega_0/V.sqarcsec * V.fleming(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha,fcmin=fcmin)
 
 class LumFuncMCMC:
-    def __init__(self,z,flux=None,flux_e=None,Flim=2.7,Flim_lims=[1.0,5.0],alpha=3.5,
-                 alpha_lims=[0.0,6.0],line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
-                 lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
-                 sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],phistar=-3.0,
-                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False):
+    def __init__(self,z,flux=None,flux_e=None,Flim=[2.35,3.12,2.20,2.86,2.85],Flim_lims=[1.0,6.0],
+                 alpha=3.5, alpha_lims=[0.0,6.0],line_name="OIII",
+                 line_plot_name=r'[OIII] $\lambda 5007$',lum=None,lum_e=None,Omega_0=[100.0,100.0,100.0,100.0,100.0],nbins=50,
+                 nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
+                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,
+                 root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5):
         ''' Initialize LumFuncMCMC class
 
         Init
         ----
-        z : numpy array (1 dim)
-            Array of redshifts for sample
-        flux : numpy array (1 dim) or None Object
-            Array of fluxes in 10^-17 erg/cm^2/s
-        flux_e : numpy array (1 dim) or None Object
-            Array of flux errors in 10^-17 erg/cm^2/s
-        Flim: float (multiple of 1e-17 erg/cm^2/s)
-            50% completeness flux parameter
+        z : List of numpy arrays (1 dim)
+            List of arrays of redshifts for sample (one for each field)
+        flux : list of numpy arrays (1 dim) or None Object
+            List of arrays of fluxes in 10^-17 erg/cm^2/s
+        flux_e : list of numpy arrays (1 dim) or None Object
+            List of arrays of flux errors in 10^-17 erg/cm^2/s
+        Flim: list of floats (multiple of 1e-17 erg/cm^2/s)
+            50% completeness flux parameters for each field (AEGIS, COSMOS, GOODSN, GOODSS, UDS)
         Flim_lims: two-element list
-            Minimum and maximum values allowed in Flim prior
+            Minimum and maximum values allowed in Flim prior (same for all fields)
         alpha: float
             Completeness-related slope parameter
         alpha_lims: two-element list
@@ -100,8 +102,8 @@ class LumFuncMCMC:
             Array of log luminosities in erg/s
         lum_e: numpy array (1 dim) or None Object
             Array of log luminosity errors in erg/s
-        Omega_0: float
-            Effective survey area in square arcseconds
+        Omega_0: List of floats
+            Effective survey area in square arcseconds for each field
         nbins: int
             Number of bins for plotting luminosity function and conducting V_eff method
         nboot: int
@@ -124,27 +126,32 @@ class LumFuncMCMC:
             The number of walkers for emcee when fitting a model
         nsteps : int
             The number of steps each walker will make when fitting a model
-        root: Float
-            Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
+        root: List of floats
+            Minimum flux cutoff for each field based on the completeness curve parameters and desired minimum completeness
         fix_sch_al: Bool
             Whether or not to fix the alpha parameter of true luminosity function
         fcmin: Float
             Completeness fraction below which the modification to the Fleming curve becomes important
         fix_comp: Bool
             Whether or not to fix the completeness parameters
+        min_comp_frac: Float
+            Minimum completeness fraction considered
         '''
-        self.z = z
+        self.z = np.concatenate(z)
         self.zmin, self.zmax = min(self.z), max(self.z)
-        self.root, self.fcmin = root, fcmin
+        self.root, self.fcmin, self.min_comp_frac = root, fcmin, min_comp_frac
         self.setDLdVdz()
         if flux is not None: 
-            self.flux = 1.0e-17*flux
+            self.flux = 1.0e-17*np.concatenate(flux)
             if flux_e is not None:
-                self.flux_e = 1.0e-17*flux_e
+                self.flux_e = 1.0e-17*np.concatenate(flux_e)
         else:
-            self.lum, self.lum_e = lum, lum_e
+            self.lum, self.lum_e = np.concatenate(lum), np.concatenate(lum_e)
             self.getFluxes()
         self.Flim, self.Flim_lims = Flim, Flim_lims
+        self.fields = ['AEGIS','COSMOS','GOODSN','GOODSS','UDS']
+        self.nfields = len(self.Flim)
+        assert len(self.fields)==self.nfields
         self.alpha, self.alpha_lims = alpha, alpha_lims
         self.line_name = line_name
         self.line_plot_name = line_plot_name
@@ -152,14 +159,15 @@ class LumFuncMCMC:
             self.getLumin()
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
-        self.setOmegaLz()
+        # self.setOmegaLz()
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
         self.phistar, self.phistar_lims = phistar, phistar_lims
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
-        self.all_param_names = ['Lstar','phistar','Flim','alpha','sch_al']
+        self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
+        self.getRoot()
         self.setup_logging()
 
     def setDLdVdz(self):
@@ -171,18 +179,20 @@ class LumFuncMCMC:
             self.DL[i] = V.dLz(zi) # In Mpc
             DLarr[i] = V.dLz(zint[i])
             dVdzarr[i] = V.dVdz(zint[i])
-            minlum[i] = np.log10(4.0*np.pi*(DLarr[i]*3.086e24)**2 * self.root)
+            # minlum[i] = np.log10(4.0*np.pi*(DLarr[i]*3.086e24)**2 * self.root)
         self.DLf = interp1d(zint,DLarr)
         self.dVdzf = interp1d(zint,dVdzarr)
-        self.minlumf = interp1d(zint,minlum)
+        # self.minlumf = interp1d(zint,minlum)
 
-    def setOmegaLz(self):
+    def setOmegaLz(self,size=501):
         ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
-        logL = np.linspace(self.Lc,self.Lh,501)
-        zarr = np.linspace(self.zmin,self.zmax,501)
+        logL = np.linspace(self.Lc,self.Lh,size)
+        zarr = np.linspace(self.zmin,self.zmax,size)
         xx, yy = np.meshgrid(logL,zarr)
-        Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0,1.0e-17*self.Flim,self.alpha,self.fcmin)
-        self.Omegaf = interp2d(logL,zarr,Omegaarr,kind='cubic')
+        self.Omegaf = []
+        for i in range(self.nfields):
+            Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
+            self.Omegaf.append(interp2d(logL,zarr,Omegaarr,kind='cubic'))
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -204,6 +214,16 @@ class LumFuncMCMC:
         else:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
+
+    def getRoot(self,size=51):
+        ''' Get minimum flux depending on minimum completeness fraction as interpolation'''
+        flims = np.linspace(self.Flim_lims[0],self.Flim_lims[1],size)
+        alphas = np.linspace(self.alpha_lims[0],self.alpha_lims[1],size)
+        roots = np.empty((size,size))
+        for i in range(size):
+            for j in range(size):
+                roots[i,j] = fsolve(lambda x: V.fleming(x,flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0]])[0]
+        self.rootsf = RectBivariateSpline(flims,alphas,roots)
 
     def setup_logging(self):
         '''Setup Logging for MCSED
@@ -243,8 +263,11 @@ class LumFuncMCMC:
             if self.fix_sch_al: pass
             else: self.sch_al = input_list[2]
         else:
-            self.Flim, self.alpha = input_list[2], input_list[3]
-            if not self.fix_sch_al: input_list[4]
+            if self.fix_sch_al:
+                self.Flim, self.alpha = input_list[2:2+self.nfields], input_list[2+self.nfields]
+            else: 
+                self.sch_al = input_list[2]
+                self.Flim, self.alpha = input_list[3:3+self.nfields], input_list[3+self.nfields]
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -255,14 +278,19 @@ class LumFuncMCMC:
         '''
         flag = 1.0
         for param in self.all_param_names:
-            flag *= ((getattr(self,param) >= getattr(self,param+'_lims')[0]) *
+            if param=='Flim':
+                for i in range(self.nfields):
+                    flag *= ((getattr(self,param)[i] >= getattr(self,param+'_lims')[0]) *
+                     (getattr(self,param)[i] <= getattr(self,param+'_lims')[1]))
+            else:
+                flag *= ((getattr(self,param) >= getattr(self,param+'_lims')[0]) *
                      (getattr(self,param) <= getattr(self,param+'_lims')[1]))
         if not flag: 
             return -np.inf
         else: 
             return 0.0
 
-    def lnlike(self):
+    def lnlike(self,size=101):
         ''' Calculate the log likelihood and return the value and stellar mass
         of the model as well as other derived parameters
 
@@ -272,19 +300,22 @@ class LumFuncMCMC:
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
         # logL = np.linspace(self.Lc,self.Lh,101)
-        zarr = np.linspace(self.zmin,self.zmax,101)
+        zarr = np.linspace(self.zmin,self.zmax,size)
         dz = zarr[1]-zarr[0]
         zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
         fullint = 0.0
         for i, zi in enumerate(zmid):
-            logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,101)
-            # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
-            integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * self.dVdzf(zi) * Omega(logL,zi,self.DLf,self.Omega_0,1.0e-17*self.Flim,self.alpha,self.fcmin)
-            fullint += trapz(integ,logL)*dz
+            volume_part = self.dVdzf(zi)
+            for ii in range(self.nfields):
+                minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf(self.Flim[ii],self.alpha))
+                logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,size)
+                # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
+                integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * Omega(logL,zi,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin) * volume_part
+                fullint += trapz(integ,logL)*dz
         return lnpart - fullint
 
     def lnprob(self, theta):
-        ''' Calculate the log probabilty 
+        ''' Calculate the log probability 
 
         Returns
         -------
@@ -308,12 +339,11 @@ class LumFuncMCMC:
             Two dimensional array with Nwalker x Ndim values
         '''
         # theta = [self.sch_al, self.Lstar, self.phistar]
-        if self.fix_sch_al:
-            if self.fix_comp: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims))
-            else: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.Flim_lims,self.alpha_lims))
-        else:
-            if self.fix_comp: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.sch_al_lims))
-            else: theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims,self.Flim_lims,self.alpha_lims,self.sch_al_lims))
+        theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims))
+        if not self.fix_sch_al: theta_lims = np.vstack((theta_lims,self.sch_al_lims))
+        if not self.fix_comp:
+            for i in range(self.nfields): theta_lims = np.vstack((theta_lims,self.Flim_lims))
+            theta_lims = np.vstack((theta_lims,self.alpha_lims))
         if num is None:
             num = self.nwalkers
         pos = (np.random.rand(num)[:, np.newaxis] *
@@ -328,12 +358,12 @@ class LumFuncMCMC:
         names : list
             list of all parameter names
         '''
-        if self.fix_sch_al:
-            if self.fix_comp: return [r'$\log L_*$',r'$\log \phi_*$']
-            else: return [r'$\log L_*$',r'$\log \phi_*$',r'$F_{\rm lim}$',r'$\alpha_C$']
-        else:
-            if self.fix_comp: return [r'$\log L_*$',r'$\log \phi_*$',r'$\alpha$']
-            else: return [r'$\log L_*$',r'$\log \phi_*$',r'$F_{\rm lim}$',r'$\alpha_C$',r'$\alpha$']
+        names = [r'$\log L_*$',r'$\log \phi_*$']
+        if not self.fix_sch_al: names += [r'$\alpha_C$']
+        if not self.fix_comp:
+            for i in range(self.nfields): names += [r'$F_{{\rm 50},%d}$'%(i)]
+            names += [r'$\alpha_C$']
+        return names
 
     def get_params(self):
         ''' Grab the the parameters in each class
@@ -343,12 +373,11 @@ class LumFuncMCMC:
         vals : list
             list of all parameter values
         '''
-        if self.fix_sch_al:
-            if self.fix_comp: vals = [self.Lstar,self.phistar]
-            else: vals = [self.Lstar,self.phistar,self.Flim,self.alpha]
-        else:
-            if self.fix_comp: vals = [self.Lstar,self.phistar,self.sch_al]
-            else: vals = [self.Lstar,self.phistar,self.Flim,self.alpha,self.sch_al]
+        vals = [self.Lstar,self.phistar]
+        if not self.sch_al: vals += [self.sch_al]
+        if not self.fix_comp:
+            vals += self.Flim
+            vals += [self.alpha]
         self.nfreeparams = len(vals)
         return vals
 

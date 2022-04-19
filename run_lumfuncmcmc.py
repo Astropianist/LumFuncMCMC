@@ -6,7 +6,6 @@ import logging
 from astropy.table import Table
 from lumfuncmcmc import LumFuncMCMC
 import VmaxLumFunc as V
-from scipy.optimize import fsolve
 import configLF
 from distutils.dir_util import mkpath
 
@@ -102,6 +101,10 @@ def parse_args(argv=None):
                         help='''Fix Schechter Alpha''',
                         action='count',default=0)
 
+    parser.add_argument("-fc", "--fix_comp",
+                        help='''Fix Completeness''',
+                        action='count',default=0)
+
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
                          type=str, default=None)               
@@ -157,10 +160,11 @@ def read_input_file(args):
     """
     datfile = Table.read(args.filename,format='ascii')
     z = datfile['z']
-    if abs(args.min_comp_frac-0.0)<1.0e-6:
-        root = 0.0
-    else:
-        root = fsolve(lambda x: V.p(x,args.Flim,args.alpha)-args.min_comp_frac,[args.Flim])[0]
+    # if abs(args.min_comp_frac-0.0)<1.0e-6:
+    #     root = 0.0
+    # else:
+    #     root = fsolve(lambda x: V.p(x,args.Flim,args.alpha)-args.min_comp_frac,[args.Flim])[0]
+    root = 0.0
     try:
         flux = datfile['%s_flux'%(args.line_name)]
         if max(flux)>1.0e-5: 
@@ -210,7 +214,8 @@ def main(argv=None):
                         sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, 
                         Lstar_lims=args.Lstar_lims, phistar=args.phistar, 
                         phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, 
-                        nwalkers=args.nwalkers, nsteps=args.nsteps, root=root, fix_sch_al=args.fix_sch_al)
+                        nwalkers=args.nwalkers, nsteps=args.nsteps, root=root, 
+                        fix_sch_al=args.fix_sch_al, fix_comp=args.fix_comp, min_comp_frac=args.min_comp_frac)
     print "Initialized LumFuncMCMC class"
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
