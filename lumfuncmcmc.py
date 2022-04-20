@@ -364,7 +364,7 @@ class LumFuncMCMC:
             list of all parameter names
         '''
         names = [r'$\log L_*$',r'$\log \phi_*$']
-        if not self.fix_sch_al: names += [r'$\alpha_C$']
+        if not self.fix_sch_al: names += [r'$\alpha$']
         if not self.fix_comp:
             for i in range(self.nfields): names += [r'$F_{{\rm 50},%d}$'%(i)]
             names += [r'$\alpha_C$']
