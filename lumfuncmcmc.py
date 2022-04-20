@@ -425,11 +425,10 @@ class LumFuncMCMC:
         Larr = np.linspace(min(self.lum)*1.001,max(self.lum),self.nbins+1)
         self.lfbinorig, self.var = 0., 0.
         for ii in range(self.nfields):
-            lum_current = self.lum[self.field_ind[ii]:self.field_ind[ii+1]]
             root = self.rootsf(self.Flim[ii],self.alpha)
-            for i in range(len(lum_current)):
-                zmaxval = min(self.zmax,V.getMaxz(10**lum_current[i],root))
-                self.phifunc[self.field_ind[ii]+i] = V.lumfunc(self.flux[self.field_ind[ii]+i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha)
+            for i in range(self.field_ind[ii],self.field_ind[ii+1]):
+                zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root))
+                self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root,Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
 
@@ -473,7 +472,7 @@ class LumFuncMCMC:
         # nsamples = self.samples
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
-        Flims, alphas = np.zeros(rndsamples,self.nfields), np.zeros(rndsamples)
+        Flims, alphas = np.zeros((rndsamples,self.nfields)), np.zeros(rndsamples)
         lf = []
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
@@ -496,7 +495,7 @@ class LumFuncMCMC:
         ''' Add Subplots to Triangle plot below '''
         lf = []
         indsort = np.argsort(self.lum)
-        Flims, alphas = np.zeros(rndsamples,self.nfields), np.zeros(rndsamples)
+        Flims, alphas = np.zeros((rndsamples,self.nfields)), np.zeros(rndsamples)
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
