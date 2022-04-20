@@ -351,7 +351,7 @@ class LumFuncMCMC:
             theta_lims = np.vstack((theta_lims,self.alpha_lims))
         if num is None:
             num = self.nwalkers
-        pos = (np.random.rand(num)[:, np.newaxis] *
+        pos = (np.random.rand(num,len(theta_lims)) *
               (theta_lims[:, 1]-theta_lims[:, 0]) + theta_lims[:, 0])
         return pos
 
@@ -381,7 +381,7 @@ class LumFuncMCMC:
         vals = [self.Lstar,self.phistar]
         if not self.sch_al: vals += [self.sch_al]
         if not self.fix_comp:
-            vals += self.Flim
+            vals += list(self.Flim)
             vals += [self.alpha]
         self.nfreeparams = len(vals)
         return vals
