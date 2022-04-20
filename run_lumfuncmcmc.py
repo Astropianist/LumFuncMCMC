@@ -185,7 +185,8 @@ def read_input_file(args):
         lum, lum_e = None, None
     z = []
     for field in field_names: 
-        cond = fields==field
+        try: cond = np.logical_and(fields==field,fluxfull>0)
+        except: cond = np.logical_and(fields==field,lumfull>0)
         z.append(zfull[cond])
     return z, flux, flux_e, lum, lum_e, field_names, field_ind
 
