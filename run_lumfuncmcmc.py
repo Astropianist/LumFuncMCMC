@@ -160,7 +160,8 @@ def read_input_file(args):
     """
     datfile = Table.read(args.filename,format='ascii')
     fields, zfull = datfile['Field'], datfile['z']
-    field_names = np.unique(fields)
+    field_names, field_ind = np.unique(fields,return_indices=True)
+    field_ind = np.append(field_ind,len(fields))
     try:
         fluxfull = datfile['%s_flux'%(args.line_name)]
         fluxfull_e = datfile['%s_flux_e'%(args.line_name)]
@@ -186,7 +187,7 @@ def read_input_file(args):
     for field in field_names: 
         cond = fields==field
         z.append(zfull[cond])
-    return z, flux, flux_e, lum, lum_e
+    return z, flux, flux_e, lum, lum_e, field_names, field_ind
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -199,7 +200,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     # Read input file into arrays
-    z, flux, flux_e, lum, lum_e = read_input_file(args)
+    z, flux, flux_e, lum, lum_e, field_names, field_ind = read_input_file(args)
     print("Read Input File")
 
     # Initialize LumFuncMCMC class
@@ -213,7 +214,7 @@ def main(argv=None):
                         nwalkers=args.nwalkers, nsteps=args.nsteps, 
                         fix_sch_al=args.fix_sch_al, fix_comp=args.fix_comp, 
                         min_comp_frac=args.min_comp_frac, Flim_lims=args.Flim_lims,
-                        alpha_lims=args.alpha_lims)
+                        alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind)
     print("Initialized LumFuncMCMC class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()

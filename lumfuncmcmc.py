@@ -75,7 +75,8 @@ class LumFuncMCMC:
                  line_plot_name=r'[OIII] $\lambda 5007$',lum=None,lum_e=None,Omega_0=[100.0,100.0,100.0,100.0,100.0],nbins=50,
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,
-                 root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5):
+                 root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
+                 field_names=None,field_ind=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -136,6 +137,10 @@ class LumFuncMCMC:
             Whether or not to fix the completeness parameters
         min_comp_frac: Float
             Minimum completeness fraction considered
+        field_names: 1-D Numpy array
+            List of fields used in data
+        field_ind: 1-D Numpy array
+            Indices that convert the unique field names to the full list of fluxes
         '''
         self.z = np.concatenate(z)
         self.zmin, self.zmax = min(self.z), max(self.z)
@@ -149,9 +154,8 @@ class LumFuncMCMC:
             self.lum, self.lum_e = np.concatenate(lum), np.concatenate(lum_e)
             self.getFluxes()
         self.Flim, self.Flim_lims = Flim, Flim_lims
-        self.fields = ['AEGIS','COSMOS','GOODSN','GOODSS','UDS']
-        self.nfields = len(self.Flim)
-        assert len(self.fields)==self.nfields
+        self.fields, self.nfields = self.field_names, len(self.Flim)
+        self.field_ind = field_ind
         self.alpha, self.alpha_lims = alpha, alpha_lims
         self.line_name = line_name
         self.line_plot_name = line_plot_name
@@ -222,7 +226,7 @@ class LumFuncMCMC:
         roots = np.empty((size,size))
         for i in range(size):
             for j in range(size):
-                roots[i,j] = fsolve(lambda x: V.fleming(x,flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0]])[0]
+                roots[i,j] = fsolve(lambda x: V.fleming(x,flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0])[0]
         self.rootsf = RectBivariateSpline(flims,alphas,roots)
 
     def setup_logging(self):
@@ -417,10 +421,16 @@ class LumFuncMCMC:
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         self.phifunc = np.zeros(len(self.lum))
-        for i in range(len(self.lum)):
-            zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],self.root))
-            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,zmaxval,1.0e-17*self.Flim,self.alpha)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
+        Larr = np.linspace(min(self.lum)*1.001,max(self.lum),self.nbins+1)
+        self.lfbinorig, self.var = 0., 0.
+        for ii in range(self.nfields):
+            lum_current = self.lum[self.field_ind[ii]:self.field_ind[ii+1]]
+            root = self.rootsf(self.Flim[ii],self.alpha)
+            for i in range(len(lum_current)):
+                zmaxval = min(self.zmax,V.getMaxz(10**lum_current[i],root))
+                self.phifunc[self.field_ind[ii]+i] = V.lumfunc(self.flux[self.field_ind[ii]+i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha)
+            self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root,Larr=Larr)
+            self.lfbinorig += lfbinorigi; self.var += vari
 
     def calcModLumFunc(self):
         ''' Calculate modeled ("observed") luminosity function given class Schechter parameters
@@ -462,7 +472,7 @@ class LumFuncMCMC:
         # nsamples = self.samples
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
-        Flims, alphas = np.zeros(rndsamples), np.zeros(rndsamples)
+        Flims, alphas = np.zeros(rndsamples,self.nfields), np.zeros(rndsamples)
         lf = []
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
@@ -471,7 +481,7 @@ class LumFuncMCMC:
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
         self.medianLF = np.median(np.array(lf), axis=0)
-        self.Flim, self.alpha = np.median(Flims), np.median(alphas)
+        self.Flim, self.alpha = list(np.median(Flims,axis=0)), np.median(alphas)
         self.VeffLF()
 
     def add_LumFunc_plot(self,ax1):
@@ -485,7 +495,7 @@ class LumFuncMCMC:
         ''' Add Subplots to Triangle plot below '''
         lf = []
         indsort = np.argsort(self.lum)
-        Flims, alphas = np.zeros(rndsamples), np.zeros(rndsamples)
+        Flims, alphas = np.zeros(rndsamples,self.nfields), np.zeros(rndsamples)
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
@@ -494,7 +504,7 @@ class LumFuncMCMC:
             lf.append(modlum)
             ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
         self.medianLF = np.median(np.array(lf), axis=0)
-        self.Flim, self.alpha = np.median(Flims), np.median(alphas)
+        self.Flim, self.alpha = list(np.median(Flims,axis=0)), np.median(alphas)
         self.VeffLF()
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
         ax1.errorbar(self.Lavg,self.lfbinorig,yerr=np.sqrt(self.var),fmt='b^')
