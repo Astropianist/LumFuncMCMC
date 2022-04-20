@@ -160,14 +160,14 @@ def read_input_file(args):
     """
     datfile = Table.read(args.filename,format='ascii')
     fields, zfull = datfile['Field'], datfile['z']
-    field_names, field_ind = np.unique(fields,return_indices=True)
+    field_names, field_ind = np.unique(fields,return_index=True)
     field_ind = np.append(field_ind,len(fields))
     try:
         fluxfull = datfile['%s_flux'%(args.line_name)]
         fluxfull_e = datfile['%s_flux_e'%(args.line_name)]
         flux, flux_e = [], []
         for field in field_names:
-            cond = fields==field
+            cond = np.logical_and(fields==field,fluxfull>0)
             flux.append(fluxfull[cond]); flux_e.append(fluxfull_e[cond])
     except:
         flux, flux_e = None, None
@@ -177,7 +177,7 @@ def read_input_file(args):
             lumfull_e = datfile['%s_lum'%(args.line_name)]
         lum, lum_e = [], []
         for field in field_names:
-            cond = fields==field
+            cond = np.logical_and(fields==field,lumfull>0)
             lum.append(lumfull[cond])
             if lumfull_e is not None: lum_e.append(lumfull_e[cond])
         if len(lum_e)==0: lum_e = None

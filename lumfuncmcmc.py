@@ -154,7 +154,7 @@ class LumFuncMCMC:
             self.lum, self.lum_e = np.concatenate(lum), np.concatenate(lum_e)
             self.getFluxes()
         self.Flim, self.Flim_lims = Flim, Flim_lims
-        self.fields, self.nfields = self.field_names, len(self.Flim)
+        self.fields, self.nfields = field_names, len(self.Flim)
         self.field_ind = field_ind
         self.alpha, self.alpha_lims = alpha, alpha_lims
         self.line_name = line_name
