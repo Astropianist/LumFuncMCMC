@@ -313,7 +313,7 @@ class LumFuncMCMC:
             volume_part = self.dVdzf(zi)
             for ii in range(self.nfields):
                 minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf(self.Flim[ii],self.alpha))
-                logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,size)
+                logL = np.linspace(max(min(self.lum),minlum),self.Lstar+1.75,size)
                 # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
                 integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * Omega(logL,zi,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin) * volume_part
                 fullint += trapz(integ,logL)*dz
