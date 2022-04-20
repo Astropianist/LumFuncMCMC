@@ -427,7 +427,8 @@ class LumFuncMCMC:
         for ii in range(self.nfields):
             root = self.rootsf(self.Flim[ii],self.alpha)
             for i in range(self.field_ind[ii],self.field_ind[ii+1]):
-                zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root))
+                if self.min_comp_frac<0.01: zmaxval = self.zmax
+                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root))
                 self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root,Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
