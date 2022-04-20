@@ -223,10 +223,11 @@ class LumFuncMCMC:
         ''' Get minimum flux depending on minimum completeness fraction as interpolation'''
         flims = np.linspace(self.Flim_lims[0],self.Flim_lims[1],size)
         alphas = np.linspace(self.alpha_lims[0],self.alpha_lims[1],size)
-        roots = np.empty((size,size))
-        for i in range(size):
-            for j in range(size):
-                roots[i,j] = fsolve(lambda x: V.fleming(x,flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0])[0]
+        roots = np.zeros((size,size))
+        if self.min_comp_frac>0.01:
+            for i in range(size):
+                for j in range(size):
+                    roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0])[0]
         self.rootsf = RectBivariateSpline(flims,alphas,roots)
 
     def setup_logging(self):

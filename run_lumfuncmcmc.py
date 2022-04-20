@@ -227,6 +227,8 @@ def main(argv=None):
     for label in labels:
         formats[label] = '%0.3f'
     formats['Line'] = '%s'
+    print('Labels:', labels)
+    
     LFmod.table = Table(names=labels, dtype=['S10'] +
                               ['f8']*(len(labels)-1))
     print("Finished making names and labels for LF table and about to start fitting the model!")
