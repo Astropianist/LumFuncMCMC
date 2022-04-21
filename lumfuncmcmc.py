@@ -164,7 +164,6 @@ class LumFuncMCMC:
             self.getLumin()
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
-        if self.fix_comp: self.setOmegaLz()
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
@@ -172,6 +171,7 @@ class LumFuncMCMC:
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
+        if self.fix_comp: self.setOmegaLz()
         self.getRoot()
         self.setup_logging()
         pdb.set_trace()
