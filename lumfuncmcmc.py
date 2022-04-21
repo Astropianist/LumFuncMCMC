@@ -174,7 +174,7 @@ class LumFuncMCMC:
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
         self.getRoot()
         self.setup_logging()
-        # pdb.set_trace()
+        pdb.set_trace()
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
@@ -437,7 +437,7 @@ class LumFuncMCMC:
             for i in range(self.field_ind[ii],self.field_ind[ii+1]):
                 if self.min_comp_frac<0.01: zmaxval = self.zmax
                 else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[ii]))
-                self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha)
+                self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
 

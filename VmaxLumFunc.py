@@ -192,7 +192,7 @@ def lumfuncint(z,F,Omega_0,Flim,alpha):
     """
     return Omega_0/sqarcsec * p(F,Flim,alpha)*dVdz(z)
 
-def lumfuncintv2(z,F,Omega_0,func,Flim,alpha):
+def lumfuncintv2(z,F,Omega_0,func,Flim,alpha,fcmin=0.1):
     """ Integrand of luminosity function MLE for faster computation
     
     Input
@@ -208,10 +208,11 @@ def lumfuncintv2(z,F,Omega_0,func,Flim,alpha):
     alpha: Float
         Fleming curve alpha (slope) parameter
     """
-    return Omega_0/sqarcsec * p(F,Flim,alpha)*func(z)
+    # return Omega_0/sqarcsec * p(F,Flim,alpha)*func(z)
+    return Omega_0/sqarcsec * fleming(F,Flim,alpha,fcmin=fcmin) * func(z)
 
 #phi(L)--1/Veff estimator
-def lumfunc(F,func,Omega_0=100.0,minz=1.16,maxz=1.9,Flim=3.0e-17,alpha=-3.5):
+def lumfunc(F,func,Omega_0=100.0,minz=1.16,maxz=1.9,Flim=3.0e-17,alpha=-3.5,fcmin=0.1):
     """ Luminosity function volume^-1 weights for a given flux
 
     Input
@@ -231,7 +232,7 @@ def lumfunc(F,func,Omega_0=100.0,minz=1.16,maxz=1.9,Flim=3.0e-17,alpha=-3.5):
     alpha: Float
         Fleming curve alpha (slope) parameter
     """
-    ans, err = quad(lumfuncintv2, minz, maxz, args=(F,Omega_0,func,Flim,alpha))
+    ans, err = quad(lumfuncintv2, minz, maxz, args=(F,Omega_0,func,Flim,alpha,fcmin))
     return 1.0/ans
 
 def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
