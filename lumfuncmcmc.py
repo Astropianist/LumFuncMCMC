@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import corner
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
+import pdb
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -173,6 +174,7 @@ class LumFuncMCMC:
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
         self.getRoot()
         self.setup_logging()
+        pdb.set_trace()
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
