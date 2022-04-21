@@ -486,7 +486,7 @@ class LumFuncMCMC:
         for ii in range(self.nfields):
             for i in range(self.field_ind[ii],self.field_ind[ii+1]):
                 if self.min_comp_frac<0.01: zmaxval = self.zmax
-                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i]))
+                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[ii]))
                 if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
