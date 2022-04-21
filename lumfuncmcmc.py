@@ -3,7 +3,7 @@ import logging
 import emcee
 from uncertainties import unumpy, ufloat
 import matplotlib
-from scipy.interpolate import interp1d, interp2d, RectBivariateSpline
+from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 import time
 matplotlib.use("Agg")
@@ -164,7 +164,7 @@ class LumFuncMCMC:
             self.getLumin()
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
-        # self.setOmegaLz()
+        if self.fix_comp: self.setOmegaLz()
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
@@ -193,12 +193,16 @@ class LumFuncMCMC:
     def setOmegaLz(self,size=501):
         ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
         logL = np.linspace(self.Lc,self.Lh,size)
-        zarr = np.linspace(self.zmin,self.zmax,size)
-        xx, yy = np.meshgrid(logL,zarr)
+        zarr = np.linspace(0.95*self.zmin,1.05*self.zmax,size)
+        # xx, yy = np.meshgrid(logL,zarr)
         self.Omegaf = []
-        for i in range(self.nfields):
-            Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
-            self.Omegaf.append(interp2d(logL,zarr,Omegaarr,kind='cubic'))
+        Omegaarr = np.empty((size,size))
+        for ii in range(self.nfields):
+            for i in range(size):
+                # Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
+                Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],self.Flim[ii],self.alpha,self.fcmin)
+            # self.Omegaf.append(interp2d(logL,zarr,Omegaarr,kind='cubic'))
+            self.Omegaf.append(RectBivariateSpline(logL,zarr,Omegaarr))
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -326,6 +330,34 @@ class LumFuncMCMC:
                 fullint += trapz(integ,logL)*dz
         return lnpart - fullint
 
+    def lnlike_fix_comp(self,size=101):
+        ''' Calculate the log likelihood and return the value and stellar mass of the model as well as other derived parameters when completeness parameters are fixed (faster)
+
+        Returns
+        -------
+        log likelihood (float)
+            The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
+        lnpart = 0.0
+        for ii in range(self.nfields):
+            tl = TrueLumFunc(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.sch_al,self.Lstar,self.phistar)
+            om = self.Omegaf[ii](self.lum[self.field_ind[ii]:self.field_ind[ii+1]], self.z[self.field_ind[ii]:self.field_ind[ii+1]])
+            tlfom = tl*om
+            lnpart += sum(tlfom[tlfom>0.0])
+        # logL = np.linspace(self.Lc,self.Lh,101)
+        zarr = np.linspace(self.zmin,self.zmax,size)
+        dz = zarr[1]-zarr[0]
+        zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
+        fullint = 0.0
+        for i, zi in enumerate(zmid):
+            volume_part = self.dVdzf(zi)
+            minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf.ev(self.Flim,self.alpha))
+            for ii in range(self.nfields):
+                logL = np.linspace(max(min(self.lum),minlum[ii]),self.Lstar+1.75,size)
+                # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
+                integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * self.Omegaf[ii](logL,zi) * volume_part
+                fullint += trapz(integ,logL)*dz
+        return lnpart - fullint
+
     def lnprob(self, theta):
         ''' Calculate the log probability 
 
@@ -338,6 +370,21 @@ class LumFuncMCMC:
         if np.isfinite(lp):
             lnl = self.lnlike()
             # pdb.set_trace()
+            return lnl+lp
+        else:
+            return -np.inf
+
+    def lnprob_fix_comp(self, theta):
+        ''' Calculate the log probability for fixed completeness
+
+        Returns
+        -------
+        log prior + log likelihood, (float)
+            The log probability is just the sum of the logs of the prior and likelihood. '''
+        self.set_parameters_from_list(theta)
+        lp = self.lnprior()
+        if np.isfinite(lp):
+            lnl = self.lnlike_fix_comp()
             return lnl+lp
         else:
             return -np.inf
@@ -402,7 +449,9 @@ class LumFuncMCMC:
         pos = self.get_init_walker_values()
         ndim = pos.shape[1]
         start = time.time()
-        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.lnprob)
+        if self.fix_comp: func = 'lnprob_fix_comp'
+        else: func = 'lnprob'
+        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
         end = time.time()
@@ -430,13 +479,14 @@ class LumFuncMCMC:
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         self.phifunc = np.zeros(len(self.lum))
-        Larr = np.linspace(min(self.lum)*1.001,max(self.lum),self.nbins+1)
         self.lfbinorig, self.var = 0., 0.
         root = self.rootsf.ev(self.Flim,self.alpha)
+        minlum = max(min(self.lum)*1.001,V.get_L_constF(max(root),self.zmax))
+        Larr = np.linspace(minlum,max(self.lum),self.nbins+1)
         for ii in range(self.nfields):
             for i in range(self.field_ind[ii],self.field_ind[ii+1]):
                 if self.min_comp_frac<0.01: zmaxval = self.zmax
-                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[ii]))
+                else: zmaxval = max(self.zmin,min(self.zmax,V.getMaxz(10**self.lum[i],root[ii])))
                 self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
