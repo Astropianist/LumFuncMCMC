@@ -72,7 +72,7 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
 
 class LumFuncMCMC:
     def __init__(self,z,flux=None,flux_e=None,Flim=[2.35,3.12,2.20,2.86,2.85],Flim_lims=[1.0,6.0],
-                 alpha=3.5, alpha_lims=[0.0,6.0],line_name="OIII",
+                 alpha=3.5, alpha_lims=[1.0,6.0],line_name="OIII",
                  line_plot_name=r'[OIII] $\lambda 5007$',lum=None,lum_e=None,Omega_0=[100.0,100.0,100.0,100.0,100.0],nbins=50,
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,
