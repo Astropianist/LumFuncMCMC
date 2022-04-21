@@ -221,7 +221,7 @@ class LumFuncMCMC:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
 
-    def getRoot(self,size=51):
+    def getRoot(self,size=201):
         ''' Get minimum flux depending on minimum completeness fraction as interpolation'''
         flims = np.linspace(self.Flim_lims[0],self.Flim_lims[1],size)
         alphas = np.linspace(self.alpha_lims[0],self.alpha_lims[1],size)
@@ -337,7 +337,7 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike()
-            pdb.set_trace()
+            # pdb.set_trace()
             return lnl+lp
         else:
             return -np.inf
