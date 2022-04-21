@@ -174,7 +174,7 @@ class LumFuncMCMC:
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
         self.getRoot()
         self.setup_logging()
-        pdb.set_trace()
+        # pdb.set_trace()
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
