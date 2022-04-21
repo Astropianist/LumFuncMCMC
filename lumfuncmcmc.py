@@ -229,7 +229,7 @@ class LumFuncMCMC:
         if self.min_comp_frac>0.01:
             for i in range(size):
                 for j in range(size):
-                    roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0])[0]
+                    roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0e-17])[0]
         self.rootsf = RectBivariateSpline(flims,alphas,roots)
 
     def setup_logging(self):
@@ -313,9 +313,9 @@ class LumFuncMCMC:
         fullint = 0.0
         for i, zi in enumerate(zmid):
             volume_part = self.dVdzf(zi)
+            minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf.ev(self.Flim,self.alpha))
             for ii in range(self.nfields):
-                minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf(self.Flim[ii],self.alpha))
-                logL = np.linspace(max(min(self.lum),minlum),self.Lstar+1.75,size)
+                logL = np.linspace(max(min(self.lum),minlum[ii]),self.Lstar+1.75,size)
                 # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
                 integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * Omega(logL,zi,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin) * volume_part
                 fullint += trapz(integ,logL)*dz
@@ -332,6 +332,7 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike()
+            pdb.set_trace()
             return lnl+lp
         else:
             return -np.inf
@@ -381,7 +382,7 @@ class LumFuncMCMC:
             list of all parameter values
         '''
         vals = [self.Lstar,self.phistar]
-        if not self.sch_al: vals += [self.sch_al]
+        if not self.fix_sch_al: vals += [self.sch_al]
         if not self.fix_comp:
             vals += list(self.Flim)
             vals += [self.alpha]
@@ -426,13 +427,13 @@ class LumFuncMCMC:
         self.phifunc = np.zeros(len(self.lum))
         Larr = np.linspace(min(self.lum)*1.001,max(self.lum),self.nbins+1)
         self.lfbinorig, self.var = 0., 0.
+        root = self.rootsf.ev(self.Flim,self.alpha)
         for ii in range(self.nfields):
-            root = self.rootsf(self.Flim[ii],self.alpha)
             for i in range(self.field_ind[ii],self.field_ind[ii+1]):
                 if self.min_comp_frac<0.01: zmaxval = self.zmax
-                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root))
+                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[ii]))
                 self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha)
-            self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root,Larr=Larr)
+            self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
 
     def calcModLumFunc(self):
