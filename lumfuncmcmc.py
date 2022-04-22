@@ -255,7 +255,11 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
+        cond = self.flux>self.root
+        tl = np.log(TrueLumFunc(self.lum[cond],self.sch_al,self.Lstar,self.phistar))
+        om = self.Omegaf(self.lum[cond],self.z[cond])
+        tlom = tl*om
+        lnpart = sum(np.log(tlom[tlom>0.0]))
         # logL = np.linspace(self.Lc,self.Lh,101)
         zarr = np.linspace(self.zmin,self.zmax,101)
         dz = zarr[1]-zarr[0]
