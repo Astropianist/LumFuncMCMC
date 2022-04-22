@@ -74,6 +74,73 @@ def p(F,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     """ Completeness (Fleming) curve as function of Flim and alpha """
     return 0.5*(1.0 - (2.5*alpha*np.log10(F/Flim))/np.sqrt(1.0+ (2.5*alpha*np.log10(F/Flim))**2))
 
+def fleming(f, Flim=3.0e-17, alpha=3.5, fcmin=0.1):
+    '''
+    The original Fleming completeness function
+    Parameters
+    ----------
+    f : float
+        linear flux
+    Flim : float
+        linear flux at which the completeness fraction is 50%
+    alpha : float
+        describes the speed with which the completeness declines
+    fcmin : False or float
+        if False, fit original Fleming curve
+        if float, use modified Fleming where fcmin in range (0,1)
+        is the completeness fraction below which the 
+        modification to the Fleming curve becomes important
+    Returns
+    -------
+    fc : float
+        the completeness fraction (0, 1)
+    '''
+    if type(alpha)==type(None):
+        return np.ones(len(list(f)))
+    numerator = alpha * np.log10( f / Flim )
+    denominator = ( 1. + numerator**2. ) ** 0.5
+    fc = 0.5* (1. + numerator / denominator )
+    if not fcmin:
+        return fc
+    else:
+        f_tau = inverse_fleming(f50=Flim, alpha=alpha, fcmin=fcmin)
+        fc_decay = expdecay(f, f_tau)
+        fc_mod = fc**(1. / fc_decay)
+    return fc_mod
+
+def expdecay(x, tau):
+    '''
+    Exponential decay function
+    used for the modification to the Fleming curve (see eq. 2)
+    '''
+    return 1. - np.exp(-x/tau)
+
+def inverse_fleming(f50, alpha, fcmin=0.1):
+    '''
+    Find the flux at which the completeness fraction = fcmin
+    i.e., inverting eq. 1
+    Used for the faint-end modification to the Fleming function (see eq. 2)
+    Parameters
+    ----------
+    f50 : float
+        linear flux at which the completeness fraction is 50%
+    alpha : float
+        describes the speed with which the completeness declines
+    fcmin : float in range (0, 1)
+        completeness fraction
+        in practice, this is the completeness fraction below which the 
+        modification to the Fleming curve becomes important (see eq. 3)
+    Returns
+    -------
+    f : float
+        linear flux at which the completeness fraction = fcmin
+    '''
+
+    a = (2*fcmin -1)**2.
+    b = -1*( abs(a / (1-a))*alpha**-2. )**0.5
+
+    return f50*10**b
+
 def Ha(a,w=-1.0,omega_m=OmegaM,omega_l=OmegaL,omega_r=0.,omega_k=0.): 
     """ Hubble parameter as a function of a; this ignores the complicated transition of neutrinos from relativistic to non-relativistic in the early universe """
     return H0*np.sqrt(omega_m*a**(-3) + omega_l*a**(-3*(w+1)) + omega_r*a**(-4) + omega_k*a**(-2))

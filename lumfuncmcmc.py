@@ -6,6 +6,7 @@ import matplotlib
 from scipy.interpolate import interp1d, interp2d
 from scipy.integrate import trapz
 import time
+import pdb
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import corner
@@ -255,11 +256,14 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
+        # tic = time.time()
         cond = self.flux>self.root
-        tl = np.log(TrueLumFunc(self.lum[cond],self.sch_al,self.Lstar,self.phistar))
+        tl = TrueLumFunc(self.lum[cond],self.sch_al,self.Lstar,self.phistar)
         om = self.Omegaf(self.lum[cond],self.z[cond])
         tlom = tl*om
-        lnpart = sum(np.log(tlom[tlom>0.0]))
+        lnpart_new = sum(np.log(tlom[tlom>0.0]))
+        # toc = time.time()
+        # print("Time for lnpart calculation:",toc-tic)
         # logL = np.linspace(self.Lc,self.Lh,101)
         zarr = np.linspace(self.zmin,self.zmax,101)
         dz = zarr[1]-zarr[0]
