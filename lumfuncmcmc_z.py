@@ -116,7 +116,7 @@ class LumFuncMCMC:
                  lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
                  sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],phistar=-3.0,
                  phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0,
-                 z1=1.20,z2=1.53,z3=1.86,fix_sch_al=False):
+                 z1=1.20,z2=1.53,z3=1.86):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -198,7 +198,6 @@ class LumFuncMCMC:
             setattr(self,'phi'+str(i),phistar + 0.45*rngphi*(2.0*np.random.rand()-1.0))
             setattr(self,'phi'+str(i)+'_lims',np.copy(phistar_lims))
         self.nwalkers, self.nsteps = nwalkers, nsteps
-        self.fix_sch_al = fix_sch_al
         self.setup_logging()
 
     def setDLdVdz(self):
@@ -276,10 +275,9 @@ class LumFuncMCMC:
         -----
         theta : list
             list of input parameters for Schechter Fit'''
-        self.L1, self.L2, self.L3 = input_list[0], input_list[1], input_list[2]
-        self.phi1, self.phi2, self.phi3 = input_list[3], input_list[4], input_list[5]
-        if not self.fix_sch_al:
-            self.sch_al = input_list[6]
+        self.sch_al = input_list[0]
+        self.L1, self.L2, self.L3 = input_list[1], input_list[2], input_list[3]
+        self.phi1, self.phi2, self.phi3 = input_list[4], input_list[5], input_list[6]
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -346,12 +344,8 @@ class LumFuncMCMC:
         pos : np.array (2 dim)
             Two dimensional array with Nwalker x Ndim values
         '''
-        if self.fix_sch_al:
-            theta = [self.L1, self.L2, self.L3, self.phi1, self.phi2, self.phi3]
-            theta_lims = np.vstack((self.L1_lims,self.L2_lims,self.L3_lims,self.phi1_lims,self.phi2_lims,self.phi3_lims))
-        else:
-            theta = [self.L1, self.L2, self.L3, self.phi1, self.phi2, self.phi3, self.sch_al]
-            theta_lims = np.vstack((self.L1_lims,self.L2_lims,self.L3_lims,self.phi1_lims,self.phi2_lims,self.phi3_lims,self.sch_al_lims))
+        theta = [self.sch_al, self.L1, self.L2, self.L3, self.phi1, self.phi2, self.phi3]
+        theta_lims = np.vstack((self.sch_al_lims,self.L1_lims,self.L2_lims,self.L3_lims,self.phi1_lims,self.phi2_lims,self.phi3_lims))
         if num is None:
             num = self.nwalkers
         pos = (np.random.rand(num*len(theta)).reshape(num,len(theta)) *
@@ -366,10 +360,7 @@ class LumFuncMCMC:
         names : list
             list of all parameter names
         '''
-        if self.fix_sch_al:
-            return [r'$\log {\rm{L}}1_*$',r'$\log {\rm{L}}2_*$',r'$\log {\rm{L}}3_*$',r'$\log \phi1_*$',r'$\log \phi2_*$',r'$\log \phi3_*$']
-        else:
-            return [r'$\log {\rm{L}}1_*$',r'$\log {\rm{L}}2_*$',r'$\log {\rm{L}}3_*$',r'$\log \phi1_*$',r'$\log \phi2_*$',r'$\log \phi3_*$',r'$\alpha$']
+        return [r'$\alpha$',r'$\log {\rm{L}}1_*$',r'$\log {\rm{L}}2_*$',r'$\log {\rm{L}}3_*$',r'$\log \phi1_*$',r'$\log \phi2_*$',r'$\log \phi3_*$']
 
     def get_params(self):
         ''' Grab the the parameters in each class
@@ -379,10 +370,7 @@ class LumFuncMCMC:
         vals : list
             list of all parameter values
         '''
-        if self.fix_sch_al:
-            vals = [self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3]
-        else:
-            vals = [self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.sch_al]
+        vals = [self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3]
         self.nfreeparams = len(vals)
         return vals
 
@@ -423,8 +411,7 @@ class LumFuncMCMC:
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         self.phifunc = np.zeros(len(self.lum))
         for i in range(len(self.lum)):
-            zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],self.root))
-            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,zmaxval,self.Flim,self.alpha)
+            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,self.Flim,self.alpha)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
 
     def set_median_fit(self,lnprobcut=7.5,zlen=100,Llen=100):
