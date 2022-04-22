@@ -142,6 +142,7 @@ class LumFuncMCMC:
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
         self.setOmegaLz()
+        self.lumcond = self.lum[self.flux>self.root]
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
@@ -257,11 +258,7 @@ class LumFuncMCMC:
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         tic = time.time()
-        cond = self.flux>self.root
-        tl = TrueLumFunc(self.lum[cond],self.sch_al,self.Lstar,self.phistar)
-        om = self.Omegaf(self.lum[cond],self.z[cond])
-        tlom = tl*om
-        lnpart = sum(np.log(tlom[tlom>0.0]))
+        lnpart = sum(np.log(TrueLumFunc(self.lumcond,self.sch_al,self.Lstar,self.phistar)))
         toc = time.time()
         print("Time for lnpart calculation:",toc-tic)
         tic = time.time()
