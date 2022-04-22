@@ -257,16 +257,16 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        tic = time.time()
+        # tic = time.time()
         lnpart = sum(np.log(TrueLumFunc(self.lumcond,self.sch_al,self.Lstar,self.phistar)))
-        toc = time.time()
-        print("Time for lnpart calculation:",toc-tic)
-        tic = time.time()
-        lnpart_old = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
-        toc = time.time()
-        print("Time for old lnpart calculation:",toc-tic)
+        # toc = time.time()
+        # print("Time for lnpart calculation:",toc-tic)
+        # tic = time.time()
+        # lnpart_old = sum(np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)))
+        # toc = time.time()
+        # print("Time for old lnpart calculation:",toc-tic)
         # logL = np.linspace(self.Lc,self.Lh,101)
-        tic = time.time()
+        # tic = time.time()
         zarr = np.linspace(self.zmin,self.zmax,101)
         dz = zarr[1]-zarr[0]
         zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
@@ -275,9 +275,9 @@ class LumFuncMCMC:
             logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,101)
             integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
             fullint += trapz(integ,logL)*dz
-        toc = time.time()
-        print("Time for fullint calculation:",toc-tic)
-        pdb.set_trace()
+        # toc = time.time()
+        # print("Time for fullint calculation:",toc-tic)
+        # pdb.set_trace()
         return lnpart - fullint
 
     def lnprob(self, theta):
