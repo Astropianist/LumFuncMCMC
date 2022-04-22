@@ -75,7 +75,7 @@ class LumFuncMCMC:
                  alpha=3.5, alpha_lims=[1.0,6.0],line_name="OIII",
                  line_plot_name=r'[OIII] $\lambda 5007$',lum=None,lum_e=None,Omega_0=[100.0,100.0,100.0,100.0,100.0],nbins=50,
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
-                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,
+                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=38.0,Lh=47.0,nwalkers=100,nsteps=1000,
                  root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
                  field_names=None,field_ind=None):
         ''' Initialize LumFuncMCMC class
@@ -171,8 +171,11 @@ class LumFuncMCMC:
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
-        if self.fix_comp: self.setOmegaLz()
         self.getRoot()
+        if self.fix_comp: 
+            self.setOmegaLz()
+            self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
+            self.allind = np.arange(len(self.lum))
         self.setup_logging()
         pdb.set_trace()
 
@@ -200,7 +203,7 @@ class LumFuncMCMC:
         for ii in range(self.nfields):
             for i in range(size):
                 # Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
-                Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],self.Flim[ii],self.alpha,self.fcmin)
+                Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             # self.Omegaf.append(interp2d(logL,zarr,Omegaarr,kind='cubic'))
             self.Omegaf.append(RectBivariateSpline(logL,zarr,Omegaarr))
 
@@ -339,22 +342,23 @@ class LumFuncMCMC:
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = 0.0
         for ii in range(self.nfields):
-            tl = TrueLumFunc(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.sch_al,self.Lstar,self.phistar)
-            om = self.Omegaf[ii](self.lum[self.field_ind[ii]:self.field_ind[ii+1]], self.z[self.field_ind[ii]:self.field_ind[ii+1]])
+            cond = np.logical_and.reduce((self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1],self.flux>=self.roots_ln[ii]))
+            tl = TrueLumFunc(self.lum[cond],self.sch_al,self.Lstar,self.phistar)
+            om = self.Omegaf[ii].ev(self.lum[cond], self.z[cond])
             tlfom = tl*om
             lnpart += sum(tlfom[tlfom>0.0])
         # logL = np.linspace(self.Lc,self.Lh,101)
         zarr = np.linspace(self.zmin,self.zmax,size)
         dz = zarr[1]-zarr[0]
         zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
+        volume_part = self.dVdzf(zmid)
         fullint = 0.0
         for i, zi in enumerate(zmid):
-            volume_part = self.dVdzf(zi)
-            minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf.ev(self.Flim,self.alpha))
+            minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.roots_ln)
             for ii in range(self.nfields):
                 logL = np.linspace(max(min(self.lum),minlum[ii]),self.Lstar+1.75,size)
                 # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
-                integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * self.Omegaf[ii](logL,zi) * volume_part
+                integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * self.Omegaf[ii].ev(logL,zi) * volume_part[i]
                 fullint += trapz(integ,logL)*dz
         return lnpart - fullint
 
@@ -490,19 +494,6 @@ class LumFuncMCMC:
                 if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
-
-    def calcModLumFunc(self):
-        ''' Calculate modeled ("observed") luminosity function given class Schechter parameters
-
-        Returns
-        -------
-        ModLumFunc(self.lum) : 1-D Numpy Array
-            Array of values giving modeled "observed" luminosity function at luminosities in sample
-        '''
-        Omegavals = np.zeros(len(self.z))
-        for i,Li,zi in zip(np.arange(len(self.z)),self.lum,self.z): 
-            Omegavals[i] = self.Omegaf(Li,zi)
-        return TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omegavals
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
