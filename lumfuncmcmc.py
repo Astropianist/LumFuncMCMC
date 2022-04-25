@@ -186,15 +186,17 @@ class LumFuncMCMC:
 
     def setlnsimple(self):
         '''Makes arrays needed for faster calculation of lnlike'''
-        if self.ln_simple: self.size_ln = 251
+        if self.ln_simple: self.size_ln = 201
         else: self.size_ln = 101
         self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
-        # self.dz = self.zarr[1]-self.zarr[0]
-        # self.zmid = np.linspace(self.zmin+self.dz/2.0,self.zmax-self.dz/2.0,self.size_ln-1)
-        self.logL = np.linspace(np.min(self.lum),self.Lh,self.size_ln)
-        # self.dlogL = self.logL[1]-self.logL[0]
+        minlums = self.minlumf(self.zarr)
+        minlums[minlums<np.min(self.lum)] = np.min(self.lum)
+        self.logL = np.empty((self.size_ln,self.size_ln))
+        for i in range(self.size_ln):
+            self.logL[i] = np.linspace(minlums[i],self.Lh,self.size_ln)
+        # self.logL = np.linspace(np.min(self.lum),self.Lh,self.size_ln)
         volume_part = self.dVdzf(self.zarr)
-        Omega_part = self.Omegaf(self.logL[:,None],self.zarr[None])
+        Omega_part = self.Omegaf(self.logL,self.zarr[None])
         self.integ_part = volume_part * Omega_part
 
     def getLumin(self):
@@ -312,8 +314,9 @@ class LumFuncMCMC:
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)).sum()
         tlf = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar)
-        integ = tlf[:,None] * self.integ_part
-        fullint = trapz(trapz(integ,self.zarr,axis=1),self.logL)
+        integ = tlf * self.integ_part
+        # fullint = trapz(trapz(integ,self.zarr,axis=1),self.logL)
+        fullint = trapz(trapz(integ,self.logL,axis=0),self.zarr)
         return lnpart - fullint
 
     def lnprob(self, theta):
