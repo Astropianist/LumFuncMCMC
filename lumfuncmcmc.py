@@ -188,12 +188,12 @@ class LumFuncMCMC:
         if self.ln_simple: self.size_ln = 251
         else: self.size_ln = 101
         self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
-        self.dz = self.zarr[1]-self.zarr[0]
-        self.zmid = np.linspace(self.zmin+self.dz/2.0,self.zmax-self.dz/2.0,self.size_ln-1)
+        # self.dz = self.zarr[1]-self.zarr[0]
+        # self.zmid = np.linspace(self.zmin+self.dz/2.0,self.zmax-self.dz/2.0,self.size_ln-1)
         self.logL = np.linspace(self.Lc,self.Lh,self.size_ln)
-        self.dlogL = self.logL[1]-self.logL[0]
-        volume_part = self.dVdzf(self.zmid)
-        Omega_part = self.Omegaf(self.logL[:,None],self.zmid[None])
+        # self.dlogL = self.logL[1]-self.logL[0]
+        volume_part = self.dVdzf(self.zarr)
+        Omega_part = self.Omegaf(self.logL[:,None],self.zarr[None])
         self.integ_part = volume_part * Omega_part
 
     def getLumin(self):
@@ -309,28 +309,10 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        tic = time.time()
         lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)).sum()
-        toc = time.time()
-        print("Time to do lnpart:",toc-tic)
-        tic = time.time()
         tlf = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar)
         integ = tlf[:,None] * self.integ_part
-        toc = time.time()
-        print("Time to do calculate integrand:",toc-tic)
-        tic = time.time()
-        fullint = np.sum(integ)*self.dz*self.dlogL
-        toc = time.time()
-        print("Time to do crude integral:",toc-tic)
-        tic = time.time()
-        fullintv2 = trapz(trapz(integ,self.logL,axis=0),self.zmid)
-        toc = time.time()
-        print("Time to do trapezoid with logL inner:",toc-tic)
-        tic = time.time()
-        fullintv3 = trapz(trapz(integ,self.zmid,axis=1),self.logL)
-        toc = time.time()
-        print("Time to do trapezoid with zmid inner:",toc-tic)
-        pdb.set_trace()
+        fullint = trapz(trapz(integ,self.zarr,axis=1),self.logL)
         return lnpart - fullint
 
     def lnprob(self, theta):
