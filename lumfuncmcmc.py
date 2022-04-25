@@ -3,7 +3,7 @@ import logging
 import emcee
 from uncertainties import unumpy, ufloat
 import matplotlib
-from scipy.interpolate import interp1d, interp2d
+from scipy.interpolate import interp1d, interp2d, RectBivariateSpline
 from scipy.integrate import trapz
 import time
 import pdb
@@ -71,8 +71,8 @@ class LumFuncMCMC:
     def __init__(self,z,flux=None,flux_e=None,Flim=2.7e-17,alpha=-2.06,
                  line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
                  lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
-                 sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],phistar=-3.0,
-                 phistar_lims=[-8.0,5.0],Lc=35.0,Lh=60.0,nwalkers=100,nsteps=1000,root=0.0):
+                 sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[41.0,45.0],phistar=-3.0,
+                 phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,root=0.0,ln_simple=True):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -124,6 +124,7 @@ class LumFuncMCMC:
         '''
         self.z = z
         self.zmin, self.zmax = min(self.z), max(self.z)
+        self.ln_simple = ln_simple
         self.root = root
         self.setDLdVdz()
         if flux is not None: 
@@ -142,6 +143,7 @@ class LumFuncMCMC:
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
         self.setOmegaLz()
+        self.setlnsimple()
         self.lumcond = self.lum[self.flux>self.root]
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
@@ -164,13 +166,35 @@ class LumFuncMCMC:
         self.dVdzf = interp1d(zint,dVdzarr)
         self.minlumf = interp1d(zint,minlum)
 
-    def setOmegaLz(self):
+    def setOmegaLz_old(self):
         ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
         logL = np.linspace(self.Lc,self.Lh,501)
         zarr = np.linspace(self.zmin,self.zmax,501)
         xx, yy = np.meshgrid(logL,zarr)
         Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0,self.Flim,self.alpha)
         self.Omegaf = interp2d(logL,zarr,Omegaarr,kind='cubic')
+
+    def setOmegaLz(self,size=501):
+        ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
+        logL = np.linspace(self.Lc,self.Lh,size)
+        zarr = np.linspace(self.zmin,self.zmax,size)
+        Omegaarr = np.empty((size,size))
+        for i in range(size):
+            Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0,self.Flim,self.alpha)
+        self.Omegaf = RectBivariateSpline(logL,zarr,Omegaarr)
+
+    def setlnsimple(self):
+        '''Makes arrays needed for faster calculation of lnlike'''
+        if self.ln_simple: self.size_ln = 251
+        else: self.size_ln = 101
+        self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
+        self.dz = self.zarr[1]-self.zarr[0]
+        self.zmid = np.linspace(self.zmin+self.dz/2.0,self.zmax-self.dz/2.0,self.size_ln-1)
+        self.logL = np.linspace(self.Lc,self.Lh,self.size_ln)
+        self.dlogL = self.logL[1]-self.logL[0]
+        volume_part = self.dVdzf(self.zmid)
+        Omega_part = self.Omegaf(self.logL[:,None],self.zmid[None])
+        self.integ_part = volume_part * Omega_part
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -258,7 +282,7 @@ class LumFuncMCMC:
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         # tic = time.time()
-        lnpart = sum(np.log(TrueLumFunc(self.lumcond,self.sch_al,self.Lstar,self.phistar)))
+        lnpart = np.log(TrueLumFunc(self.lumcond,self.sch_al,self.Lstar,self.phistar)).sum()
         # toc = time.time()
         # print("Time for lnpart calculation:",toc-tic)
         # tic = time.time()
@@ -267,17 +291,46 @@ class LumFuncMCMC:
         # print("Time for old lnpart calculation:",toc-tic)
         # logL = np.linspace(self.Lc,self.Lh,101)
         # tic = time.time()
-        zarr = np.linspace(self.zmin,self.zmax,101)
-        dz = zarr[1]-zarr[0]
-        zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
         fullint = 0.0
-        for i, zi in enumerate(zmid):
+        for i, zi in enumerate(self.zmid):
             logL = np.linspace(max(min(self.lum),self.minlumf(zi)),self.Lstar+1.75,101)
             integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
-            fullint += trapz(integ,logL)*dz
+            fullint += trapz(integ,logL)*self.dz
         # toc = time.time()
         # print("Time for fullint calculation:",toc-tic)
         # pdb.set_trace()
+        return lnpart - fullint
+
+    def lnlike_simple(self):
+        ''' Calculate the log likelihood and return the value and stellar mass
+        of the model as well as other derived parameters
+
+        Returns
+        -------
+        log likelihood (float)
+            The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
+        tic = time.time()
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)).sum()
+        toc = time.time()
+        print("Time to do lnpart:",toc-tic)
+        tic = time.time()
+        tlf = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar)
+        integ = tlf[:,None] * self.integ_part
+        toc = time.time()
+        print("Time to do calculate integrand:",toc-tic)
+        tic = time.time()
+        fullint = np.sum(integ)*self.dz*self.dlogL
+        toc = time.time()
+        print("Time to do crude integral:",toc-tic)
+        tic = time.time()
+        fullintv2 = trapz(trapz(integ,self.logL,axis=0),self.zmid)
+        toc = time.time()
+        print("Time to do trapezoid with logL inner:",toc-tic)
+        tic = time.time()
+        fullintv3 = trapz(trapz(integ,self.zmid,axis=1),self.logL)
+        toc = time.time()
+        print("Time to do trapezoid with zmid inner:",toc-tic)
+        pdb.set_trace()
         return lnpart - fullint
 
     def lnprob(self, theta):
@@ -291,6 +344,21 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike()
+            return lnl+lp
+        else:
+            return -np.inf
+
+    def lnprob_simple(self, theta):
+        ''' Calculate the log probabilty with quicker version
+
+        Returns
+        -------
+        log prior + log likelihood, (float)
+            The log probability is just the sum of the logs of the prior and likelihood. '''
+        self.set_parameters_from_list(theta)
+        lp = self.lnprior()
+        if np.isfinite(lp):
+            lnl = self.lnlike_simple()
             return lnl+lp
         else:
             return -np.inf
@@ -342,7 +410,9 @@ class LumFuncMCMC:
         pos = self.get_init_walker_values()
         ndim = pos.shape[1]
         start = time.time()
-        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, self.lnprob)
+        if self.lnlike_simple: func_name = 'lnprob_simple'
+        else: func_name = 'lnprob'
+        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func_name))
         # Do real run
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
         end = time.time()
