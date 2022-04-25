@@ -4,7 +4,7 @@ nbins = 50
 nboot = 100
 Flim=4.0e-17 # For OIII
 # Flim = 3.1e-17 # For H-alpha
-alpha=-2.12 # For OIII
+alpha=4.56 # For OIII
 # alpha=-2.20 # For H-alpha
 line_name="OIII"
 # line_name="Ha"
@@ -20,6 +20,7 @@ phistar_lims=[-8.0,5.0]
 Lc=36.0
 Lh=48.0
 min_comp_frac = 0.5
+fcmin=0.1
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
 

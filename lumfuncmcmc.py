@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import corner
 import VmaxLumFunc as V
 import seaborn as sns
-sns.set_context("talk") # options include: talk, poster, paper
+sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
 sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                "xtick.top":True, "ytick.right":True,
@@ -42,7 +42,7 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 # 
-def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha):
+def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
     Input
@@ -65,14 +65,14 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha):
     Omega(logL,z) : Float or 1-D array (same size as logL and/or z)
     '''
     L = 10**logL
-    return Omega_0/V.sqarcsec * V.p(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha)
+    return Omega_0/V.sqarcsec * V.fleming(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha,fcmin)
 
 class LumFuncMCMC:
-    def __init__(self,z,flux=None,flux_e=None,Flim=2.7e-17,alpha=-2.06,
+    def __init__(self,z,flux=None,flux_e=None,Flim=2.7e-17,alpha=4.56,
                  line_name="OIII",line_plot_name=r'[OIII] $\lambda 5007$', 
                  lum=None,lum_e=None,Omega_0=100.0,nbins=50,nboot=100,sch_al=-1.6,
                  sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[41.0,45.0],phistar=-3.0,
-                 phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,root=0.0,ln_simple=True):
+                 phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,root=0.0,ln_simple=True,fcmin=0.1):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -136,6 +136,7 @@ class LumFuncMCMC:
             self.getFluxes()
         self.Flim = Flim
         self.alpha = alpha
+        self.fcmin = fcmin
         self.line_name = line_name
         self.line_plot_name = line_plot_name
         if lum is None: 
@@ -190,7 +191,7 @@ class LumFuncMCMC:
         self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
         # self.dz = self.zarr[1]-self.zarr[0]
         # self.zmid = np.linspace(self.zmin+self.dz/2.0,self.zmax-self.dz/2.0,self.size_ln-1)
-        self.logL = np.linspace(self.Lc,self.Lh,self.size_ln)
+        self.logL = np.linspace(np.min(self.lum),self.Lh,self.size_ln)
         # self.dlogL = self.logL[1]-self.logL[0]
         volume_part = self.dVdzf(self.zarr)
         Omega_part = self.Omegaf(self.logL[:,None],self.zarr[None])
@@ -423,7 +424,7 @@ class LumFuncMCMC:
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         self.phifunc = np.zeros(len(self.lum))
         for i in range(len(self.lum)):
-            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,self.Flim,self.alpha)
+            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,self.Flim,self.alpha,self.fcmin)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
 
     def calcModLumFunc(self):

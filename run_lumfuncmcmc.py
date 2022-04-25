@@ -96,7 +96,11 @@ def parse_args(argv=None):
 
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
-                         type=str, default=None)               
+                         type=str, default=None)    
+
+    parser.add_argument("-lnc", "--ln_comp",
+                         help='''Whether or not to use more complicated lnlike''',
+                         action='count', default=0)             
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
@@ -104,7 +108,7 @@ def parse_args(argv=None):
 
     # Use config values if none are set in the input
     arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh',
-    'min_comp_frac', 'param_percentiles', 'output_dict']
+    'min_comp_frac', 'param_percentiles', 'output_dict','fcmin']
 
     for arg_i in arg_inputs:
         try:
@@ -203,7 +207,7 @@ def main(argv=None):
                         sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, 
                         Lstar_lims=args.Lstar_lims, phistar=args.phistar, 
                         phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, 
-                        nwalkers=args.nwalkers, nsteps=args.nsteps, root=root)
+                        nwalkers=args.nwalkers, nsteps=args.nsteps, root=root, fcmin=args.fcmin, ln_simple=not args.ln_comp)
     print("Initialized LumFuncMCMC class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
