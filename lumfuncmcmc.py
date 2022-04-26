@@ -75,8 +75,8 @@ class LumFuncMCMC:
                  alpha=3.5, alpha_lims=[1.0,6.0],line_name="OIII",
                  line_plot_name=r'[OIII] $\lambda 5007$',lum=None,lum_e=None,Omega_0=[100.0,100.0,100.0,100.0,100.0],nbins=50,
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
-                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=38.0,Lh=47.0,nwalkers=100,nsteps=1000,
-                 root=0.0,fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
+                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,
+                 fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
                  field_names=None,field_ind=None):
         ''' Initialize LumFuncMCMC class
 
@@ -145,23 +145,13 @@ class LumFuncMCMC:
         '''
         self.z = np.concatenate(z)
         self.zmin, self.zmax = min(self.z), max(self.z)
-        self.root, self.fcmin, self.min_comp_frac = root, fcmin, min_comp_frac
-        self.setDLdVdz()
-        if flux is not None: 
-            self.flux = 1.0e-17*np.concatenate(flux)
-            if flux_e is not None:
-                self.flux_e = 1.0e-17*np.concatenate(flux_e)
-        else:
-            self.lum, self.lum_e = np.concatenate(lum), np.concatenate(lum_e)
-            self.getFluxes()
+        self.fcmin, self.min_comp_frac = fcmin, min_comp_frac
         self.Flim, self.Flim_lims = Flim, Flim_lims
         self.fields, self.nfields = field_names, len(self.Flim)
         self.field_ind = field_ind
         self.alpha, self.alpha_lims = alpha, alpha_lims
         self.line_name = line_name
         self.line_plot_name = line_plot_name
-        if lum is None: 
-            self.getLumin()
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
         self.nbins, self.nboot = nbins, nboot
@@ -172,26 +162,38 @@ class LumFuncMCMC:
         self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
         self.getRoot()
-        if self.fix_comp: 
-            self.setOmegaLz()
-            self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
-            self.allind = np.arange(len(self.lum))
+        self.setDLdVdz()
+        if flux is not None: 
+            self.flux = 1.0e-17*np.concatenate(flux)
+            if flux_e is not None:
+                self.flux_e = 1.0e-17*np.concatenate(flux_e)
+        else:
+            self.lum, self.lum_e = np.concatenate(lum), np.concatenate(lum_e)
+            self.getFluxes()
+        if lum is None: 
+            self.getLumin()
+        self.setOmegaLz()
+        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
+        self.allind = np.arange(len(self.lum))
+        self.setlnsimple()
         self.setup_logging()
-        pdb.set_trace()
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = np.zeros(len(self.z))
         zint = np.linspace(0.95*self.zmin,1.05*self.zmax,len(self.z))
-        dVdzarr, DLarr, minlum = np.zeros(len(zint)), np.zeros(len(zint)), np.zeros(len(zint))
+        dVdzarr, DLarr = np.zeros(len(zint)), np.zeros(len(zint))
+        self.minlumf = []
         for i,zi in enumerate(self.z):
             self.DL[i] = V.dLz(zi) # In Mpc
             DLarr[i] = V.dLz(zint[i])
             dVdzarr[i] = V.dVdz(zint[i])
-            # minlum[i] = np.log10(4.0*np.pi*(DLarr[i]*3.086e24)**2 * self.root)
         self.DLf = interp1d(zint,DLarr)
         self.dVdzf = interp1d(zint,dVdzarr)
-        # self.minlumf = interp1d(zint,minlum)
+        roots = self.rootsf.ev(self.Flim,self.alpha)
+        for ii in range(self.nfields):
+            minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * roots[ii])
+            self.minlumf.append(interp1d(zint,minlum))
 
     def setOmegaLz(self,size=501):
         ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
@@ -206,6 +208,39 @@ class LumFuncMCMC:
                 Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             # self.Omegaf.append(interp2d(logL,zarr,Omegaarr,kind='cubic'))
             self.Omegaf.append(RectBivariateSpline(logL,zarr,Omegaarr))
+
+    def setlnsimple(self):
+        '''Makes arrays needed for faster calculation of lnlike'''
+        if self.ln_simple: self.size_ln = 201
+        else: self.size_ln = 101
+        self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
+        self.DL_zarr = self.DLf(self.zarr)
+        self.volume_part = self.dVdzf(self.zarr)
+        self.logL, self.integ_part = [], []
+        self.logLi = np.empty((self.size_ln,self.size_ln))
+        self.zarr_rep = np.repeat(self.zarr[None],self.size_ln,axis=0)
+        for ii in range(self.nfields):
+            minlumsi = self.minlumf[ii](self.zarr)
+            minlumsi[minlumsi<np.min(self.lum)] = np.min(self.lum)
+            for i in range(self.size_ln):
+                self.logLi[:,i] = np.linspace(minlumsi[i],self.Lh,self.size_ln)
+            self.logL.append(self.logLi)
+            Om_part = self.Omegaf.ev(self.logLi,self.zarr_rep)
+            self.integ_part.append(self.volume_part * Om_part)
+
+    def setlncomp(self):
+        '''Sets the necessary arrays for lnlike in not fixed case and calculates integral part'''
+        fullint = 0.0
+        for ii in range(self.nfields):
+            minlumsi = np.log10(4.0*np.pi*(self.DL_zarr*3.086e24)**2 * self.roots_ln[ii])
+            # minlumsi[minlumsi<np.min(self.lum)] = np.min(self.lum)
+            for i in range(self.size_ln):
+                self.logLi[:,i] = np.linspace(minlumsi[i],self.Lh,self.size_ln)
+            tlf = TrueLumFunc(self.logLi,self.sch_al,self.Lstar,self.phistar)
+            Om_part = Omega(self.logLi,self.zarr_rep,self.DLf,self.Omega_0[ii],self.Flim[ii],self.alpha,self.fcmin)
+            integ = tlf * self.volume_part * Om_part
+            fullint += trapz(trapz(integ,self.logLi,axis=0),self.zarr)
+        return fullint
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -304,7 +339,7 @@ class LumFuncMCMC:
         else: 
             return 0.0
 
-    def lnlike(self,size=101):
+    def lnlike(self):
         ''' Calculate the log likelihood and return the value and stellar mass
         of the model as well as other derived parameters
 
@@ -313,27 +348,34 @@ class LumFuncMCMC:
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = 0.0
+        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         for ii in range(self.nfields):
-            tl = TrueLumFunc(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.sch_al,self.Lstar,self.phistar)
-            om = Omega(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.z[self.field_ind[ii]:self.field_ind[ii+1]],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
+            tic = time.time()
+            ind = np.where(np.logical_and.reduce((self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1],self.flux>self.roots_ln[ii])))[0]
+            tl = TrueLumFunc(self.lum[ind],self.sch_al,self.Lstar,self.phistar)
+            om = Omega(self.lum[ind],self.z[ind],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             tlfom = tl*om
-            lnpart += sum(tlfom[tlfom>0.0])
+            toc = time.time()
+            print("Time for making condition and calculating TLF and Omega:",toc-tic)
+            tic = time.time()
+            tlsimp = TrueLumFunc(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.sch_al,self.Lstar,self.phistar)
+            omsimp = Omega(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.z[self.field_ind[ii]:self.field_ind[ii+1]],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
+            tlomold = tlsimp*omsimp
+            toc = time.time()
+            print("Time for calculating TLF and Omega without extra condition:",toc-tic)
+            tic = time.time()
+            lnpart += np.log(tlfom).sum()
+            toc = time.time()
+            print("Time for calculating log sum:",toc-tic)
         # logL = np.linspace(self.Lc,self.Lh,101)
-        zarr = np.linspace(self.zmin,self.zmax,size)
-        dz = zarr[1]-zarr[0]
-        zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
-        fullint = 0.0
-        for i, zi in enumerate(zmid):
-            volume_part = self.dVdzf(zi)
-            minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.rootsf.ev(self.Flim,self.alpha))
-            for ii in range(self.nfields):
-                logL = np.linspace(max(min(self.lum),minlum[ii]),self.Lstar+1.75,size)
-                # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
-                integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * Omega(logL,zi,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin) * volume_part
-                fullint += trapz(integ,logL)*dz
+        tic = time.time()
+        fullint = self.setlncomp()
+        toc = time.time()
+        print("Time for calculating fullint:",toc-tic)
+        pdb.set_trace()
         return lnpart - fullint
 
-    def lnlike_fix_comp(self,size=101):
+    def lnlike_fix_comp(self):
         ''' Calculate the log likelihood and return the value and stellar mass of the model as well as other derived parameters when completeness parameters are fixed (faster)
 
         Returns
@@ -342,24 +384,14 @@ class LumFuncMCMC:
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = 0.0
         for ii in range(self.nfields):
-            cond = np.logical_and.reduce((self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1],self.flux>=self.roots_ln[ii]))
-            tl = TrueLumFunc(self.lum[cond],self.sch_al,self.Lstar,self.phistar)
-            om = self.Omegaf[ii].ev(self.lum[cond], self.z[cond])
+            tl = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
+            om = self.Omegaf[ii].ev(self.lum, self.z)
             tlfom = tl*om
-            lnpart += sum(tlfom[tlfom>0.0])
-        # logL = np.linspace(self.Lc,self.Lh,101)
-        zarr = np.linspace(self.zmin,self.zmax,size)
-        dz = zarr[1]-zarr[0]
-        zmid = np.linspace(self.zmin+dz/2.0,self.zmax-dz/2.0,len(zarr)-1)
-        volume_part = self.dVdzf(zmid)
+            lnpart += np.log(tlfom).sum()
         fullint = 0.0
-        for i, zi in enumerate(zmid):
-            minlum = np.log10(4.0*np.pi*(self.DLf(zi)*3.086e24)**2 * self.roots_ln)
-            for ii in range(self.nfields):
-                logL = np.linspace(max(min(self.lum),minlum[ii]),self.Lstar+1.75,size)
-                # integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar)*self.dVdzf(zi)*self.Omegaf(logL,zi)
-                integ = TrueLumFunc(logL,self.sch_al,self.Lstar,self.phistar) * self.Omegaf[ii].ev(logL,zi) * volume_part[i]
-                fullint += trapz(integ,logL)*dz
+        for ii in range(self.nfields):
+            integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * self.integ_part[ii]
+            fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
         return lnpart - fullint
 
     def lnprob(self, theta):

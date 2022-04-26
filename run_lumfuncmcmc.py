@@ -6,6 +6,7 @@ import logging
 from astropy.table import Table
 from lumfuncmcmc import LumFuncMCMC
 import VmaxLumFunc as V
+from scipy.optimize import fsolve
 import configLF
 from distutils.dir_util import mkpath
 
@@ -114,7 +115,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles', 'output_dict','fix_sch_al','Flim_lims','alpha_lims']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles', 'output_dict','fix_sch_al','Flim_lims','alpha_lims','fcmin']
 
     for arg_i in arg_inputs:
         try:
@@ -162,12 +163,21 @@ def read_input_file(args):
     fields, zfull = datfile['Field'], datfile['z']
     field_names = np.unique(fields)
     field_ind = np.array([0])
+    if abs(args.min_comp_frac-0.0)<1.0e-6:
+        roots = np.zeros(len(field_names))
+    else:
+        roots = np.array([])
+        for i in range(len(field_names)):
+            root = fsolve(lambda x: V.fleming(x,args.Flim[i],args.alpha,args.fcmin)-args.min_comp_frac,[args.Flim[i]])[0]
+            roots = np.append(roots,root)
     try:
         fluxfull = datfile['%s_flux'%(args.line_name)]
         fluxfull_e = datfile['%s_flux_e'%(args.line_name)]
         flux, flux_e = [], []
         for i,field in enumerate(field_names):
-            cond = np.logical_and(fields==field,fluxfull>0)
+            if args.fix_comp: fluxmin = roots[i]
+            else: fluxmin = 0.0
+            cond = np.logical_and(fields==field,fluxfull>fluxmin)
             flux.append(fluxfull[cond]); flux_e.append(fluxfull_e[cond])
             condlen = len(fluxfull[cond])
             field_ind = np.append(field_ind,field_ind[i]+condlen)
@@ -188,9 +198,11 @@ def read_input_file(args):
     else: 
         lum, lum_e = None, None
     z = []
-    for field in field_names: 
-        try: cond = np.logical_and(fields==field,fluxfull>0)
-        except: cond = np.logical_and(fields==field,lumfull>0)
+    for i,field in enumerate(field_names):
+        if args.fix_comp: fluxmin = roots[i]
+        else: fluxmin = 0.0
+        try: cond = np.logical_and(fields==field,fluxfull>fluxmin)
+        except: cond = np.logical_and(fields==field,lumfull>0.0)
         z.append(zfull[cond])
     return z, flux, flux_e, lum, lum_e, field_names, field_ind
 
