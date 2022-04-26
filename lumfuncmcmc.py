@@ -200,7 +200,7 @@ class LumFuncMCMC:
             self.logL[:,i] = np.linspace(minlums[i],self.Lh,self.size_ln)
         # self.logL = np.linspace(np.min(self.lum),self.Lh,self.size_ln)
         volume_part = self.dVdzf(self.zarr)
-        Omega_part = self.Omegaf(self.logL,np.repeat(self.zarr[None],self.size_ln,axis=0))
+        Omega_part = self.Omegaf.ev(self.logL,np.repeat(self.zarr[None],self.size_ln,axis=0))
         self.integ_part = volume_part * Omega_part
 
     def getLumin(self):
