@@ -127,6 +127,7 @@ class LumFuncMCMC:
         self.ln_simple = ln_simple
         self.root = root
         self.setDLdVdz()
+        print("Finished setting cosmological function interpolations")
         if flux is not None: 
             self.flux = 1.0e-17*flux
             if flux_e is not None:
@@ -141,10 +142,13 @@ class LumFuncMCMC:
         self.line_plot_name = line_plot_name
         if lum is None: 
             self.getLumin()
+        print("Finished getting all fluxes and luminosities")
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
         self.setOmegaLz()
+        print("Finished calculating Omega interpolation")
         self.setlnsimple()
+        print("Finished setting the fixed arrays for the ln simple calculation")
         self.lumcond = self.lum[self.flux>self.root]
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
