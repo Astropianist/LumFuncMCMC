@@ -316,15 +316,11 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        tic = time.time()
         lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)).sum()
         tlf = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar)
         integ = tlf * self.integ_part
         # fullint = trapz(trapz(integ,self.zarr,axis=1),self.logL)
         fullint = trapz(trapz(integ,self.logL,axis=0),self.zarr)
-        toc = time.time()
-        print("Time for lnlike_simple run:",toc-tic)
-        pdb.set_trace()
         return lnpart - fullint
 
     def lnprob(self, theta):
