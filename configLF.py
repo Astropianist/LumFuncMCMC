@@ -17,8 +17,8 @@ Lstar=42.5
 Lstar_lims=[40.0,45.0]
 phistar=-2.0
 phistar_lims=[-8.0,5.0]
-Lc=36.0
-Lh=48.0
+Lc=40.0
+Lh=46.0
 min_comp_frac = 0.5
 fcmin=0.1
 # percentiles of each parameter to report in the output file

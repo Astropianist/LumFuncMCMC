@@ -193,7 +193,7 @@ class LumFuncMCMC:
         minlums[minlums<np.min(self.lum)] = np.min(self.lum)
         self.logL = np.empty((self.size_ln,self.size_ln))
         for i in range(self.size_ln):
-            self.logL[i] = np.linspace(minlums[i],self.Lh,self.size_ln)
+            self.logL[:,i] = np.linspace(minlums[i],self.Lh,self.size_ln)
         # self.logL = np.linspace(np.min(self.lum),self.Lh,self.size_ln)
         volume_part = self.dVdzf(self.zarr)
         Omega_part = self.Omegaf(self.logL,self.zarr[None])
