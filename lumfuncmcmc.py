@@ -211,7 +211,7 @@ class LumFuncMCMC:
 
     def setlnsimple(self):
         '''Makes arrays needed for faster calculation of lnlike'''
-        if self.fix_comp: self.size_ln = 251
+        if self.fix_comp: self.size_ln = 201
         else: self.size_ln = 101
         self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
         self.DL_zarr = self.DLf(self.zarr)
@@ -499,18 +499,20 @@ class LumFuncMCMC:
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         self.phifunc = np.zeros(len(self.lum))
-        self.lfbinorig, self.var = 0., 0.
-        root = self.rootsf.ev(self.Flim,self.alpha)
-        minlum = max(min(self.lum)*1.001,np.log10(V.get_L_constF(max(root),self.zmax)))
-        Larr = np.linspace(minlum,max(self.lum),self.nbins+1)
+        Flims = []
+        counts = 0
         for ii in range(self.nfields):
-            for i in range(self.field_ind[ii],self.field_ind[ii+1]):
-                if self.min_comp_frac<0.01: zmaxval = self.zmax
-                else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[ii]))
-                if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
-            self.lfbinorig += lfbinorigi; self.var += vari
-        self.lfbinorig /= self.nfields; self.var /= self.nfields
+            while counts<self.field_ind[ii+1]:
+                Flims.append(self.Flim[ii])
+                counts += 1
+        Flims = np.array(Flims)
+        assert len(Flims)==len(self.flux)
+        root = self.rootsf.ev(Flims,self.alpha)
+        flux_Veff = self.flux[self.flux>=root]
+        Flims_Veff = Flims[self.flux>=root]
+        for i in range(len(flux_Veff)):
+            self.phifunc[i] = V.lumfunc(flux_Veff[i],self.dVdzf,self.Omega_0,self.zmin,self.zmax,Flims_Veff,self.alpha,self.fcmin)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
