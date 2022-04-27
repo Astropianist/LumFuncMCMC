@@ -211,7 +211,7 @@ class LumFuncMCMC:
 
     def setlnsimple(self):
         '''Makes arrays needed for faster calculation of lnlike'''
-        if self.fix_comp: self.size_ln = 201
+        if self.fix_comp: self.size_ln = 251
         else: self.size_ln = 101
         self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
         self.DL_zarr = self.DLf(self.zarr)
@@ -501,7 +501,7 @@ class LumFuncMCMC:
         self.phifunc = np.zeros(len(self.lum))
         self.lfbinorig, self.var = 0., 0.
         root = self.rootsf.ev(self.Flim,self.alpha)
-        minlum = max(min(self.lum)*1.001,np.log10(V.get_L_constF(max(root),self.zmin)))
+        minlum = max(min(self.lum)*1.001,np.log10(V.get_L_constF(max(root),self.zmax)))
         Larr = np.linspace(minlum,max(self.lum),self.nbins+1)
         for ii in range(self.nfields):
             for i in range(self.field_ind[ii],self.field_ind[ii+1]):
@@ -510,6 +510,7 @@ class LumFuncMCMC:
                 if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0[ii],self.zmin,zmaxval,1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             self.Lavg, lfbinorigi, vari = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,root[ii],Larr=Larr)
             self.lfbinorig += lfbinorigi; self.var += vari
+        self.lfbinorig /= self.nfields; self.var /= self.nfields
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
