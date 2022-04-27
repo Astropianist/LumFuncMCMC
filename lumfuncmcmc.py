@@ -211,7 +211,7 @@ class LumFuncMCMC:
 
     def setlnsimple(self):
         '''Makes arrays needed for faster calculation of lnlike'''
-        if self.ln_simple: self.size_ln = 201
+        if self.fix_comp: self.size_ln = 201
         else: self.size_ln = 101
         self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
         self.DL_zarr = self.DLf(self.zarr)
@@ -225,7 +225,7 @@ class LumFuncMCMC:
             for i in range(self.size_ln):
                 self.logLi[:,i] = np.linspace(minlumsi[i],self.Lh,self.size_ln)
             self.logL.append(self.logLi)
-            Om_part = self.Omegaf.ev(self.logLi,self.zarr_rep)
+            Om_part = self.Omegaf[ii].ev(self.logLi,self.zarr_rep)
             self.integ_part.append(self.volume_part * Om_part)
 
     def setlncomp(self):
@@ -240,6 +240,7 @@ class LumFuncMCMC:
             Om_part = Omega(self.logLi,self.zarr_rep,self.DLf,self.Omega_0[ii],self.Flim[ii],self.alpha,self.fcmin)
             integ = tlf * self.volume_part * Om_part
             fullint += trapz(trapz(integ,self.logLi,axis=0),self.zarr)
+            pdb.set_trace()
         return fullint
 
     def getLumin(self):
@@ -350,29 +351,13 @@ class LumFuncMCMC:
         lnpart = 0.0
         self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         for ii in range(self.nfields):
-            tic = time.time()
             ind = np.where(np.logical_and.reduce((self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1],self.flux>self.roots_ln[ii])))[0]
             tl = TrueLumFunc(self.lum[ind],self.sch_al,self.Lstar,self.phistar)
             om = Omega(self.lum[ind],self.z[ind],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             tlfom = tl*om
-            toc = time.time()
-            print("Time for making condition and calculating TLF and Omega:",toc-tic)
-            tic = time.time()
-            tlsimp = TrueLumFunc(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.sch_al,self.Lstar,self.phistar)
-            omsimp = Omega(self.lum[self.field_ind[ii]:self.field_ind[ii+1]],self.z[self.field_ind[ii]:self.field_ind[ii+1]],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            tlomold = tlsimp*omsimp
-            toc = time.time()
-            print("Time for calculating TLF and Omega without extra condition:",toc-tic)
-            tic = time.time()
             lnpart += np.log(tlfom).sum()
-            toc = time.time()
-            print("Time for calculating log sum:",toc-tic)
         # logL = np.linspace(self.Lc,self.Lh,101)
-        tic = time.time()
         fullint = self.setlncomp()
-        toc = time.time()
-        print("Time for calculating fullint:",toc-tic)
-        pdb.set_trace()
         return lnpart - fullint
 
     def lnlike_fix_comp(self):
