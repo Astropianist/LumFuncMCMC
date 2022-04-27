@@ -505,7 +505,7 @@ class LumFuncMCMC:
                 Flims.append(self.Flim[ii])
                 Omega_0s.append(self.Omega_0[ii])
                 counts += 1
-        Flims = np.array(Flims)
+        Flims = 1.0e-17*np.array(Flims)
         assert len(Flims)==len(self.flux)
         root = self.rootsf.ev(Flims,self.alpha)
         cond = self.flux>=root
