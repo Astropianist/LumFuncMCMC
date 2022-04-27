@@ -500,12 +500,16 @@ class LumFuncMCMC:
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         Flims, Omega_0s = [], []
         counts = 0
+        cts_field = []
         for ii in range(self.nfields):
+            cts_fieldi = 0
             while counts<self.field_ind[ii+1]:
                 Flims.append(self.Flim[ii])
                 Omega_0s.append(self.Omega_0[ii])
-                counts += 1
-        Flims = 1.0e-17*np.array(Flims)
+                counts += 1; cts_fieldi += 1
+            cts_field.append(cts_fieldi)
+
+        Flims = 1.0e-17*np.array(Flims); cts_field = np.array(cts_field)
         assert len(Flims)==len(self.flux)
         root = self.rootsf.ev(Flims,self.alpha)
         cond = self.flux>=root
@@ -514,8 +518,8 @@ class LumFuncMCMC:
         for i in range(len(flux_Veff)):
             if self.min_comp_frac<0.01: zmaxval = self.zmax
             else: zmaxval = min(self.zmax,V.getMaxz(10**lum_Veff[i],root_Veff[i]))
-            self.phifunc[i] = V.lumfunc(flux_Veff[i],self.dVdzf,Omega_0s[i],self.zmin,zmaxval[i],Flims_Veff[i],self.alpha,self.fcmin)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(lum_Veff,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins)
+            self.phifunc[i] = V.lumfunc(flux_Veff[i],self.dVdzf,Omega_0s[i],self.zmin,zmaxval,Flims_Veff[i],self.alpha,self.fcmin)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(lum_Veff,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*cts_field*self.Flim/len(flux_Veff))
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''

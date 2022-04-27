@@ -341,19 +341,19 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None):
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
     ########### Correct for luminosity bins that are only partially included #########
-    # zarr = np.linspace(0.9*minz,1.1*maxz,201)
-    # Lminarr = np.zeros_like(zarr)
-    # for i,zi in enumerate(zarr):
-    #     Lminarr[i] = get_L_constF(Fmin,zi)
-    # Lminarr = np.log10(Lminarr)
-    # Lminzf = interp1d(zarr,Lminarr,kind='cubic')
-    # for j in range(len(lfbinorig)):
-    #     mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
-    #     # print "mult[%d]=%.2f"%(j,mult)
-    #     if abs(mult-1.0)<1.0e-8:
-    #         break
-    #     lfbinorig[j]*=mult
-    #     var[j]*=mult**2
+    zarr = np.linspace(0.9*minz,1.1*maxz,201)
+    Lminarr = np.zeros_like(zarr)
+    for i,zi in enumerate(zarr):
+        Lminarr[i] = get_L_constF(Fmin,zi)
+    Lminarr = np.log10(Lminarr)
+    Lminzf = interp1d(zarr,Lminarr,kind='cubic')
+    for j in range(len(lfbinorig)):
+        mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
+        # print "mult[%d]=%.2f"%(j,mult)
+        if abs(mult-1.0)<1.0e-8:
+            break
+        lfbinorig[j]*=mult
+        var[j]*=mult**2
     return Lavg, lfbinorig, var
 
 def getBootErr(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=0.0):
