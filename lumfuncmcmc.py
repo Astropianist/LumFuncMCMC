@@ -511,10 +511,13 @@ class LumFuncMCMC:
         cond = self.flux>=root
         flux_Veff = self.flux[cond]
         Flims_Veff = Flims[cond]
+        lum_Veff = self.lum[cond]
         self.phifunc = np.zeros_like(flux_Veff)
+        if self.min_comp_frac<0.01: zmaxval = [self.zmax]*len(flux_Veff)
+        else: zmaxval = np.minimum(self.zmax,V.getMaxz(10**lum_Veff,root[cond]))
         for i in range(len(flux_Veff)):
-            self.phifunc[i] = V.lumfunc(flux_Veff[i],self.dVdzf,Omega_0s[i],self.zmin,self.zmax,Flims_Veff[i],self.alpha,self.fcmin)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum[cond],self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,self.root)
+            self.phifunc[i] = V.lumfunc(flux_Veff[i],self.dVdzf,Omega_0s[i],self.zmin,zmaxval[i],Flims_Veff[i],self.alpha,self.fcmin)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(lum_Veff,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins)
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
