@@ -237,10 +237,9 @@ class LumFuncMCMC:
             for i in range(self.size_ln):
                 self.logLi[:,i] = np.linspace(minlumsi[i],self.Lh,self.size_ln)
             tlf = TrueLumFunc(self.logLi,self.sch_al,self.Lstar,self.phistar)
-            Om_part = Omega(self.logLi,self.zarr_rep,self.DLf,self.Omega_0[ii],self.Flim[ii],self.alpha,self.fcmin)
+            Om_part = Omega(self.logLi,self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             integ = tlf * self.volume_part * Om_part
             fullint += trapz(trapz(integ,self.logLi,axis=0),self.zarr)
-            pdb.set_trace()
         return fullint
 
     def getLumin(self):
