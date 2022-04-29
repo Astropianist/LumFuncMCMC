@@ -192,7 +192,8 @@ class LumFuncMCMC:
         self.dVdzf = interp1d(zint,dVdzarr)
         roots = self.rootsf.ev(self.Flim,self.alpha)
         for ii in range(self.nfields):
-            minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * roots[ii])
+            if self.min_comp_frac<=0.001: minlum = np.zeros_like(DLarr)
+            else: minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * roots[ii])
             self.minlumf.append(interp1d(zint,minlum))
 
     def setOmegaLz(self,size=501):
@@ -268,7 +269,7 @@ class LumFuncMCMC:
         flims = np.linspace(self.Flim_lims[0],self.Flim_lims[1],size)
         alphas = np.linspace(self.alpha_lims[0],self.alpha_lims[1],size)
         roots = np.zeros((size,size))
-        if self.min_comp_frac>0.01:
+        if self.min_comp_frac>0.001:
             for i in range(size):
                 for j in range(size):
                     roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0e-17])[0]
