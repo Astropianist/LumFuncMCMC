@@ -281,7 +281,7 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
         phifunc[i] = lumfunc(F[i],dVdzf,Omega_0,minz,zmaxarr[i],Flim,alpha)
     return Lfunc, phifunc, minz, maxz
 
-def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None):
+def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,correct_low=False):
     """ Estimate true luminosity function and errors on the "measurements" using bootstrap method
     This function is for log luminosities and is used with a Schechter function with log quantities (not in this code)
 
@@ -341,6 +341,7 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None):
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
     ########### Correct for luminosity bins that are only partially included #########
+    if not correct_low: return Lavg, lfbinorig, var
     zarr = np.linspace(0.9*minz,1.1*maxz,201)
     Lminarr = np.zeros_like(zarr)
     for i,zi in enumerate(zarr):

@@ -582,9 +582,13 @@ class LumFuncMCMC:
             ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
         self.medianLF = np.median(np.array(lf), axis=0)
         self.Flim, self.alpha = list(np.median(Flims,axis=0)), np.median(alphas)
+        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         self.VeffLF()
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
-        ax1.errorbar(self.Lavg,self.lfbinorig,yerr=np.sqrt(self.var),fmt='b^')
+        cond_veff = self.Lavg >= V.get_L_constF(max(self.roots_ln),max(self.z))
+        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
+        # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
+        ax1.set_xlim([V.get_L_constF(max(self.roots_ln),min(self.z)),max(self.lum)])
         
     def triangle_plot(self, outname, lnprobcut=7.5, imgtype='png'):
         ''' Make a triangle corner plot for samples from fit
