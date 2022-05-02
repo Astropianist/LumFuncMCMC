@@ -280,13 +280,13 @@ class LumFuncMCMC:
         '''Function to initially define arrays of same length as the entire input to facilitate different Flim calculation''' 
         self.Flims_arr, self.Omega_0_arr = np.zeros(self.field_ind[-1]), np.zeros(self.field_ind[-1],dtype=int)
         for ii in range(self.nfields):
-            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flims[ii]
+            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]
             self.Omega_0_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Omega_0[ii]
 
     def getFlim(self):
         '''Function to re-compute Flim full-length array''' 
         for ii in range(self.nfields):
-            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flims[ii]
+            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]
 
     def setup_logging(self):
         '''Setup Logging for MCSED
