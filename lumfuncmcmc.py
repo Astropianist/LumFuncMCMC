@@ -372,7 +372,7 @@ class LumFuncMCMC:
             integ_part = self.volume_part * Omega(self.logL[ii],self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * integ_part
             fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
-        return lnpart - fullint
+        return lnpart - fullint/self.nfields
 
     def lnlike_fix_comp(self):
         ''' Calculate the log likelihood and return the value and stellar mass of the model as well as other derived parameters when completeness parameters are fixed (faster)
@@ -387,7 +387,7 @@ class LumFuncMCMC:
         for ii in range(self.nfields):
             integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * self.integ_part[ii]
             fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
-        return lnpart - fullint
+        return lnpart - fullint/self.nfields
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
