@@ -229,6 +229,7 @@ class LumFuncMCMC:
             self.logL.append(self.logLi)
             Om_part = self.Omegaf[ii].ev(self.logLi,self.zarr_rep)
             self.integ_part.append(self.volume_part * Om_part)
+        self.Om_arr = Omega(self.lum,self.z,self.DLf,self.Omega_0_arr,1.0e-17*self.Flims_arr,self.alpha,self.fcmin)
 
     def setlncomp(self):
         '''Sets the necessary arrays for lnlike in not fixed case and calculates integral part'''
@@ -381,7 +382,7 @@ class LumFuncMCMC:
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         self.getFlim()
-        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.Omegaf[ii].ev(self.lum, self.z)).sum()
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.Om_arr).sum()
         fullint = 0.0
         for ii in range(self.nfields):
             integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * self.integ_part[ii]
@@ -508,7 +509,7 @@ class LumFuncMCMC:
 
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
-        self.Flims_arr = self.getFlim()
+        self.getFlim()
         root = self.rootsf.ev(self.Flims_arr,self.alpha)
         self.phifunc = np.zeros_like(self.flux)
         for i in range(len(self.flux)):
