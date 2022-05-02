@@ -361,16 +361,16 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = 0.0
         self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
-        for ii in range(self.nfields):
-            ind = np.where(np.logical_and(self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1]))[0]
-            tl = TrueLumFunc(self.lum[ind],self.sch_al,self.Lstar,self.phistar)
-            om = Omega(self.lum[ind],self.z[ind],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            tlfom = tl*om
-            lnpart += np.log(tlfom).sum()
+        self.Flims_arr = self.getFlim()
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omega(self.lum,self.z,self.DLf,self.Omega_0_arr,1.0e-17*self.Flims_arr,self.alpha,self.fcmin)).sum()
         # logL = np.linspace(self.Lc,self.Lh,101)
-        fullint = self.setlncomp()
+        # fullint = self.setlncomp()
+        fullint = 0.0
+        for ii in range(self.nfields):
+            integ_part = self.volume_part * Omega(self.logL[ii],self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
+            integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * integ_part
+            fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
         return lnpart - fullint
 
     def lnlike_fix_comp(self):
@@ -380,13 +380,8 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = 0.0
-        for ii in range(self.nfields):
-            ind = np.where(np.logical_and(self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1]))[0]
-            tl = TrueLumFunc(self.lum[ind],self.sch_al,self.Lstar,self.phistar)
-            om = self.Omegaf[ii].ev(self.lum[ind], self.z[ind])
-            tlfom = tl*om
-            lnpart += np.log(tlfom).sum()
+        self.Flims_arr = self.getFlim()
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omega(self.lum,self.z,self.DLf,self.Omega_0_arr,1.0e-17*self.Flims_arr,self.alpha,self.fcmin)).sum()
         fullint = 0.0
         for ii in range(self.nfields):
             integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * self.integ_part[ii]
