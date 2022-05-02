@@ -175,8 +175,7 @@ def read_input_file(args):
         fluxfull_e = datfile['%s_flux_e'%(args.line_name)]
         flux, flux_e = [], []
         for i,field in enumerate(field_names):
-            if args.fix_comp: fluxmin = roots[i]
-            else: fluxmin = 0.0
+            fluxmin = roots[i]
             cond = np.logical_and(fields==field,fluxfull>fluxmin)
             flux.append(fluxfull[cond]); flux_e.append(fluxfull_e[cond])
             condlen = len(fluxfull[cond])
@@ -199,8 +198,7 @@ def read_input_file(args):
         lum, lum_e = None, None
     z = []
     for i,field in enumerate(field_names):
-        if args.fix_comp: fluxmin = roots[i]
-        else: fluxmin = 0.0
+        fluxmin = roots[i]
         try: cond = np.logical_and(fields==field,fluxfull>fluxmin)
         except: cond = np.logical_and(fields==field,lumfull>0.0)
         z.append(zfull[cond])

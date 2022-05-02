@@ -161,6 +161,7 @@ class LumFuncMCMC:
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
+        self.defineFlimOmArr()
         self.getRoot()
         self.setDLdVdz()
         if flux is not None: 
@@ -275,6 +276,18 @@ class LumFuncMCMC:
                     roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0e-17])[0]
         self.rootsf = RectBivariateSpline(flims,alphas,roots)
 
+    def defineFlimOmArr(self):
+        '''Function to initially define arrays of same length as the entire input to facilitate different Flim calculation''' 
+        self.Flims_arr, self.Omega_0_arr = np.zeros(self.field_ind[-1]), np.zeros(self.field_ind[-1],dtype=int)
+        for ii in range(self.nfields):
+            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flims[ii]
+            self.Omega_0_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Omega_0[ii]
+
+    def getFlim(self):
+        '''Function to re-compute Flim full-length array''' 
+        for ii in range(self.nfields):
+            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flims[ii]
+
     def setup_logging(self):
         '''Setup Logging for MCSED
 
@@ -351,7 +364,7 @@ class LumFuncMCMC:
         lnpart = 0.0
         self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         for ii in range(self.nfields):
-            ind = np.where(np.logical_and.reduce((self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1],self.flux>self.roots_ln[ii])))[0]
+            ind = np.where(np.logical_and(self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1]))[0]
             tl = TrueLumFunc(self.lum[ind],self.sch_al,self.Lstar,self.phistar)
             om = Omega(self.lum[ind],self.z[ind],self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             tlfom = tl*om
@@ -369,8 +382,9 @@ class LumFuncMCMC:
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = 0.0
         for ii in range(self.nfields):
-            tl = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
-            om = self.Omegaf[ii].ev(self.lum, self.z)
+            ind = np.where(np.logical_and(self.allind>=self.field_ind[ii],self.allind<self.field_ind[ii+1]))[0]
+            tl = TrueLumFunc(self.lum[ind],self.sch_al,self.Lstar,self.phistar)
+            om = self.Omegaf[ii].ev(self.lum[ind], self.z[ind])
             tlfom = tl*om
             lnpart += np.log(tlfom).sum()
         fullint = 0.0
@@ -499,28 +513,14 @@ class LumFuncMCMC:
 
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
-        Flims, Omega_0s = [], []
-        counts = 0
-        cts_field = []
-        for ii in range(self.nfields):
-            cts_fieldi = 0
-            while counts<self.field_ind[ii+1]:
-                Flims.append(self.Flim[ii])
-                Omega_0s.append(self.Omega_0[ii])
-                counts += 1; cts_fieldi += 1
-            cts_field.append(cts_fieldi)
-
-        Flims = 1.0e-17*np.array(Flims); cts_field = np.array(cts_field)
-        assert len(Flims)==len(self.flux)
-        root = self.rootsf.ev(Flims,self.alpha)
-        cond = self.flux>=root
-        flux_Veff, Flims_Veff, lum_Veff, root_Veff = self.flux[cond], Flims[cond], self.lum[cond], root[cond]
-        self.phifunc = np.zeros_like(flux_Veff)
-        for i in range(len(flux_Veff)):
-            if self.min_comp_frac<0.01: zmaxval = self.zmax
-            else: zmaxval = min(self.zmax,V.getMaxz(10**lum_Veff[i],root_Veff[i]))
-            self.phifunc[i] = V.lumfunc(flux_Veff[i],self.dVdzf,Omega_0s[i],self.zmin,zmaxval,Flims_Veff[i],self.alpha,self.fcmin)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(lum_Veff,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.dot(cts_field,self.Flim)/len(flux_Veff))
+        self.Flims_arr = self.getFlim()
+        root = self.rootsf.ev(self.Flims_arr,self.alpha)
+        self.phifunc = np.zeros_like(self.flux)
+        for i in range(len(self.flux)):
+            if self.min_comp_frac<=0.001: zmaxval = self.zmax
+            else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[i]))
+            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0_arr[i],self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.max(self.Flim))
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
@@ -627,7 +627,7 @@ class LumFuncMCMC:
             poss = [0.50-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)]
         else: 
             figw = w
-            poss = [0.65,0.75,0.32,0.23]
+            poss = [0.67,0.75,0.32,0.23]
         fig.set_figwidth(figw)
         ax1 = fig.add_subplot(3, 1, 1)
         ax1.set_position(poss)
