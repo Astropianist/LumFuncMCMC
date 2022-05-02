@@ -585,10 +585,10 @@ class LumFuncMCMC:
         self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         self.VeffLF()
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
-        cond_veff = self.Lavg >= V.get_L_constF(max(self.roots_ln),max(self.z))
+        cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
         ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
         # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
-        ax1.set_xlim([V.get_L_constF(max(self.roots_ln),min(self.z)),max(self.lum)])
+        ax1.set_xlim([np.log10(V.get_L_constF(max(self.roots_ln),min(self.z))),max(self.lum)])
         
     def triangle_plot(self, outname, lnprobcut=7.5, imgtype='png'):
         ''' Make a triangle corner plot for samples from fit
@@ -622,10 +622,15 @@ class LumFuncMCMC:
                             title_kwargs={"fontsize": fsgrad-2},
                             quantiles=[0.16, 0.5, 0.84], bins=30)
         w = fig.get_figwidth()
-        fig.set_figwidth(w-(len(indarr)-13)*0.025*w)
+        if len(indarr)>=4: 
+            figw = w-(len(indarr)-13)*0.025*w
+            poss = [0.50-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)]
+        else: 
+            figw = w
+            poss = [0.65,0.75,0.32,0.23]
+        fig.set_figwidth(figw)
         ax1 = fig.add_subplot(3, 1, 1)
-        ax1.set_position([0.50-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 
-                          0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)])
+        ax1.set_position(poss)
         self.add_LumFunc_plot(ax1)
         self.add_subplots(ax1,nsamples)
         fig.savefig("%s.%s" % (outname,imgtype), dpi=200)
