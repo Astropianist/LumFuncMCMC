@@ -494,6 +494,7 @@ class LumFuncMCMC:
         # Calculate how long the run should last
         tau = np.max(sampler.acor)
         burnin_step = int(tau*3)
+        if burnin_step>self.nsteps//2: burnin_step = self.nsteps//2
         self.log.info("Mean acceptance fraction: %0.2f" %
                       (np.mean(sampler.acceptance_fraction)))
         self.log.info("AutoCorrelation Steps: %i, Number of Burn-in Steps: %i"
@@ -514,8 +515,8 @@ class LumFuncMCMC:
         self.phifunc = np.zeros_like(self.flux)
         for i in range(len(self.flux)):
             if self.min_comp_frac<=0.001: zmaxval = self.zmax
-            else: zmaxval = max(min(self.zmax,V.getMaxz(10**self.lum[i],root[i])),self.zmin)
-            self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0_arr[i],self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
+            min(self.zmax,V.getMaxz(10**self.lum[i],root[i]))
+            if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0_arr[i],self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.max(self.Flim))
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
@@ -539,9 +540,12 @@ class LumFuncMCMC:
         self.medianLF : list (1d)
             median fitted ("observed") luminosity function
         '''
-        chi2sel = (self.samples[:, -1] >
-                   (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        nsamples = self.samples[chi2sel, :]
+        nsamples = []
+        while len(nsamples)<len(self.samples)//4: 
+            chi2sel = (self.samples[:, -1] >
+                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
+            nsamples = self.samples[chi2sel, :]
+            lnprobcut *= 2.0
         # nsamples = self.samples
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
@@ -602,9 +606,12 @@ class LumFuncMCMC:
             The file extension of the output plot
         '''
         # Make selection for three sigma sample
-        chi2sel = (self.samples[:, -1] >
-                   (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        nsamples = self.samples[chi2sel, :]
+        nsamples = []
+        while len(nsamples)<len(self.samples)//4: 
+            chi2sel = (self.samples[:, -1] >
+                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
+            nsamples = self.samples[chi2sel, :]
+            lnprobcut *= 2.0
         # nsamples = self.samples
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
@@ -634,9 +641,12 @@ class LumFuncMCMC:
 
     def add_fitinfo_to_table(self, percentiles, start_value=1, lnprobcut=7.5):
         ''' Assumes that "Ln Prob" is the last column in self.samples'''
-        chi2sel = (self.samples[:, -1] >
-                   (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-        nsamples = self.samples[chi2sel, :-1]
+        nsamples = []
+        while len(nsamples)<len(self.samples)//4: 
+            chi2sel = (self.samples[:, -1] >
+                    (np.max(self.samples[:, -1], axis=0) - lnprobcut))
+            nsamples = self.samples[chi2sel, :]
+            lnprobcut *= 2.0
         # nsamples = self.samples[:,:-1]
         self.log.info("Number of table entries: %d"%(len(self.table[0])))
         self.log.info("Len(percentiles): %d; len(other axis): %d"%(len(percentiles), len(np.percentile(nsamples,percentiles[0],axis=0))))
