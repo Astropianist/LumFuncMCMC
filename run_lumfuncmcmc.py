@@ -78,9 +78,9 @@ def parse_args(argv=None):
                         help='''Number of bootstrap iterations for V_eff method''',
                         type=int, default=None)
 
-    parser.add_argument("-o0", "--Omega_0",
-                        help='''Effective survey area in square arcseconds''',
-                        type=float, default=None)
+    # parser.add_argument("-o0", "--Omega_0",
+    #                     help='''Effective survey area in square arcseconds''',
+    #                     type=float, default=None)
 
     parser.add_argument("-mcf", "--min_comp_frac",
                         help='''Minimum completeness fraction considered''',
@@ -90,25 +90,32 @@ def parse_args(argv=None):
                         help='''Minimum completeness fraction considered''',
                         type=float, default=None)
 
-    parser.add_argument("-fl", "--Flim",
-                        help='''Minimum completeness fraction considered''',
-                        type=float, default=None)     
+    # parser.add_argument("-fl", "--Flim",
+    #                     help='''Minimum completeness fraction considered''',
+    #                     type=float, default=None)  
+
+    parser.add_argument("-sa", "--sch_al",
+                        help='''Schechter Alpha Param''',
+                        type=float, default=None)
+
+    parser.add_argument("-fsa", "--fix_sch_al",
+                        help='''Fix Schechter Alpha''',
+                        action='count',default=0)
+
+    parser.add_argument("-fc", "--fix_comp",
+                        help='''Fix Completeness''',
+                        action='count',default=0)
 
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
-                         type=str, default=None)    
-
-    parser.add_argument("-lnc", "--ln_comp",
-                         help='''Whether or not to use more complicated lnlike''',
-                         action='count', default=0)             
+                         type=str, default=None)               
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh',
-    'min_comp_frac', 'param_percentiles', 'output_dict','fcmin']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles', 'output_dict','fix_sch_al','Flim_lims','alpha_lims','fcmin']
 
     for arg_i in arg_inputs:
         try:
@@ -153,37 +160,49 @@ def read_input_file(args):
         Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
     """
     datfile = Table.read(args.filename,format='ascii')
-    z = datfile['z']
+    fields, zfull = datfile['Field'], datfile['z']
+    field_names = np.unique(fields)
+    field_ind = np.array([0])
     if abs(args.min_comp_frac-0.0)<1.0e-6:
-        root = 0.0
+        roots = np.zeros(len(field_names))
     else:
-        root = fsolve(lambda x: V.p(x,args.Flim,args.alpha)-args.min_comp_frac,[args.Flim])[0]
+        roots = np.array([])
+        for i in range(len(field_names)):
+            root = fsolve(lambda x: V.fleming(x,args.Flim[i],args.alpha,args.fcmin)-args.min_comp_frac,[args.Flim[i]])[0]
+            roots = np.append(roots,root)
     try:
-        flux = datfile['%s_flux'%(args.line_name)]
-        if max(flux)>1.0e-5: 
-            cond = flux>1.0e17*root
-        else:
-            cond = flux>root
-        flux_e = datfile['%s_flux_e'%(args.line_name)]
-        flux, flux_e = flux[cond], flux_e[cond]
+        fluxfull = datfile['%s_flux'%(args.line_name)]
+        fluxfull_e = datfile['%s_flux_e'%(args.line_name)]
+        flux, flux_e = [], []
+        for i,field in enumerate(field_names):
+            fluxmin = roots[i]
+            cond = np.logical_and(fields==field,fluxfull>fluxmin)
+            flux.append(fluxfull[cond]); flux_e.append(fluxfull_e[cond])
+            condlen = len(fluxfull[cond])
+            field_ind = np.append(field_ind,field_ind[i]+condlen)
     except:
         flux, flux_e = None, None
     if '%s_lum'%(args.line_name) in datfile.columns: 
-        lum = datfile['%s_lum'%(args.line_name)]
-        DL = np.zeros(len(z))
-        for i,zi in enumerate(z):
-            DL[i] = V.dLz(zi)
-        lumflux = 10**lum/(4.0*np.pi*(DL*3.086e24)**2)
-        cond = lumflux>root
-        lum = lum[cond]
+        lumfull = datfile['%s_lum'%(args.line_name)]
         if '%s_lum_e'%(args.line_name) in datfile.columns:
-            lum_e = datfile['%s_lum'%(args.line_name)][cond]
-        else:
-            lum_e = None
+            lumfull_e = datfile['%s_lum'%(args.line_name)]
+        lum, lum_e = [], []
+        for field in field_names:
+            cond = np.logical_and(fields==field,lumfull>0)
+            lum.append(lumfull[cond])
+            if lumfull_e is not None: lum_e.append(lumfull_e[cond])
+            condlen = len(lumfull[cond])
+            field_ind = np.append(field_ind,field_ind[i]+condlen)
+        if len(lum_e)==0: lum_e = None
     else: 
         lum, lum_e = None, None
-    z = z[cond]
-    return z, flux, flux_e, lum, lum_e, root
+    z = []
+    for i,field in enumerate(field_names):
+        fluxmin = roots[i]
+        try: cond = np.logical_and(fields==field,fluxfull>fluxmin)
+        except: cond = np.logical_and(fields==field,lumfull>0.0)
+        z.append(zfull[cond])
+    return z, flux, flux_e, lum, lum_e, field_names, field_ind
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -196,7 +215,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     # Read input file into arrays
-    z, flux, flux_e, lum, lum_e, root = read_input_file(args)
+    z, flux, flux_e, lum, lum_e, field_names, field_ind = read_input_file(args)
     print("Read Input File")
 
     # Initialize LumFuncMCMC class
@@ -207,7 +226,10 @@ def main(argv=None):
                         sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, 
                         Lstar_lims=args.Lstar_lims, phistar=args.phistar, 
                         phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, 
-                        nwalkers=args.nwalkers, nsteps=args.nsteps, root=root, fcmin=args.fcmin, ln_simple=not args.ln_comp)
+                        nwalkers=args.nwalkers, nsteps=args.nsteps, 
+                        fix_sch_al=args.fix_sch_al, fix_comp=args.fix_comp, 
+                        min_comp_frac=args.min_comp_frac, Flim_lims=args.Flim_lims,
+                        alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind)
     print("Initialized LumFuncMCMC class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
@@ -219,6 +241,8 @@ def main(argv=None):
     for label in labels:
         formats[label] = '%0.3f'
     formats['Line'] = '%s'
+    print('Labels:', labels)
+    
     LFmod.table = Table(names=labels, dtype=['S10'] +
                               ['f8']*(len(labels)-1))
     print("Finished making names and labels for LF table and about to start fitting the model!")
