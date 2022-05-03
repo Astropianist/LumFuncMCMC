@@ -31,7 +31,6 @@ min_comp_frac = 0.0
 fcmin = 0.1
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
-fix_sch_al=False
 
 output_dict = {'parameters'    : True,
                'settings'      : True, 

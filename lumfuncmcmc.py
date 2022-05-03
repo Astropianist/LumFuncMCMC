@@ -6,6 +6,7 @@ import matplotlib
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 import time
+import pdb
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import corner
@@ -60,15 +61,13 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
         50% completeness flux value
     alpha: float
         Completeness-related slope
-    fcmin: Float
-        Completeness fraction below which the modification to the Fleming curve becomes important
 
     Returns
     -------
     Omega(logL,z) : Float or 1-D array (same size as logL and/or z)
     '''
     L = 10**logL
-    return Omega_0/V.sqarcsec * V.fleming(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha,fcmin=fcmin)
+    return Omega_0/V.sqarcsec * V.fleming(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha,fcmin)
 
 class LumFuncMCMC:
     def __init__(self,z,flux=None,flux_e=None,Flim=[2.35,3.12,2.20,2.86,2.85],Flim_lims=[1.0,6.0],
@@ -93,9 +92,7 @@ class LumFuncMCMC:
         Flim_lims: two-element list
             Minimum and maximum values allowed in Flim prior (same for all fields)
         alpha: float
-            Completeness-related slope parameter
-        alpha_lims: two-element list
-            Minimum and maximum values allowed in completeness alpha prior
+            Completeness-related slope
         line_name: string
             Name of line or monochromatic luminosity element
         line_plot_name: (raw) string
@@ -196,7 +193,7 @@ class LumFuncMCMC:
             if self.min_comp_frac<=0.001: minlum = np.zeros_like(DLarr)
             else: minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * roots[ii])
             self.minlumf.append(interp1d(zint,minlum))
-
+            
     def setOmegaLz(self,size=501):
         ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
         logL = np.linspace(self.Lc,self.Lh,size)
@@ -208,7 +205,6 @@ class LumFuncMCMC:
             for i in range(size):
                 # Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
                 Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            # self.Omegaf.append(interp2d(logL,zarr,Omegaarr,kind='cubic'))
             self.Omegaf.append(RectBivariateSpline(logL,zarr,Omegaarr))
 
     def setlnsimple(self):
