@@ -707,6 +707,22 @@ def get_L_constF(F,z):
         Luminosity (erg/s) """
     return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
 
+def getMaxz(L,Fmin):
+    """ Get the redshift at which the given luminosity corresponds to the minimum flux considered
+    Input
+    -----
+    L: Float 
+        Luminosity (erg/s)
+    Fmin: Float
+        Min flux considered (erg/cm^2/s)
+    
+    Return
+    ------
+    zmax: Float
+        Redshift at which luminosity corresponds to min flux
+    """
+    return fsolve(lambda x: get_L_constF(Fmin,x)-L,1.5)[0]
+
 def get_mult_factor(lum0,lum1,Lminzf,zmin,zmax):
     """ Factor to multiply counts by when a luminosity bin has values not considered at some redshifts
     Input
