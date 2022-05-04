@@ -61,6 +61,8 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
         50% completeness flux value
     alpha: float
         Completeness-related slope
+    fcmin: float
+        Fractional completeness below which we really do not want to exaggerate the incompleteness levels
 
     Returns
     -------
@@ -567,8 +569,8 @@ class LumFuncMCMC:
     def add_LumFunc_plot(self,ax1):
         """ Set up the plot for the luminosity function """
         ax1.set_yscale('log')
-        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)",fontsize='x-small')
-        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)",fontsize='xx-small')
+        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)")
+        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)",fontsize='small')
         ax1.minorticks_on()
 
     def add_subplots(self,ax1,nsamples,rndsamples=200):
