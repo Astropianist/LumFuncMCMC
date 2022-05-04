@@ -476,7 +476,7 @@ class LumFuncMCMCz:
             if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0_arr[i],self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.max(self.Flim))
 
-    def set_median_fit(self,lnprobcut=7.5,zlen=101,Llen=99):
+    def set_median_fit(self,lnprobcut=7.5,zlen=100,Llen=100):
         '''
         set attributes
         median modeled ("observed") luminosity function for rndsamples random samples
@@ -520,7 +520,7 @@ class LumFuncMCMCz:
         ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)",fontsize='small')
         ax1.minorticks_on()
 
-    def add_subplots(self,ax1,nsamples,zlen=101,Llen=99):
+    def add_subplots(self,ax1,nsamples,zlen=100,Llen=100):
         ''' Add Subplots to Triangle plot below '''
         self.Lout = np.linspace(min(self.lum)-0.08,max(self.lum)+0.01,Llen)
         self.zout = np.linspace(self.zmin,self.zmax,zlen)
@@ -531,7 +531,8 @@ class LumFuncMCMCz:
             self.medianLF[i] = schechter_z(self.Lout,self.zout[i],self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3)
         self.VeffLF()
         im = ax1.pcolormesh(LLout,self.medianLF,zzout,shading='auto',cmap='viridis')
-        ax1.errorbar(self.Lavg,self.lfbinorig,yerr=np.sqrt(self.var),fmt='b^')
+        cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
+        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
         ax1.set_ylim(bottom=np.percentile(self.medianLF,5))
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes('right', size='5%', pad=0.05)
