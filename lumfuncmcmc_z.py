@@ -207,8 +207,8 @@ class LumFuncMCMCz:
         self.L1, self.L2, self.L3 = np.random.uniform(self.Lstar_lims[0]+0.5,self.Lstar_lims[-1]-0.5,3)
         self.phi1, self.phi2, self.phi3 = np.random.uniform(self.phistar_lims[0]+3,self.phistar_lims[-1]-3,3)
         self.nwalkers, self.nsteps = nwalkers, nsteps
-        self.defineFlimOmArr()
         self.getRoot()
+        self.defineFlimOmArr()
         self.setDLdVdz()
         if flux is not None: 
             self.flux = 1.0e-17*np.concatenate(flux)
@@ -220,7 +220,6 @@ class LumFuncMCMCz:
         if lum is None: 
             self.getLumin()
         self.setOmegaLz()
-        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         self.allind = np.arange(len(self.lum))
         self.setlnsimple()
         self.setup_logging()
@@ -237,10 +236,9 @@ class LumFuncMCMCz:
             dVdzarr[i] = V.dVdz(zint[i])
         self.DLf = interp1d(zint,DLarr)
         self.dVdzf = interp1d(zint,dVdzarr)
-        roots = self.rootsf.ev(self.Flim,self.alpha)
         for ii in range(self.nfields):
             if self.min_comp_frac<=0.001: minlum = np.zeros_like(DLarr)
-            else: minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * roots[ii])
+            else: minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * self.roots_ln[ii])
             self.minlumf.append(interp1d(zint,minlum))
             
     def setOmegaLz(self,size=501):
@@ -252,7 +250,6 @@ class LumFuncMCMCz:
         Omegaarr = np.empty((size,size))
         for ii in range(self.nfields):
             for i in range(size):
-                # Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
                 Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             self.Omegaf.append(RectBivariateSpline(logL,zarr,Omegaarr))
 
@@ -296,28 +293,20 @@ class LumFuncMCMCz:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
 
-    def getRoot(self,size=201):
-        ''' Get minimum flux depending on minimum completeness fraction as interpolation'''
-        flims = np.linspace(self.Flim_lims[0],self.Flim_lims[1],size)
-        alphas = np.linspace(self.alpha_lims[0],self.alpha_lims[1],size)
-        roots = np.zeros((size,size))
-        if self.min_comp_frac>0.001:
-            for i in range(size):
-                for j in range(size):
-                    roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0e-17])[0]
-        self.rootsf = RectBivariateSpline(flims,alphas,roots)
+    def getRoot(self):
+        ''' Get F50 fluxes'''
+        self.roots_ln = np.array([])
+        for i in range(len(self.nfields)):
+            root = fsolve(lambda x: V.fleming(x,1.0e-17*self.Flim[i],self.alpha,self.fcmin)-self.min_comp_frac,[1.0e-17*self.Flim[i]])[0]
+            self.roots_ln = np.append(self.roots_ln,root)
 
     def defineFlimOmArr(self):
         '''Function to initially define arrays of same length as the entire input to facilitate different Flim calculation''' 
-        self.Flims_arr, self.Omega_0_arr = np.zeros(self.field_ind[-1]), np.zeros(self.field_ind[-1],dtype=int)
+        self.Flims_arr, self.Omega_0_arr, self.roots_arr = np.zeros(self.field_ind[-1]), np.zeros(self.field_ind[-1],dtype=int), np.zeros(self.field_ind[-1])
         for ii in range(self.nfields):
             self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]
             self.Omega_0_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Omega_0[ii]
-
-    def getFlim(self):
-        '''Function to re-compute Flim full-length array''' 
-        for ii in range(self.nfields):
-            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]
+            self.roots_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.roots_ln[ii]
 
     def setup_logging(self):
         '''Setup Logging for MCSED
@@ -480,12 +469,10 @@ class LumFuncMCMCz:
 
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
-        self.getFlim()
-        root = self.rootsf.ev(self.Flims_arr,self.alpha)
         self.phifunc = np.zeros_like(self.flux)
         for i in range(len(self.flux)):
             if self.min_comp_frac<=0.001: zmaxval = self.zmax
-            else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[i]))
+            else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],self.roots_arr[i]))
             if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0_arr[i],self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.max(self.Flim))
 
