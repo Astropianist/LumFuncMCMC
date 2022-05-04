@@ -296,7 +296,7 @@ class LumFuncMCMCz:
     def getRoot(self):
         ''' Get F50 fluxes'''
         self.roots_ln = np.array([])
-        for i in range(len(self.nfields)):
+        for i in range(self.nfields):
             root = fsolve(lambda x: V.fleming(x,1.0e-17*self.Flim[i],self.alpha,self.fcmin)-self.min_comp_frac,[1.0e-17*self.Flim[i]])[0]
             self.roots_ln = np.append(self.roots_ln,root)
 
