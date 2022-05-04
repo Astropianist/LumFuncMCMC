@@ -308,7 +308,7 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,corre
     ##### Bin the data by luminosity to create a true luminosity function #####
     if Larr is None:
         Lmin = np.log10(get_L_constF(Fmin,maxz))
-        print "Min Luminosity:", Lmin
+        print("Min Luminosity:", Lmin)
         Larr = np.linspace(min(L)*1.001,max(L),nbin+1) #To establish bin boundaries
     Lavg = np.linspace((Larr[0]+Larr[1])/2.0,(Larr[-1]+Larr[-2])/2.0,len(Larr)-1) #Centers of bins
     dL = Lavg[1]-Lavg[0]

@@ -76,7 +76,8 @@ class LumFuncMCMC:
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,
                  fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
-                 field_names=None,field_ind=None):
+                 field_names=None,field_ind=None,Flim_aegis=2.35,
+                 Flim_rel=[1.0,1.3,0.9,1.1,1.1]):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -144,6 +145,9 @@ class LumFuncMCMC:
         self.zmin, self.zmax = min(self.z), max(self.z)
         self.fcmin, self.min_comp_frac = fcmin, min_comp_frac
         self.Flim, self.Flim_lims = Flim, Flim_lims
+        self.Flim_aegis = Flim_aegis
+        if type(Flim_rel)==list: self.Flim_rel = np.array(Flim_rel)
+        else: self.Flim_rel = Flim_rel
         self.fields, self.nfields = field_names, len(self.Flim)
         self.field_ind = field_ind
         self.alpha, self.alpha_lims = alpha, alpha_lims
@@ -324,10 +328,11 @@ class LumFuncMCMC:
             else: self.sch_al = input_list[2]
         else:
             if self.fix_sch_al:
-                self.Flim, self.alpha = input_list[2:2+self.nfields], input_list[2+self.nfields]
+                self.Flim_aegis, self.alpha = input_list[2], input_list[3]
             else: 
                 self.sch_al = input_list[2]
-                self.Flim, self.alpha = input_list[3:3+self.nfields], input_list[3+self.nfields]
+                self.Flim_aegis, self.alpha = input_list[3], input_list[4]
+            self.Flim = self.Flim_aegis * self.Flim_rel
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -429,7 +434,7 @@ class LumFuncMCMC:
         theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims))
         if not self.fix_sch_al: theta_lims = np.vstack((theta_lims,self.sch_al_lims))
         if not self.fix_comp:
-            for i in range(self.nfields): theta_lims = np.vstack((theta_lims,self.Flim_lims))
+            theta_lims = np.vstack((theta_lims,self.Flim_lims))
             theta_lims = np.vstack((theta_lims,self.alpha_lims))
         if num is None:
             num = self.nwalkers
@@ -448,7 +453,8 @@ class LumFuncMCMC:
         names = [r'$\log L_*$',r'$\log \phi_*$']
         if not self.fix_sch_al: names += [r'$\alpha$']
         if not self.fix_comp:
-            for i in range(self.nfields): names += [r'$F_{{\rm 50},%d}$'%(i)]
+            # for i in range(self.nfields): names += [r'$F_{{\rm 50},%d}$'%(i)]
+            names += [r'$F_{\rm{50, aegis}}$']
             names += [r'$\alpha_C$']
         return names
 
@@ -463,7 +469,8 @@ class LumFuncMCMC:
         vals = [self.Lstar,self.phistar]
         if not self.fix_sch_al: vals += [self.sch_al]
         if not self.fix_comp:
-            vals += list(self.Flim)
+            # vals += list(self.Flim)
+            vals + [self.Flim_aegis]
             vals += [self.alpha]
         self.nfreeparams = len(vals)
         return vals

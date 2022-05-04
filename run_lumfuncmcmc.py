@@ -115,7 +115,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles', 'output_dict','fix_sch_al','Flim_lims','alpha_lims','fcmin']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles', 'output_dict','fix_sch_al','Flim_lims','alpha_lims','fcmin','Flim_aegis','Flim_rel']
 
     for arg_i in arg_inputs:
         try:
@@ -229,7 +229,8 @@ def main(argv=None):
                         nwalkers=args.nwalkers, nsteps=args.nsteps, 
                         fix_sch_al=args.fix_sch_al, fix_comp=args.fix_comp, 
                         min_comp_frac=args.min_comp_frac, Flim_lims=args.Flim_lims,
-                        alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind)
+                        alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind,
+                        Flim_aegis=args.Flim_aegis, Flim_rel=args.Flim_rel)
     print("Initialized LumFuncMCMC class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
