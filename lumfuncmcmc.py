@@ -641,7 +641,7 @@ class LumFuncMCMC:
         while len(nsamples)<len(self.samples)//4: 
             chi2sel = (self.samples[:, -1] >
                     (np.max(self.samples[:, -1], axis=0) - lnprobcut))
-            nsamples = self.samples[chi2sel, :]
+            nsamples = self.samples[chi2sel, :-1]
             lnprobcut *= 2.0
         # nsamples = self.samples[:,:-1]
         self.log.info("Number of table entries: %d"%(len(self.table[0])))

@@ -308,7 +308,7 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,corre
     ##### Bin the data by luminosity to create a true luminosity function #####
     if Larr is None:
         Lmin = np.log10(get_L_constF(Fmin,maxz))
-        print "Min Luminosity:", Lmin
+        print("Min Luminosity:", Lmin)
         Larr = np.linspace(min(L)*1.001,max(L),nbin+1) #To establish bin boundaries
     Lavg = np.linspace((Larr[0]+Larr[1])/2.0,(Larr[-1]+Larr[-2])/2.0,len(Larr)-1) #Centers of bins
     dL = Lavg[1]-Lavg[0]
@@ -706,6 +706,22 @@ def get_L_constF(F,z):
     L: Float
         Luminosity (erg/s) """
     return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
+
+def getMaxz(L,Fmin):
+    """ Get the redshift at which the given luminosity corresponds to the minimum flux considered
+    Input
+    -----
+    L: Float 
+        Luminosity (erg/s)
+    Fmin: Float
+        Min flux considered (erg/cm^2/s)
+    
+    Return
+    ------
+    zmax: Float
+        Redshift at which luminosity corresponds to min flux
+    """
+    return fsolve(lambda x: get_L_constF(Fmin,x)-L,1.5)[0]
 
 def get_mult_factor(lum0,lum1,Lminzf,zmin,zmax):
     """ Factor to multiply counts by when a luminosity bin has values not considered at some redshifts
