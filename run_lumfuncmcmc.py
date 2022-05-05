@@ -119,7 +119,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles', 'output_dict','fix_sch_al','Flim_lims','alpha_lims','fcmin']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','Flim','alpha','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac', 'param_percentiles','output_dict','Flim_lims','alpha_lims','fcmin']
 
     for arg_i in arg_inputs:
         try:
