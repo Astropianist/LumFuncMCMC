@@ -76,7 +76,7 @@ class LumFuncMCMC:
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,
                  fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
-                 field_names=None,field_ind=None):
+                 field_names=None,field_ind=None,diff_rand=True):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -158,6 +158,7 @@ class LumFuncMCMC:
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
+        self.diff_rand = diff_rand
         self.defineFlimOmArr()
         self.getRoot()
         self.setDLdVdz()
@@ -433,8 +434,9 @@ class LumFuncMCMC:
             theta_lims = np.vstack((theta_lims,self.alpha_lims))
         if num is None:
             num = self.nwalkers
-        pos = (np.random.rand(num,len(theta_lims)) *
-              (theta_lims[:, 1]-theta_lims[:, 0]) + theta_lims[:, 0])
+        if self.diff_rand: pos_part1 = np.random.rand(num,len(theta_lims))
+        else: pos_part1 = np.random.rand(num)[:,np.newaxis]
+        pos = (pos_part1 * (theta_lims[:, 1]-theta_lims[:, 0]) + theta_lims[:, 0])
         return pos
 
     def get_param_names(self):

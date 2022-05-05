@@ -106,6 +106,10 @@ def parse_args(argv=None):
                         help='''Fix Completeness''',
                         action='count',default=0)
 
+    parser.add_argument("-sr", "--same_rand",
+                        help='''Same random starting point''',
+                        action='count',default=0)
+
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
                          type=str, default=None)               
@@ -229,7 +233,8 @@ def main(argv=None):
                         nwalkers=args.nwalkers, nsteps=args.nsteps, 
                         fix_sch_al=args.fix_sch_al, fix_comp=args.fix_comp, 
                         min_comp_frac=args.min_comp_frac, Flim_lims=args.Flim_lims,
-                        alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind)
+                        alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind,
+                        diff_rand=not args.same_rand)
     print("Initialized LumFuncMCMC class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
