@@ -517,7 +517,7 @@ class LumFuncMCMCz:
         """ Set up the plot for the luminosity function """
         ax1.set_yscale('log')
         ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)")
-        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)",fontsize='small')
+        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
         ax1.minorticks_on()
 
     def add_subplots(self,ax1,nsamples,zlen=100,Llen=100):
@@ -532,7 +532,7 @@ class LumFuncMCMCz:
         self.VeffLF()
         im = ax1.pcolormesh(LLout,self.medianLF,zzout,shading='auto',cmap='viridis')
         cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
-        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
+        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='r^',markersize=10,elinewidth=3)
         ax1.set_ylim(bottom=np.percentile(self.medianLF,5))
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -575,7 +575,7 @@ class LumFuncMCMCz:
         w = fig.get_figwidth()
         if len(indarr)>=4: 
             figw = w-(len(indarr)-13)*0.025*w
-            poss = [0.50-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)]
+            poss = [0.44-0.008*(len(indarr)-4), 0.78-0.001*(len(indarr)-4), 0.48+0.008*(len(indarr)-4), 0.19+0.001*(len(indarr)-4)]
         else: 
             figw = w
             poss = [0.67,0.75,0.32,0.23]

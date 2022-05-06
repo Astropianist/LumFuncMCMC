@@ -118,6 +118,11 @@ def parse_args(argv=None):
     if args.line_name=='Ha':
         args.line_plot_name = r'${\rm{H\alpha}}$'
 
+    if args.filename=='OIIIGautamWillNoAGN.dat':
+        args.z1, args.z2, args.z3 = 1.20, 1.76, 2.32
+    else:
+        args.z1, args.z2, args.z3 = 1.20, 1.53, 1.86
+
     return args
 
 def read_input_file(args):
@@ -215,7 +220,8 @@ def main(argv=None):
                         phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, 
                         nwalkers=args.nwalkers, nsteps=args.nsteps,
                         min_comp_frac=args.min_comp_frac,
-                        field_names=field_names, field_ind=field_ind)
+                        field_names=field_names, field_ind=field_ind,
+                        z1=args.z1, z2=args.z2, z3=args.z3)
     print("Initialized LumFuncMCMCz class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
