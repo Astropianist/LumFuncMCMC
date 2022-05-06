@@ -91,8 +91,8 @@ def parse_args(argv=None):
     #                     help='''Minimum completeness fraction considered''',
     #                     type=float, default=None)  
 
-    parser.add_argument("-fc", "--fix_comp",
-                        help='''Fix Completeness''',
+    parser.add_argument("-fsa", "--fix_sch_al",
+                        help='''Fix Schechter Alpha''',
                         action='count',default=0)
 
     parser.add_argument("-ln", "--line_name",
@@ -221,7 +221,8 @@ def main(argv=None):
                         nwalkers=args.nwalkers, nsteps=args.nsteps,
                         min_comp_frac=args.min_comp_frac,
                         field_names=field_names, field_ind=field_ind,
-                        z1=args.z1, z2=args.z2, z3=args.z3)
+                        z1=args.z1, z2=args.z2, z3=args.z3,
+                        fix_sch_al=args.fix_sch_al)
     print("Initialized LumFuncMCMCz class")
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()

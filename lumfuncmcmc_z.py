@@ -122,7 +122,7 @@ class LumFuncMCMCz:
                  nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[41.0,45.0],
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,
                  fcmin=0.1,min_comp_frac=0.5,field_names=None,
-                 field_ind=None,z1=1.20,z2=1.53,z3=1.86):
+                 field_ind=None,z1=1.20,z2=1.53,z3=1.86,fix_sch_al=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -177,8 +177,6 @@ class LumFuncMCMCz:
             Whether or not to fix the alpha parameter of true luminosity function
         fcmin: Float
             Completeness fraction below which the modification to the Fleming curve becomes important
-        fix_comp: Bool
-            Whether or not to fix the completeness parameters
         min_comp_frac: Float
             Minimum completeness fraction considered
         field_names: 1-D Numpy array
@@ -200,6 +198,7 @@ class LumFuncMCMCz:
         self.line_plot_name = line_plot_name
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
+        self.fix_sch_al = fix_sch_al
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
@@ -340,9 +339,9 @@ class LumFuncMCMCz:
         -----
         theta : list
             list of input parameters for Schechter Fit'''
-        self.sch_al = input_list[0]
-        self.L1, self.L2, self.L3 = input_list[1], input_list[2], input_list[3]
-        self.phi1, self.phi2, self.phi3 = input_list[4], input_list[5], input_list[6]
+        self.L1, self.L2, self.L3 = input_list[0], input_list[1], input_list[2]
+        self.phi1, self.phi2, self.phi3 = input_list[3], input_list[4], input_list[5]
+        if not self.fix_sch_al: self.sch_al = input_list[6]
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -351,8 +350,8 @@ class LumFuncMCMCz:
         -------
         0.0 if all parameters are in bounds, -np.inf if any are out of bounds
         '''
-        flag = ((self.sch_al >= self.sch_al_lims[0]) *
-                     (self.sch_al <= self.sch_al_lims[1]))
+        if self.fix_sch_al: flag = 1
+        else: flag = ((self.sch_al >= self.sch_al_lims[0]) * (self.sch_al <= self.sch_al_lims[1]))
         for i in range(1,4):
             val = getattr(self, 'L' + str(i))
             lims = self.Lstar_lims
@@ -404,7 +403,8 @@ class LumFuncMCMCz:
         pos : np.array (2 dim)
             Two dimensional array with Nwalker x Ndim values
         '''
-        theta_lims = np.vstack((self.sch_al_lims,self.Lstar_lims,self.Lstar_lims,self.Lstar_lims,self.phistar_lims,self.phistar_lims,self.phistar_lims))
+        theta_lims = np.vstack((self.Lstar_lims,self.Lstar_lims,self.Lstar_lims,self.phistar_lims,self.phistar_lims,self.phistar_lims))
+        if not self.fix_sch_al: theta_lims = np.vstack((theta_lims,self.sch_al_lims))
         if num is None:
             num = self.nwalkers
         pos = (np.random.rand(num,len(theta_lims)) *
@@ -419,7 +419,9 @@ class LumFuncMCMCz:
         names : list
             list of all parameter names
         '''
-        return [r'$\alpha$',r'$\log {\rm{L}}1_*$',r'$\log {\rm{L}}2_*$',r'$\log {\rm{L}}3_*$',r'$\log \phi1_*$',r'$\log \phi2_*$',r'$\log \phi3_*$']
+        names =  [r'$\log {\rm{L}}1_*$',r'$\log {\rm{L}}2_*$',r'$\log {\rm{L}}3_*$',r'$\log \phi1_*$',r'$\log \phi2_*$',r'$\log \phi3_*$']
+        if not self.fix_sch_al: names += [r'$\alpha$']
+        return names
 
     def get_params(self):
         ''' Grab the the parameters in each class
@@ -429,7 +431,8 @@ class LumFuncMCMCz:
         vals : list
             list of all parameter values
         '''
-        vals = [self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3]
+        vals = [self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3]
+        if not self.fix_sch_al: vals += [self.sch_al]
         self.nfreeparams = len(vals)
         return vals
 
