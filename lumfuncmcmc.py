@@ -589,7 +589,7 @@ class LumFuncMCMC:
         ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
         # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
         xmin = np.log10(V.get_L_constF(max(self.roots_ln),min(self.z)))
-        xmax = min(max(self.lum),np.median(lstars)+0.5)
+        xmax = min(max(self.lum),np.median(lstars)+1.0)
         ax1.set_xlim(left=xmin,right=xmax)
         cond = np.logical_and(self.lum<=xmax,self.lum>=xmin)
         ax1.set_ylim(bottom=np.percentile(self.medianLF[cond],0),top=np.percentile(self.medianLF[cond],100))
