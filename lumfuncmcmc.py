@@ -562,8 +562,8 @@ class LumFuncMCMC:
     def add_LumFunc_plot(self,ax1):
         """ Set up the plot for the luminosity function """
         ax1.set_yscale('log')
-        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)",fontsize='x-small')
-        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Number Mpc$^{-3}$ dex$^{-1}$)",fontsize='xx-small')
+        ax1.set_xlabel(r"$\log$ L (erg s$^{-1}$)")
+        ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
         ax1.minorticks_on()
 
     def add_subplots(self,ax1,nsamples,rndsamples=200):
@@ -571,10 +571,12 @@ class LumFuncMCMC:
         lf = []
         indsort = np.argsort(self.lum)
         Flims, alphas = np.zeros((rndsamples,self.nfields)), np.zeros(rndsamples)
+        lstars = np.zeros(rndsamples)
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
             Flims[i], alphas[i] = self.Flim, self.alpha
+            lstars[i] = self.Lstar
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
             ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
@@ -586,7 +588,11 @@ class LumFuncMCMC:
         cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
         ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
         # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
-        ax1.set_xlim([np.log10(V.get_L_constF(max(self.roots_ln),min(self.z))),max(self.lum)])
+        xmin = np.log10(V.get_L_constF(max(self.roots_ln),min(self.z)))
+        xmax = min(max(self.lum),np.median(lstars)+0.5)
+        ax1.set_xlim([xmin,xmax])
+        cond = self.lum<=xmax
+        ax1.set_ylim(bottom=np.percentile(self.medianLF[cond],1))
         
     def triangle_plot(self, outname, lnprobcut=7.5, imgtype='png'):
         ''' Make a triangle corner plot for samples from fit

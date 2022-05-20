@@ -236,6 +236,15 @@ def main(argv=None):
                         alpha_lims=args.alpha_lims, field_names=field_names, field_ind=field_ind,
                         diff_rand=not args.same_rand)
     print("Initialized LumFuncMCMC class")
+
+    # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
+    fn = 'LFMCMCOut/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac))
+    if op.isfile(fn):
+        dat = Table.read(fn,'ascii')
+        LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+        LFmod.triangle_plot('LFMCMCOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
+        return
+
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
     percentiles = args.param_percentiles

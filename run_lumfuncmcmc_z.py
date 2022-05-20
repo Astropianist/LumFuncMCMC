@@ -224,6 +224,15 @@ def main(argv=None):
                         z1=args.z1, z2=args.z2, z3=args.z3,
                         fix_sch_al=args.fix_sch_al)
     print("Initialized LumFuncMCMCz class")
+
+    # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
+    fn = 'LFMCMCzOut/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac))
+    if op.isfile(fn):
+        dat = Table.read(fn,'ascii')
+        LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+        LFmod.triangle_plot('LFMCMCzOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
+        return
+
     # Build names for parameters and labels for table
     names = LFmod.get_param_names()
     percentiles = args.param_percentiles
