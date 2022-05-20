@@ -588,11 +588,11 @@ class LumFuncMCMC:
         cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
         ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
         # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
-        xmin = np.log10(V.get_L_constF(max(self.roots_ln),min(self.z)))
+        # xmin = np.log10(V.get_L_constF(max(self.roots_ln),min(self.z)))
         xmax = min(max(self.lum),np.median(lstars)+0.5)
-        ax1.set_xlim([xmin,xmax])
+        ax1.set_xlim(right=xmax)
         cond = self.lum<=xmax
-        ax1.set_ylim(bottom=np.percentile(self.medianLF[cond],1))
+        ax1.set_ylim(bottom=np.percentile(self.medianLF[cond],0))
         
     def triangle_plot(self, outname, lnprobcut=7.5, imgtype='png'):
         ''' Make a triangle corner plot for samples from fit
