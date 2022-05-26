@@ -90,9 +90,7 @@ def parse_args(argv=None):
                         help='''Minimum completeness fraction considered''',
                         type=float, default=None)
 
-    # parser.add_argument("-fl", "--Flim",
-    #                     help='''Minimum completeness fraction considered''',
-    #                     type=float, default=None)  
+    parser.add_argument('-fl','--Flim', type=float, nargs='*', default=None, help="Flim for each of the five fields")    
 
     parser.add_argument("-sa", "--sch_al",
                         help='''Schechter Alpha Param''',
