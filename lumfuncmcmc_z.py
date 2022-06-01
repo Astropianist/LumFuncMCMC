@@ -536,7 +536,7 @@ class LumFuncMCMCz:
         im = ax1.pcolormesh(LLout,self.medianLF,zzout,shading='auto',cmap='viridis')
         cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
         ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='r^',markersize=10,elinewidth=3)
-        xmax = max(self.L1,self.L2,self.L3)+0.5
+        xmax = min(max(self.L1,self.L2,self.L3)+0.5,self.Lout.max())
         cond = self.Lout<=xmax
         ax1.set_ylim(bottom=np.percentile(self.medianLF[:,cond],1))
         ax1.set_xlim(right=xmax)
