@@ -168,7 +168,7 @@ def dLz(z,w=-1.0):
     
 def dVdz(z,w=-1.0):
     """ Volume differential--does not include the area multiplication--just the lengthwise (along z-change) component; unit is Mpc^3 """
-    return 4.0*np.pi*dAz(z,w)**2/(a0*Hz(z,w))
+    return 4.0*np.pi*((1.0+z)*dAz(z,w))**2/(a0*Hz(z,w))
 
 def lumfuncint(z,F,Omega_0,Flim,alpha,Fmin): 
     """ Integrand of luminosity function MLE
