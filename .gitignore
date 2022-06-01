@@ -6,6 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+*.o*
+*.pbs
+*.pbs~
+
+LFMCMCOut/*
+LFMCMCzOut/*
+
 # Distribution / packaging
 .Python
 build/
