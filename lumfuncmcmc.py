@@ -179,14 +179,20 @@ class LumFuncMCMC:
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
-        self.DL = np.zeros(len(self.z))
+        # self.DL = np.zeros(len(self.z))
         zint = np.linspace(0.95*self.zmin,1.05*self.zmax,len(self.z))
-        dVdzarr, DLarr = np.zeros(len(zint)), np.zeros(len(zint))
+        # dVdzarr, DLarr = np.zeros(len(zint)), np.zeros(len(zint))
         self.minlumf = []
-        for i,zi in enumerate(self.z):
-            self.DL[i] = V.dLz(zi) # In Mpc
-            DLarr[i] = V.dLz(zint[i])
-            dVdzarr[i] = V.dVdz(zint[i])
+        self.DL = V.cosmo.luminosity_distance(self.z)
+        DLarr = V.cosmo.luminosity_distance(zint)
+        dVdzarr = V.cosmo.differential_comoving_volume(zint)
+        # for i,zi in enumerate(self.z):
+        #     # self.DL[i] = V.dLz(zi) # In Mpc
+        #     self.DL[i] = V.cosmo.luminosity_distance(zi)
+        #     # DLarr[i] = V.dLz(zint[i])
+        #     DLarr[i] = V.cosmo.luminosity_distance(zint[i])
+        #     # dVdzarr[i] = V.dVdz(zint[i])
+        #     dVdzarr[i] = V.cosmo.differential_comoving_volume(zint[i])
         self.DLf = interp1d(zint,DLarr)
         self.dVdzf = interp1d(zint,dVdzarr)
         roots = self.rootsf.ev(self.Flim,self.alpha)

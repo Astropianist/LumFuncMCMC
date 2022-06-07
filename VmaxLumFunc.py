@@ -2,7 +2,7 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
 import matplotlib as mp
-mp.use("Agg")
+# mp.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from lmfit import Model
@@ -10,9 +10,13 @@ from astropy.table import Table
 from itertools import cycle
 from scipy.optimize import fsolve
 from mpmath import gammainc
-import sys
-import os
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
+from astropy.cosmology import LambdaCDM
+import astropy.units as u
+cosmo = LambdaCDM(H0=70 * u.km / u.s / u.Mpc, 
+                  Tcmb0=2.725 * u.K, Om0=0.3,Ode0=.7)
+# import sys
+# import os
+# sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 import seaborn as sns
 sns.set_context('paper')
 mp.rcParams['font.family']='serif'
@@ -34,7 +38,8 @@ markers = cycle(tuple(['o','^','*','s','+','v','<','>']))
 h, OmegaM, OmegaL, a0 = 0.6778,  0.30821, 0.69179, 1.0
 H0 = 0.000333562*h #H0=100h km/s/Mpc in units Mpc^-1
 n = 100 #For bootstrap analysis
-sqarcsec = 4.0*np.pi * (180./np.pi * 3600.0)**2
+# sqarcsec = 4.0*np.pi * (180./np.pi * 3600.0)**2
+sqarcsec = (180./np.pi * 3600.0)**2
 
 def get_bins(arr, numbins):
     ''' Divide objects into bins with equal number of objects per bin'''
@@ -168,9 +173,9 @@ def dLz(z,w=-1.0):
     
 def dVdz(z,w=-1.0):
     """ Volume differential--does not include the area multiplication--just the lengthwise (along z-change) component; unit is Mpc^3 """
-    return 4.0*np.pi*((1.0+z)*dAz(z,w))**2/(a0*Hz(z,w))
+    return 4.0*np.pi*dAz(z,w)**2/(a0*Hz(z,w))
 
-def lumfuncint(z,F,Omega_0,Flim,alpha,Fmin): 
+def lumfuncint(z,F,Omega_0,Flim,alpha,fcmin): 
     """ Integrand of luminosity function MLE
     
     Input
@@ -184,7 +189,8 @@ def lumfuncint(z,F,Omega_0,Flim,alpha,Fmin):
     alpha: Float
         Fleming curve alpha (slope) parameter
     """
-    return Omega_0/sqarcsec * p(F,Flim,alpha,Fmin)*dVdz(z)
+    # return Omega_0/sqarcsec * p(F,Flim,alpha,Fmin)*dVdz(z)
+    return Omega_0/sqarcsec * fleming(F,Flim,alpha,fcmin=fcmin) * cosmo.differential_comoving_volume(z)
 
 def lumfuncintv2(z,F,Omega_0,func,Flim,alpha,fcmin=0.1):
     """ Integrand of luminosity function MLE for faster computation
@@ -262,14 +268,16 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     minz, maxz = min(z), max(z)
     zint = np.linspace(0.95*minz,1.05*maxz,1001)
     ######### Create interpolation function for dV/dz
-    dVdzint = np.zeros_like(zint)
-    for i,zi in enumerate(zint):
-        dVdzint[i] = dVdz(zi)
+    # dVdzint = np.zeros_like(zint)
+    dVdzint = cosmo.differential_comoving_volume(zint)
+    # for i,zi in enumerate(zint):
+        # dVdzint[i] = dVdz(zi)
+        # dVdzint[i] = cosmo.differential_comoving_volume(zi)
     dVdzf = interp1d(zint,dVdzint)
     ######## Get luminosity and effective volume^-1 weights for each flux #####
-    Lfunc, phifunc = np.zeros(len(F)), np.zeros(len(F))
+    phifunc = np.zeros(len(F))
+    Lfunc = 4.0*np.pi*(cosmo.luminosity_distance(z)*3.086e24)**2*F
     for i in range(len(F)):
-        Lfunc[i] = 4.0*np.pi*(dLz(z[i])*3.086e24)**2*F[i]
         phifunc[i] = lumfunc(F[i],dVdzf,Omega_0,minz,maxz,Flim,alpha,Fmin)
     return Lfunc, phifunc, minz, maxz
 
@@ -705,7 +713,8 @@ def get_L_constF(F,z):
     ------
     L: Float
         Luminosity (erg/s) """
-    return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
+    # return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
+    return 4.0*np.pi*(cosmo.luminosity_distance(z)*3.086e24)**2 * F
 
 def getMaxz(L,Fmin):
     """ Get the redshift at which the given luminosity corresponds to the minimum flux considered
