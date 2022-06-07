@@ -227,9 +227,9 @@ class LumFuncMCMCz:
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         zint = np.linspace(0.95*self.zmin,1.05*self.zmax,len(self.z))
         self.minlumf = []
-        self.DL = V.cosmo.luminosity_distance(self.z)
-        DLarr = V.cosmo.luminosity_distance(zint)
-        dVdzarr = V.cosmo.differential_comoving_volume(zint)
+        self.DL = V.cosmo.luminosity_distance(self.z).value
+        DLarr = V.cosmo.luminosity_distance(zint).value
+        dVdzarr = V.cosmo.differential_comoving_volume(zint).value
         self.DLf = interp1d(zint,DLarr)
         self.dVdzf = interp1d(zint,dVdzarr)
         for ii in range(self.nfields):

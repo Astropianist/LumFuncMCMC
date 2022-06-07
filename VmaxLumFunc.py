@@ -276,7 +276,7 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     dVdzf = interp1d(zint,dVdzint)
     ######## Get luminosity and effective volume^-1 weights for each flux #####
     phifunc = np.zeros(len(F))
-    Lfunc = 4.0*np.pi*(cosmo.luminosity_distance(z)*3.086e24)**2*F
+    Lfunc = 4.0*np.pi*(cosmo.luminosity_distance(z).to('cm').value)**2*F
     for i in range(len(F)):
         phifunc[i] = lumfunc(F[i],dVdzf,Omega_0,minz,maxz,Flim,alpha,Fmin)
     return Lfunc, phifunc, minz, maxz
@@ -714,7 +714,7 @@ def get_L_constF(F,z):
     L: Float
         Luminosity (erg/s) """
     # return 4.0*np.pi*(dLz(z)*3.086e24)**2 * F
-    return 4.0*np.pi*(cosmo.luminosity_distance(z)*3.086e24)**2 * F
+    return 4.0*np.pi*(cosmo.luminosity_distance(z).to('cm').value)**2 * F
 
 def getMaxz(L,Fmin):
     """ Get the redshift at which the given luminosity corresponds to the minimum flux considered

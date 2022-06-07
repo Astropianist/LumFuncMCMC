@@ -183,9 +183,9 @@ class LumFuncMCMC:
         zint = np.linspace(0.95*self.zmin,1.05*self.zmax,len(self.z))
         # dVdzarr, DLarr = np.zeros(len(zint)), np.zeros(len(zint))
         self.minlumf = []
-        self.DL = V.cosmo.luminosity_distance(self.z)
-        DLarr = V.cosmo.luminosity_distance(zint)
-        dVdzarr = V.cosmo.differential_comoving_volume(zint)
+        self.DL = V.cosmo.luminosity_distance(self.z).value
+        DLarr = V.cosmo.luminosity_distance(zint).value
+        dVdzarr = V.cosmo.differential_comoving_volume(zint).value
         # for i,zi in enumerate(self.z):
         #     # self.DL[i] = V.dLz(zi) # In Mpc
         #     self.DL[i] = V.cosmo.luminosity_distance(zi)
