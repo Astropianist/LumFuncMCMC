@@ -124,6 +124,8 @@ def parse_args(argv=None):
         args.z1, args.z2, args.z3 = 1.20, 1.76, 2.32
     else:
         args.z1, args.z2, args.z3 = 1.20, 1.53, 1.86
+    if args.line_name=='Ha':
+        args.z1, args.z2, args.z3 = 1.18, 1.36, 1.54
 
     return args
 
