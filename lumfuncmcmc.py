@@ -375,7 +375,7 @@ class LumFuncMCMC:
             integ_part = self.volume_part * Omega(self.logL[ii],self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
             integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * integ_part
             fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
-        return lnpart - fullint/self.nfields
+        return lnpart - fullint
 
     def lnlike_fix_comp(self):
         ''' Calculate the log likelihood and return the value and stellar mass of the model as well as other derived parameters when completeness parameters are fixed (faster)
@@ -390,7 +390,7 @@ class LumFuncMCMC:
         for ii in range(self.nfields):
             integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * self.integ_part[ii]
             fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
-        return lnpart - fullint/self.nfields
+        return lnpart - fullint
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
@@ -591,8 +591,8 @@ class LumFuncMCMC:
         self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         self.VeffLF()
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
-        cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
-        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
+        # cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
+        # ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
         # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
         xmin = np.log10(V.get_L_constF(max(self.roots_ln),min(self.z)))
         xmax = min(max(self.lum),np.median(lstars)+1.0)

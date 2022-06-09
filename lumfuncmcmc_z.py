@@ -373,7 +373,7 @@ class LumFuncMCMCz:
         for ii in range(self.nfields):
             integ = schechter_z(self.logL[ii],self.zarr_rep,self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3) * self.integ_part[ii]
             fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
-        return lnpart - fullint/self.nfields
+        return lnpart - fullint
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
@@ -531,8 +531,8 @@ class LumFuncMCMCz:
             self.medianLF[i] = schechter_z(self.Lout,self.zout[i],self.sch_al,self.L1,self.L2,self.L3,self.phi1,self.phi2,self.phi3,self.z1,self.z2,self.z3)
         self.VeffLF()
         im = ax1.pcolormesh(LLout,self.medianLF,zzout,shading='auto',cmap='viridis')
-        cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
-        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='r^',markersize=10,elinewidth=3)
+        # cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
+        # ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='r^',markersize=10,elinewidth=3)
         xmax = min(max(self.L1,self.L2,self.L3)+0.5,self.Lout.max())
         cond = self.Lout<=xmax
         ax1.set_ylim(bottom=np.percentile(self.medianLF[:,cond],1))
