@@ -133,7 +133,7 @@ def parse_args(argv=None):
 
     return args
 
-def read_input_file(args):
+def read_input_file(args, dust_fn=None):
     """ Function to read in input ascii file with properly named columns.
     Columns should include redshifts (header 'z') and a (linear) flux (header 
     'LineorBandName_flux') in 1.0e-17 erg/cm^2/s or log luminosity (header 
@@ -161,8 +161,10 @@ def read_input_file(args):
     root: Float
         Minimum flux cutoff based on the completeness curve parameters and desired minimum completeness
     """
+    
     datfile = Table.read(args.filename,format='ascii')
     fields, zfull = datfile['Field'], datfile['z']
+    idfull = datfile['ID']
     field_names = np.unique(fields)
     field_ind = np.array([0])
     if abs(args.min_comp_frac-0.0)<1.0e-6:
@@ -198,13 +200,28 @@ def read_input_file(args):
         if len(lum_e)==0: lum_e = None
     else: 
         lum, lum_e = None, None
-    z = []
+    z, ids, fds = [], [], []
     for i,field in enumerate(field_names):
         fluxmin = roots[i]
         try: cond = np.logical_and(fields==field,fluxfull>fluxmin)
         except: cond = np.logical_and(fields==field,lumfull>0.0)
         z.append(zfull[cond])
-    return z, flux, flux_e, lum, lum_e, field_names, field_ind
+        ids.append(idfull[cond])
+        fds.append(fields[cond])
+    ids, fds = np.concatenate(ids), np.concatenate(fds)
+    fdid = np.array([fd+str(id) for fd,id in zip(fds,ids)])
+    if dust_fn is not None: 
+        dustf = Table.read(dust_fn,format='ascii')
+        fd_dust, id_dust = dustf['Field'], dustf['ID']
+        fdid_dust = np.array([fd+str(id) for fd,id in zip(fd_dust,id_dust)])
+        ind_overlap = np.where(np.in1d(fdid_dust,fdid))
+        assert np.all(fdid_dust[ind_overlap]==fdid)
+        if args.line_name=='Ha': AHa = 2.07*2.66*dustf['E(B-V)'][ind_overlap]
+        else: AHa = 2.07*3.46*dustf['E(B-V)'][ind_overlap]
+    else:
+        AHa = None
+
+    return z, flux, flux_e, lum, lum_e, field_names, field_ind, AHa
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -217,7 +234,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     # Read input file into arrays
-    z, flux, flux_e, lum, lum_e, field_names, field_ind = read_input_file(args)
+    z, flux, flux_e, lum, lum_e, field_names, field_ind, AHa = read_input_file(args, dust_fn='combined_all_Swift_NoDust_Donley_removed.dat')
     print("Read Input File")
 
     # Initialize LumFuncMCMC class
