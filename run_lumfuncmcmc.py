@@ -214,7 +214,10 @@ def read_input_file(args, dust_fn=None):
         dustf = Table.read(dust_fn,format='ascii')
         fd_dust, id_dust = dustf['Field'], dustf['ID']
         fdid_dust = np.array([fd+str(id) for fd,id in zip(fd_dust,id_dust)])
-        ind_overlap = np.where(np.in1d(fdid_dust,fdid))
+        # ind_overlap = np.where(np.in1d(fdid_dust,fdid))
+        ind_overlap = np.empty(len(fdid),dtype=int)
+        for i in range(len(fdid)):
+            ind_overlap[i] = np.where(fdid_dust==fdid[i])[0][0]
         assert np.all(fdid_dust[ind_overlap]==fdid)
         if args.line_name=='Ha': AHa = 2.07*2.66*dustf['E(B-V)'][ind_overlap]
         else: AHa = 2.07*3.46*dustf['E(B-V)'][ind_overlap]
