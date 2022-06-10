@@ -470,10 +470,11 @@ class LumFuncMCMCz:
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         self.phifunc = np.zeros_like(self.flux)
+        sum_Omega = sum(self.Omega_0)
         for i in range(len(self.flux)):
             if self.min_comp_frac<=0.001: zmaxval = self.zmax
             else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],self.roots_arr[i]))
-            if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,self.Omega_0_arr[i],self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
+            if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,sum_Omega,self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.max(self.Flim))
 
     def set_median_fit(self,lnprobcut=7.5,zlen=100,Llen=100):

@@ -235,6 +235,11 @@ def main(argv=None):
         dat = Table.read(fn,format='ascii')
         LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
         LFmod.triangle_plot('LFMCMCzOut/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
+        T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
+                    names=['Luminosity', 'BinLF', 'BinLFErr'])
+        T.write('LFMCMCzOut/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+                overwrite=True, format='ascii.fixed_width_two_line')
+        print("Finished writing VeffLF file")
         return
 
     # Build names for parameters and labels for table
