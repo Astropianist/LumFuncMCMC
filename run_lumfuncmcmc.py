@@ -219,12 +219,13 @@ def read_input_file(args, dust_fn=None):
         for i in range(len(fdid)):
             ind_overlap[i] = np.where(fdid_dust==fdid[i])[0][0]
         assert np.all(fdid_dust[ind_overlap]==fdid)
-        if args.line_name=='Ha': AHa = 2.07*2.66*dustf['E(B-V)'][ind_overlap]
-        else: AHa = 2.07*3.46*dustf['E(B-V)'][ind_overlap]
+        if args.line_name=='Ha': AHa, AHaerr = 2.07*2.66*dustf['E(B-V)'][ind_overlap], 2.07*2.66*dustf['E(B-V)err'][ind_overlap]
+        else: AHa, AHaerr = 2.07*3.46*dustf['E(B-V)'][ind_overlap], 2.07*3.46*dustf['E(B-V)err'][ind_overlap]
+        SFR_MC, SFR_MC_E = dustf['SFR100'][ind_overlap], dustf['SFR100err'][ind_overlap]
     else:
-        AHa = None
+        AHa, AHaerr, SFR_MC, SFR_MC_E = None, None, None, None
 
-    return z, flux, flux_e, lum, lum_e, field_names, field_ind, AHa
+    return z, flux, flux_e, lum, lum_e, field_names, field_ind, AHa, AHaerr, SFR_MC, SFR_MC_E
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -237,7 +238,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     # Read input file into arrays
-    z, flux, flux_e, lum, lum_e, field_names, field_ind, AHa = read_input_file(args, dust_fn='combined_all_Swift_NoDust_Donley_removed.dat')
+    z, flux, flux_e, lum, lum_e, field_names, field_ind, AHa, AHaerr, SFR_MC, SFR_MC_E = read_input_file(args, dust_fn='combined_all_Swift_NoDust_Donley_removed.dat')
     print("Read Input File")
 
     # Initialize LumFuncMCMC class
