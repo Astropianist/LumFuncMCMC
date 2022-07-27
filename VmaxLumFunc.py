@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
+from uncertainties import unumpy
 import matplotlib as mp
 # mp.use("Agg")
 import matplotlib.pyplot as plt
@@ -79,6 +80,18 @@ def p(F,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
     """ Completeness (Fleming) curve as function of Flim and alpha """
     return 0.5*(1.0 - (2.5*alpha*np.log10(F/Flim))/np.sqrt(1.0+ (2.5*alpha*np.log10(F/Flim))**2))
 
+def fleming_unumpy(f, Flim=3.0e-17, alpha=3.5, fcmin=0.1):
+    numerator = alpha * unumpy.log10( f / Flim )
+    denominator = ( 1. + numerator**2. ) ** 0.5
+    fc = 0.5* (1. + numerator / denominator )
+    if not fcmin:
+        return fc
+    else:
+        f_tau = inverse_fleming(f50=Flim, alpha=alpha, fcmin=fcmin)
+        fc_decay = expdecay_unumpy(f, f_tau)
+        fc_mod = fc**(1. / fc_decay)
+    return fc_mod
+
 def fleming(f, Flim=3.0e-17, alpha=3.5, fcmin=0.1):
     '''
     The original Fleming completeness function
@@ -112,6 +125,13 @@ def fleming(f, Flim=3.0e-17, alpha=3.5, fcmin=0.1):
         fc_decay = expdecay(f, f_tau)
         fc_mod = fc**(1. / fc_decay)
     return fc_mod
+
+def expdecay_unumpy(x, tau):
+    '''
+    Exponential decay function
+    used for the modification to the Fleming curve (see eq. 2)
+    '''
+    return 1. - unumpy.exp(-x/tau)
 
 def expdecay(x, tau):
     '''
