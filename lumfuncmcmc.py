@@ -1,18 +1,17 @@
 import numpy as np 
 import logging
 import emcee
+import pickle
 from uncertainties import unumpy, ufloat
 import matplotlib
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
+from scipy.interpolate import RegularGridInterpolator as RGIScipy
 import time
-import pdb
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import corner
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
-import pdb
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -21,6 +20,23 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                "xtick.major.size":12, "xtick.minor.size":4,
                "ytick.major.size":12, "ytick.minor.size":4,
                })
+
+class RGINNExt:
+    def __init__( self, points, values, method='cubic' ):
+        self.interp = RGIScipy(points, values, method=method,
+                                              bounds_error=False, fill_value=np.nan)
+        self.nearest = RGIScipy(points, values, method='nearest',
+                                           bounds_error=False, fill_value=None)
+
+def makeCompFunc(file_name='cosmos_completeness_grid.pickle'):
+    with open(file_name,'rb') as f:
+        dat = pickle.load(f)
+    mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
+    interp_comp = RGINNExt((dist, mag), comp)
+    return interp_comp
+
+def cgs2magAB(cgs):
+    return -2.5*np.log10(cgs)-48.6
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -34,7 +50,7 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     logLstar: float
         Schechther log(Lstar) parameter
     logphistar: float
-        Schechther log(phistar) parameter
+        Schechter log(phistar) parameter
 
     Returns
     -------
@@ -44,7 +60,7 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 # 
-def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
+def Omega(logL,z,dist_arcmin,dLzfunc,compfunc,Omega_0):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
     Input
@@ -53,46 +69,43 @@ def Omega(logL,z,dLzfunc,Omega_0,Flim,alpha,fcmin=0.1):
         Value or array of log luminosities in erg/s
     z : float or numpy 1-D array
         Value or array of redshifts; logL and z cannot be different-sized arrays
+    dist_arcmin: float or numpy 1-D array
+        Value or array of distances in arcmin from the given point(s) to the center of the field
     dLzfunc : interp1d function
         1-D interpolation function for luminosity distance in Mpc
+    compfunc: RGINNExt instance
+        2-D interpolation function for completeness vs distance and magnitude
     Omega_0: float
         Effective survey area in square arcseconds
-    Flim: float
-        50% completeness flux value
-    alpha: float
-        Completeness-related slope
 
     Returns
     -------
     Omega(logL,z) : Float or 1-D array (same size as logL and/or z)
     '''
     L = 10**logL
-    return Omega_0/V.sqarcsec * V.fleming(L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2),Flim,alpha,fcmin)
+    flux_cgs = L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2)
+    mags = cgs2magAB(flux_cgs)
+    comp = compfunc((dist_arcmin, mags))
+    return Omega_0/V.sqarcsec * comp
 
 class LumFuncMCMC:
-    def __init__(self,z,flux=None,flux_e=None,Flim=[2.35,3.12,2.20,2.86,2.85],Flim_lims=[1.0,6.0],
-                 alpha=3.5, alpha_lims=[1.0,6.0],line_name="OIII",
-                 line_plot_name=r'[OIII] $\lambda 5007$',lum=None,lum_e=None,Omega_0=[100.0,100.0,100.0,100.0,100.0],nbins=50,
-                 nboot=100,sch_al=-1.6, sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
-                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,nwalkers=100,nsteps=1000,
-                 fix_sch_al=False,fcmin=0.1,fix_comp=False,min_comp_frac=0.5,
-                 field_names=None,field_ind=None,diff_rand=True):
+    def __init__(self,z,flux=None,flux_e=None,line_name="OIII",
+                 line_plot_name=r'[OIII] $\lambda 5007$',lum=None,
+                 lum_e=None,Omega_0=43200.,nbins=50,nboot=100,sch_al=-1.6,
+                 sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
+                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,
+                 nwalkers=100,nsteps=1000,fix_sch_al=False,
+                 min_comp_frac=0.5,diff_rand=True):
         ''' Initialize LumFuncMCMC class
 
         Init
         ----
-        z : List of numpy arrays (1 dim)
-            List of arrays of redshifts for sample (one for each field)
-        flux : list of numpy arrays (1 dim) or None Object
-            List of arrays of fluxes in 10^-17 erg/cm^2/s
-        flux_e : list of numpy arrays (1 dim) or None Object
-            List of arrays of flux errors in 10^-17 erg/cm^2/s
-        Flim: list of floats (multiple of 1e-17 erg/cm^2/s)
-            50% completeness flux parameters for each field (AEGIS, COSMOS, GOODSN, GOODSS, UDS)
-        Flim_lims: two-element list
-            Minimum and maximum values allowed in Flim prior (same for all fields)
-        alpha: float
-            Completeness-related slope
+        z : Float
+            Redshift of objects in field
+        flux : 1-D Numpy array or None Object
+            Array of fluxes in 10^-17 erg/cm^2/s
+        flux_e : 1-D Numpy array or None Object
+            Array of flux errors in 10^-17 erg/cm^2/s
         line_name: string
             Name of line or monochromatic luminosity element
         line_plot_name: (raw) string
@@ -101,8 +114,8 @@ class LumFuncMCMC:
             Array of log luminosities in erg/s
         lum_e: numpy array (1 dim) or None Object
             Array of log luminosity errors in erg/s
-        Omega_0: List of floats
-            Effective survey area in square arcseconds for each field
+        Omega_0: Float
+            Effective survey area in square arcseconds
         nbins: int
             Number of bins for plotting luminosity function and conducting V_eff method
         nboot: int
@@ -125,28 +138,13 @@ class LumFuncMCMC:
             The number of walkers for emcee when fitting a model
         nsteps : int
             The number of steps each walker will make when fitting a model
-        root: List of floats
-            Minimum flux cutoff for each field based on the completeness curve parameters and desired minimum completeness
         fix_sch_al: Bool
             Whether or not to fix the alpha parameter of true luminosity function
-        fcmin: Float
-            Completeness fraction below which the modification to the Fleming curve becomes important
-        fix_comp: Bool
-            Whether or not to fix the completeness parameters
         min_comp_frac: Float
             Minimum completeness fraction considered
-        field_names: 1-D Numpy array
-            List of fields used in data
-        field_ind: 1-D Numpy array
-            Indices that convert the unique field names to the full list of fluxes
         '''
-        self.z = np.concatenate(z)
-        self.zmin, self.zmax = min(self.z), max(self.z)
-        self.fcmin, self.min_comp_frac = fcmin, min_comp_frac
-        self.Flim, self.Flim_lims = Flim, Flim_lims
-        self.fields, self.nfields = field_names, len(self.Flim)
-        self.field_ind = field_ind
-        self.alpha, self.alpha_lims = alpha, alpha_lims
+        self.z = z
+        self.min_comp_frac = min_comp_frac
         self.line_name = line_name
         self.line_plot_name = line_plot_name
         self.Lc, self.Lh = Lc, Lh
@@ -156,7 +154,7 @@ class LumFuncMCMC:
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
         self.phistar, self.phistar_lims = phistar, phistar_lims
         self.nwalkers, self.nsteps = nwalkers, nsteps
-        self.fix_sch_al, self.fix_comp = fix_sch_al, fix_comp
+        self.fix_sch_al = fix_sch_al
         self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
         self.diff_rand = diff_rand
         self.defineFlimOmArr()
@@ -179,11 +177,9 @@ class LumFuncMCMC:
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
-        # self.DL = np.zeros(len(self.z))
-        zint = np.linspace(0.95*self.zmin,1.05*self.zmax,len(self.z))
-        # dVdzarr, DLarr = np.zeros(len(zint)), np.zeros(len(zint))
         self.minlumf = []
         self.DL = V.cosmo.luminosity_distance(self.z).value
+        self
         DLarr = V.cosmo.luminosity_distance(zint).value
         dVdzarr = V.cosmo.differential_comoving_volume(zint).value
         # for i,zi in enumerate(self.z):
@@ -282,6 +278,7 @@ class LumFuncMCMC:
 
     def defineFlimOmArr(self):
         '''Function to initially define arrays of same length as the entire input to facilitate different Flim calculation''' 
+        
         self.Flims_arr, self.Omega_0_arr = np.zeros(self.field_ind[-1]), np.zeros(self.field_ind[-1],dtype=int)
         for ii in range(self.nfields):
             self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]

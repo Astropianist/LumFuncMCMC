@@ -2,24 +2,14 @@ nwalkers = 100
 nsteps = 1000
 nbins = 50
 nboot = 100
-# Flim = [2.35,3.12,2.20,2.86,2.85]
-Flim = [2.72,3.61,2.55,3.31,3.30] # Multiplied by 1.16 from Will's values for size distinction
-# Flim=4.0 # For OIII
-# Flim = 3.1 # For H-alpha
-Flim_lims=[1.0,6.0]
-alpha = 4.56
-# alpha=2.12 # For OIII
-# alpha=2.20 # For H-alpha
-alpha_lims=[1.0,7.0]
-line_name="OIII"
-# line_name="Ha"
-line_plot_name=r'[OIII] $\lambda 5007$'
-# line_plot_name=r'${\rm{H\alpha}}$'
-Omega_0_sqarcmin = [121.9,122.2,116.0,147.3,118.7]
-frac_use = 0.85
+
+line_name="Lya"
+line_plot_name=r'Ly$\alpha$'
+Omega_0_sqarcmin = 43200.0
+frac_use = 1.0
 conv_minsec = 3600
-Omega_0 = [val*frac_use*conv_minsec for val in Omega_0_sqarcmin]
-# Omega_0=1.9125e6
+Omega_0 = Omega_0_sqarcmin*frac_use*conv_minsec
+
 sch_al=-1.49
 sch_al_lims=[-3.0,1.0]
 Lstar=42.5
@@ -29,7 +19,6 @@ phistar_lims=[-8.0,5.0]
 Lc=40.0
 Lh=46.0
 min_comp_frac = 0.0
-fcmin = 0.1
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
 
