@@ -180,8 +180,6 @@ class LumFuncMCMC:
         self.dist, self.dist_orig = dist, dist_orig
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         
-        self.defineFlimOmArr()
-        self.getRoot()
         self.setDLdVdz()
         if flux is not None: 
             self.flux = 1.0e-17*np.concatenate(flux)
@@ -217,6 +215,7 @@ class LumFuncMCMC:
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
+        self.Omega_arr = Omega(self.lum,self.DL,self.comp1df,self.Omega_0)
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
@@ -339,11 +338,7 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
-        self.getFlim()
-        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omega(self.lum,self.z,self.DLf,self.Omega_0_arr,1.0e-17*self.Flims_arr,self.alpha,self.fcmin)).sum()
-        # logL = np.linspace(self.Lc,self.Lh,101)
-        # fullint = self.setlncomp()
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omega(self.lum,self.dL,self.comp1df,self.Omega_0)).sum()
         fullint = 0.0
         for ii in range(self.nfields):
             integ_part = self.volume_part * Omega(self.logL[ii],self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
