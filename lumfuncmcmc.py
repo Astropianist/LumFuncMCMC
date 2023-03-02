@@ -3,7 +3,6 @@ import logging
 import emcee
 import pickle
 from uncertainties import unumpy, ufloat
-import matplotlib
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
@@ -27,6 +26,13 @@ class RGINNExt:
                                               bounds_error=False, fill_value=np.nan)
         self.nearest = RGIScipy(points, values, method='nearest',
                                            bounds_error=False, fill_value=None)
+        
+    def __call__( self, xi ):
+        vals = self.interp( xi )
+        idxs = np.isnan( vals )
+        if type(xi)==tuple: vals[idxs] = self.nearest((xi[0][idxs], xi[1][idxs]))
+        else: vals[idxs] = self.nearest( xi[idxs] )
+        return vals
 
 def makeCompFunc(file_name='cosmos_completeness_grid.pickle'):
     with open(file_name,'rb') as f:
@@ -37,6 +43,9 @@ def makeCompFunc(file_name='cosmos_completeness_grid.pickle'):
 
 def cgs2magAB(cgs):
     return -2.5*np.log10(cgs)-48.6
+
+def magAB2cgs(mag):
+    return 10^(-0.4*(mag+48.6)) 
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -60,48 +69,48 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 # 
-def Omega(logL,z,dist_arcmin,dLzfunc,compfunc,Omega_0):
+def Omega(logL,dLz,compfunc,Omega_0):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
     Input
     -----
     logL : float or numpy 1-D array
         Value or array of log luminosities in erg/s
-    z : float or numpy 1-D array
-        Value or array of redshifts; logL and z cannot be different-sized arrays
-    dist_arcmin: float or numpy 1-D array
-        Value or array of distances in arcmin from the given point(s) to the center of the field
-    dLzfunc : interp1d function
-        1-D interpolation function for luminosity distance in Mpc
-    compfunc: RGINNExt instance
-        2-D interpolation function for completeness vs distance and magnitude
+    dLz : float
+        Luminosity distance (for a given z=z0) in Mpc
+    compfunc: interp1d instance
+        1-D interpolation function for average completeness vs magnitude
     Omega_0: float
         Effective survey area in square arcseconds
 
     Returns
     -------
-    Omega(logL,z) : Float or 1-D array (same size as logL and/or z)
+    Omega(logL,z0) : Float or 1-D array (same size as logL)
     '''
     L = 10**logL
-    flux_cgs = L/(4.0*np.pi*(3.086e24*dLzfunc(z))**2)
+    flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
     mags = cgs2magAB(flux_cgs)
-    comp = compfunc((dist_arcmin, mags))
+    comp = compfunc(mags)
     return Omega_0/V.sqarcsec * comp
 
 class LumFuncMCMC:
-    def __init__(self,z,flux=None,flux_e=None,line_name="OIII",
+    def __init__(self,z,del_red=None,flux=None,flux_e=None,line_name="OIII",
                  line_plot_name=r'[OIII] $\lambda 5007$',lum=None,
                  lum_e=None,Omega_0=43200.,nbins=50,nboot=100,sch_al=-1.6,
                  sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,
                  nwalkers=100,nsteps=1000,fix_sch_al=False,
-                 min_comp_frac=0.5,diff_rand=True):
+                 min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
+                 interp_comp=None,dist_orig=None,dist=None,
+                 maglow=26.0,maghigh=19.0,magnum=15,distnum=100):
         ''' Initialize LumFuncMCMC class
 
         Init
         ----
         z : Float
             Redshift of objects in field
+        del_red: Float
+            Width of redshift bin
         flux : 1-D Numpy array or None Object
             Array of fluxes in 10^-17 erg/cm^2/s
         flux_e : 1-D Numpy array or None Object
@@ -142,6 +151,16 @@ class LumFuncMCMC:
             Whether or not to fix the alpha parameter of true luminosity function
         min_comp_frac: Float
             Minimum completeness fraction considered
+        field_name: String
+            Name of field
+        interp_comp: Interpolation function
+            Interpolation function for completeness
+        comp1d: Interpolation function
+            1-D interpolation function for completeness averaged over distance from field center
+        dist: 1-D Numpy Array
+            Array of distances from center of field
+        maglow, maghigh: Floats
+            Min and max magnitudes for distance-averaging
         '''
         self.z = z
         self.min_comp_frac = min_comp_frac
@@ -155,8 +174,12 @@ class LumFuncMCMC:
         self.phistar, self.phistar_lims = phistar, phistar_lims
         self.nwalkers, self.nsteps = nwalkers, nsteps
         self.fix_sch_al = fix_sch_al
-        self.all_param_names = ['Lstar','phistar','sch_al','Flim','alpha']
+        self.all_param_names = ['Lstar','phistar','sch_al']
         self.diff_rand = diff_rand
+        self.field_name = field_name
+        self.dist, self.dist_orig = dist, dist_orig
+        self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
+        
         self.defineFlimOmArr()
         self.getRoot()
         self.setDLdVdz()
@@ -169,46 +192,36 @@ class LumFuncMCMC:
             self.getFluxes()
         if lum is None: 
             self.getLumin()
-        self.setOmegaLz()
-        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
+        self.mags = cgs2magAB(self.flux) # For the completeness
+        if interp_comp is None: self.interp_comp = makeCompFunc()
+        else: self.interp_comp = interp_comp
+        self.comps = self.interp_comp((self.dist, self.mags))
+        
+        self.get1DComp()
         self.allind = np.arange(len(self.lum))
         self.setlnsimple()
         self.setup_logging()
 
+    def get1DComp(self):
+        ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''
+        maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
+        distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
+        distg, magg = np.meshgrid(distgrid, maggrid, indexing='ij')
+        comps = self.interp_comp((distg, maggrid))
+        roots = np.zeros(self.distnum)
+        for i in range(self.distnum):
+            func = interp1d(magg, comps[i])
+            roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [23.0])[0]
+        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots))
+        self.minlum = np.average(minlums)
+        comp_avg_dist = np.average(comps,axis=0)
+        self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
+        self.comps1d = self.comp1df(self.mags)
+
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
-        self.minlumf = []
         self.DL = V.cosmo.luminosity_distance(self.z).value
-        self
-        DLarr = V.cosmo.luminosity_distance(zint).value
-        dVdzarr = V.cosmo.differential_comoving_volume(zint).value
-        # for i,zi in enumerate(self.z):
-        #     # self.DL[i] = V.dLz(zi) # In Mpc
-        #     self.DL[i] = V.cosmo.luminosity_distance(zi)
-        #     # DLarr[i] = V.dLz(zint[i])
-        #     DLarr[i] = V.cosmo.luminosity_distance(zint[i])
-        #     # dVdzarr[i] = V.dVdz(zint[i])
-        #     dVdzarr[i] = V.cosmo.differential_comoving_volume(zint[i])
-        self.DLf = interp1d(zint,DLarr)
-        self.dVdzf = interp1d(zint,dVdzarr)
-        roots = self.rootsf.ev(self.Flim,self.alpha)
-        for ii in range(self.nfields):
-            if self.min_comp_frac<=0.001: minlum = np.zeros_like(DLarr)
-            else: minlum = np.log10(4.0*np.pi*(DLarr*3.086e24)**2 * roots[ii])
-            self.minlumf.append(interp1d(zint,minlum))
-            
-    def setOmegaLz(self,size=501):
-        ''' Create a 2-D interpolated function for Omega (fraction of sources that can be observed) '''
-        logL = np.linspace(self.Lc,self.Lh,size)
-        zarr = np.linspace(0.95*self.zmin,1.05*self.zmax,size)
-        # xx, yy = np.meshgrid(logL,zarr)
-        self.Omegaf = []
-        Omegaarr = np.empty((size,size))
-        for ii in range(self.nfields):
-            for i in range(size):
-                # Omegaarr = Omega(xx,yy,self.DLf,self.Omega_0[i],1.0e-17*self.Flim[i],self.alpha,self.fcmin)
-                Omegaarr[i] = Omega(logL[i],zarr,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            self.Omegaf.append(RectBivariateSpline(logL,zarr,Omegaarr))
+        self.dVdz = V.dVdz(self.z)
 
     def setlnsimple(self):
         '''Makes arrays needed for faster calculation of lnlike'''
@@ -265,30 +278,6 @@ class LumFuncMCMC:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
 
-    def getRoot(self,size=201):
-        ''' Get minimum flux depending on minimum completeness fraction as interpolation'''
-        flims = np.linspace(self.Flim_lims[0],self.Flim_lims[1],size)
-        alphas = np.linspace(self.alpha_lims[0],self.alpha_lims[1],size)
-        roots = np.zeros((size,size))
-        if self.min_comp_frac>0.001:
-            for i in range(size):
-                for j in range(size):
-                    roots[i,j] = fsolve(lambda x: V.fleming(x,1.0e-17*flims[i],alphas[j],self.fcmin)-self.min_comp_frac,[3.0e-17])[0]
-        self.rootsf = RectBivariateSpline(flims,alphas,roots)
-
-    def defineFlimOmArr(self):
-        '''Function to initially define arrays of same length as the entire input to facilitate different Flim calculation''' 
-        
-        self.Flims_arr, self.Omega_0_arr = np.zeros(self.field_ind[-1]), np.zeros(self.field_ind[-1],dtype=int)
-        for ii in range(self.nfields):
-            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]
-            self.Omega_0_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Omega_0[ii]
-
-    def getFlim(self):
-        '''Function to re-compute Flim full-length array''' 
-        for ii in range(self.nfields):
-            self.Flims_arr[self.field_ind[ii]:self.field_ind[ii+1]] = self.Flim[ii]
-
     def setup_logging(self):
         '''Setup Logging for MCSED
 
@@ -323,15 +312,8 @@ class LumFuncMCMC:
             list of input parameters for Schechter Fit'''
         self.Lstar = input_list[0]
         self.phistar = input_list[1]
-        if self.fix_comp:
-            if self.fix_sch_al: pass
-            else: self.sch_al = input_list[2]
-        else:
-            if self.fix_sch_al:
-                self.Flim, self.alpha = input_list[2:2+self.nfields], input_list[2+self.nfields]
-            else: 
-                self.sch_al = input_list[2]
-                self.Flim, self.alpha = input_list[3:3+self.nfields], input_list[3+self.nfields]
+        if self.fix_sch_al: pass
+        else: self.sch_al = input_list[2]
 
     def lnprior(self):
         ''' Simple, uniform prior for input variables
@@ -342,12 +324,7 @@ class LumFuncMCMC:
         '''
         flag = 1.0
         for param in self.all_param_names:
-            if param=='Flim':
-                for i in range(self.nfields):
-                    flag *= ((getattr(self,param)[i] >= getattr(self,param+'_lims')[0]) *
-                     (getattr(self,param)[i] <= getattr(self,param+'_lims')[1]))
-            else:
-                flag *= ((getattr(self,param) >= getattr(self,param+'_lims')[0]) *
+            flag *= ((getattr(self,param) >= getattr(self,param+'_lims')[0]) *
                      (getattr(self,param) <= getattr(self,param+'_lims')[1]))
         if not flag: 
             return -np.inf

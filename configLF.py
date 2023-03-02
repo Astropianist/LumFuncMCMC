@@ -4,7 +4,7 @@ nbins = 50
 nboot = 100
 
 line_name="Lya"
-line_plot_name=r'Ly$\alpha$'
+line_plot_name=r'${\rm{Ly\alpha}}$'
 Omega_0_sqarcmin = 43200.0
 frac_use = 1.0
 conv_minsec = 3600
@@ -19,6 +19,10 @@ phistar_lims=[-8.0,5.0]
 Lc=40.0
 Lh=46.0
 min_comp_frac = 0.0
+redshift = 3.1
+del_red = 0.06
+field = 'COSMOS'
+maglow, maghigh = 26., 19.
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
 
