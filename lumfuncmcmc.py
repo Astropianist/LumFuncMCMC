@@ -69,7 +69,7 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 # 
-def Omega(logL,dLz,compfunc,Omega_0):
+def Omega(logL,dLz,compfunc,Omega_0,freq):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
     Input
@@ -90,7 +90,7 @@ def Omega(logL,dLz,compfunc,Omega_0):
     if callable(compfunc): 
         L = 10**logL
         flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
-        mags = cgs2magAB(flux_cgs, self.freq_filt)
+        mags = cgs2magAB(flux_cgs, freq)
         comp = compfunc(mags)
     else: 
         comp = compfunc
@@ -185,7 +185,7 @@ class LumFuncMCMC:
         self.all_param_names = ['Lstar','phistar','sch_al']
         self.diff_rand = diff_rand
         self.field_name = field_name
-        self.dist, self.dist_orig = dist, dist_orig
+        self.dist, self.dist_orig, self.distnum = dist, dist_orig, distnum
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
         self.freq_filt = 3.0e18/self.wav_filt
@@ -223,9 +223,9 @@ class LumFuncMCMC:
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
-        self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0)
+        self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.freq_filt)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
-        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0)
+        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.freq_filt)
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
