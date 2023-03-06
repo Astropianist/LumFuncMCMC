@@ -217,7 +217,7 @@ class LumFuncMCMC:
         comps = comps.reshape(self.distnum, self.magnum)
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
-            func = interp1d(maggrid, comps[i])
+            func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1])) # Nearest neighbor outside
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [23.0])[0]
         minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.freq_filt))
         self.minlum = np.average(minlums)
