@@ -20,6 +20,7 @@ Lc=40.0
 Lh=46.0
 min_comp_frac = 0.0
 redshift = 3.1
+wav_filt = 5015.0
 del_red = 0.06
 field_name = 'COSMOS'
 maglow, maghigh = 26., 19.

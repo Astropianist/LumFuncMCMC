@@ -41,11 +41,11 @@ def makeCompFunc(file_name='cosmos_completeness_grid.pickle'):
     interp_comp = RGINNExt((dist, mag), comp)
     return interp_comp
 
-def cgs2magAB(cgs):
-    return -2.5*np.log10(cgs)-48.6
+def cgs2magAB(cgs, freq):
+    return -2.5*np.log10(cgs/freq)-48.6
 
-def magAB2cgs(mag):
-    return 10^(-0.4*(mag+48.6)) 
+def magAB2cgs(mag, freq):
+    return freq * 10^(-0.4*(mag+48.6)) 
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -90,7 +90,7 @@ def Omega(logL,dLz,compfunc,Omega_0):
     if callable(compfunc): 
         L = 10**logL
         flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
-        mags = cgs2magAB(flux_cgs)
+        mags = cgs2magAB(flux_cgs, self.freq_filt)
         comp = compfunc(mags)
     else: 
         comp = compfunc
@@ -106,7 +106,7 @@ class LumFuncMCMC:
                  min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
                  interp_comp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
-                 size_ln=1001):
+                 size_ln=1001, wav_filt=5015.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -167,6 +167,8 @@ class LumFuncMCMC:
             Min and max magnitudes for distance-averaging
         comps: 1-D Numpy Array
             Array of completeness values for all objects
+        wav_filt: Float
+            Central wavelength of filter
         '''
         self.z, self.del_red = z, del_red
         self.min_comp_frac = min_comp_frac
@@ -185,19 +187,20 @@ class LumFuncMCMC:
         self.field_name = field_name
         self.dist, self.dist_orig = dist, dist_orig
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
-        self.comps, self.size_ln = comps, size_ln
+        self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
+        self.freq_filt = 3.0e18/self.wav_filt
         
         self.setDLdVdz()
         if flux is not None: 
-            self.flux = 1.0e-17*np.concatenate(flux)
+            self.flux = 1.0e-17*flux
             if flux_e is not None:
-                self.flux_e = 1.0e-17*np.concatenate(flux_e)
+                self.flux_e = 1.0e-17*flux_e
         else:
-            self.lum, self.lum_e = np.concatenate(lum), np.concatenate(lum_e)
+            self.lum, self.lum_e = lum, lum_e
             self.getFluxes()
         if lum is None: 
             self.getLumin()
-        self.mags = cgs2magAB(self.flux) # For the completeness
+        self.mags = cgs2magAB(self.flux, self.freq_filt) # For the completeness
         if interp_comp is None: self.interp_comp = makeCompFunc()
         else: self.interp_comp = interp_comp
         self.comps = self.interp_comp((self.dist, self.mags))
@@ -215,7 +218,7 @@ class LumFuncMCMC:
         for i in range(self.distnum):
             func = interp1d(magg, comps[i])
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [23.0])[0]
-        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots))
+        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.freq_filt))
         self.minlum = np.average(minlums)
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
