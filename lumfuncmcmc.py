@@ -213,10 +213,11 @@ class LumFuncMCMC:
         maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
         distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
         distg, magg = np.meshgrid(distgrid, maggrid, indexing='ij')
-        comps = self.interp_comp((distg, maggrid))
+        comps = self.interp_comp((distg.ravel(), maggrid.ravel()))
+        comps = comps.reshape(self.distnum, self.magnum)
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
-            func = interp1d(magg, comps[i])
+            func = interp1d(maggrid, comps[i])
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [23.0])[0]
         minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.freq_filt))
         self.minlum = np.average(minlums)
