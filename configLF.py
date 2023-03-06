@@ -21,7 +21,7 @@ Lh=46.0
 min_comp_frac = 0.0
 redshift = 3.1
 del_red = 0.06
-field = 'COSMOS'
+field_name = 'COSMOS'
 maglow, maghigh = 26., 19.
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
