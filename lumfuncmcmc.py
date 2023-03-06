@@ -203,8 +203,6 @@ class LumFuncMCMC:
         self.comps = self.interp_comp((self.dist, self.mags))
         
         self.get1DComp()
-        self.allind = np.arange(len(self.lum))
-        self.setlnsimple()
         self.setup_logging()
 
     def get1DComp(self):
@@ -230,7 +228,7 @@ class LumFuncMCMC:
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.dVdz(self.z)
-        self.volume = self.dVdz * self.del_red # Actual total volume of survey (redshift integral separate from luminosity function integral)
+        self.volume = self.dVdz * self.del_red # Actual total volume of survey (redshift integral separate from luminosity function integral)--divided by 4pi (since we don't divide by 4pi for Omega)
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -416,15 +414,8 @@ class LumFuncMCMC:
 
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
-        self.getFlim()
-        root = self.rootsf.ev(self.Flims_arr,self.alpha)
-        sum_Omega = sum(self.Omega_0)
-        self.phifunc = np.zeros_like(self.flux)
-        for i in range(len(self.flux)):
-            if self.min_comp_frac<=0.001: zmaxval = self.zmax
-            else: zmaxval = min(self.zmax,V.getMaxz(10**self.lum[i],root[i]))
-            if zmaxval>self.zmin: self.phifunc[i] = V.lumfunc(self.flux[i],self.dVdzf,sum_Omega,self.zmin,zmaxval,1.0e-17*self.Flims_arr[i],self.alpha,self.fcmin)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.zmin,self.zmax,self.nboot,self.nbins,Fmin=1.0e-17*np.max(self.Flim))
+        self.phifunc = 1.0/(self.volume * self.Omega_arr)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,Lmin=self.minlum)
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
@@ -456,16 +447,13 @@ class LumFuncMCMC:
         # nsamples = self.samples
         self.log.info("Shape of nsamples (with a lnprobcut applied)")
         self.log.info(nsamples.shape)
-        Flims, alphas = np.zeros((rndsamples,self.nfields)), np.zeros(rndsamples)
         lf = []
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
-            Flims[i], alphas[i] = self.Flim, self.alpha
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
         self.medianLF = np.median(np.array(lf), axis=0)
-        self.Flim, self.alpha = list(np.median(Flims,axis=0)), np.median(alphas)
         self.VeffLF()
 
     def add_LumFunc_plot(self,ax1):
@@ -479,25 +467,21 @@ class LumFuncMCMC:
         ''' Add Subplots to Triangle plot below '''
         lf = []
         indsort = np.argsort(self.lum)
-        Flims, alphas = np.zeros((rndsamples,self.nfields)), np.zeros(rndsamples)
         lstars = np.zeros(rndsamples)
         for i in np.arange(rndsamples):
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
-            Flims[i], alphas[i] = self.Flim, self.alpha
             lstars[i] = self.Lstar
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
             ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
         self.medianLF = np.median(np.array(lf), axis=0)
-        self.Flim, self.alpha = list(np.median(Flims,axis=0)), np.median(alphas)
-        self.roots_ln = self.rootsf.ev(self.Flim,self.alpha)
         self.VeffLF()
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
-        # cond_veff = self.Lavg >= np.log10(V.get_L_constF(max(self.roots_ln),max(self.z)))
-        # ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
-        # ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
-        xmin = np.log10(V.get_L_constF(max(self.roots_ln),min(self.z)))
+        cond_veff = self.Lavg >= self.minlum
+        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
+        ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
+        xmin = self.minlum
         xmax = min(max(self.lum),np.median(lstars)+1.0)
         ax1.set_xlim(left=xmin,right=xmax)
         cond = np.logical_and(self.lum<=xmax,self.lum>=xmin)

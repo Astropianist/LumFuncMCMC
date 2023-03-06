@@ -301,7 +301,7 @@ def getlumfunc(F,z,Omega_0=100.0,Flim=3.0e-17,alpha=-3.5,Fmin=0.0):
         phifunc[i] = lumfunc(F[i],dVdzf,Omega_0,minz,maxz,Flim,alpha,Fmin)
     return Lfunc, phifunc, minz, maxz
 
-def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,correct_low=False):
+def getBootErrLog(L,phi,nboot=100,nbin=25,Lmin=42.0):
     """ Estimate true luminosity function and errors on the "measurements" using bootstrap method
     This function is for log luminosities and is used with a Schechter function with log quantities (not in this code)
 
@@ -311,16 +311,12 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,corre
         Array of log luminosities in log(erg/s)
     phi: 1-D Numpy Array
         Array of volume^-1 weights using V_eff method
-    minz: Float
-        Minimum z value in data set
-    maxz: Float
-        Maximum z value in data set
     nboot: Int
         Number of iterations to use for bootstrap method
     nbin: Int
         Number of bins for creating luminosity function
-    Fmin: Float
-        Minimum flux considered in the Veff method (erg/cm^2/s)
+    Lmin: Float
+        Minimum luminosity considered in the Veff method (log erg/s)
     Larr: 1-D Numpy array of size nbin+1
         Optional array of values that you can provide to standardize binning
 
@@ -334,10 +330,7 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,corre
         Array of variances derived from bootstrap method
     """
     ##### Bin the data by luminosity to create a true luminosity function #####
-    if Larr is None:
-        Lmin = np.log10(get_L_constF(Fmin,maxz))
-        print("Min Luminosity:", Lmin)
-        Larr = np.linspace(min(L)*1.001,max(L),nbin+1) #To establish bin boundaries
+    Larr = np.linspace(Lmin,max(L),nbin+1) #To establish bin boundaries
     Lavg = np.linspace((Larr[0]+Larr[1])/2.0,(Larr[-1]+Larr[-2])/2.0,len(Larr)-1) #Centers of bins
     dL = Lavg[1]-Lavg[0]
     lfbin = np.zeros((nboot,len(Lavg)))
@@ -347,7 +340,7 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,corre
         cond2 = L<Larr[j+1]
         cond = np.logical_and(cond1,cond2)
         if len(phi[cond]): 
-            lfbinorig[j] = sum(phi[cond])/dL
+            lfbinorig[j] = phi[cond].sum()/dL
     ###### Bootstrap calculation for errors ######
     for k in range(nboot):
         boot = np.random.randint(len(phi),size=len(phi))
@@ -360,21 +353,6 @@ def getBootErrLog(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=1.0e-20,Larr=None,corre
     binavg = np.average(lfbin,axis=0)
     var = 1./(nboot-1) * np.sum((lfbin-binavg)**2,axis=0)
     var[var<=0.0] = min(var[var>0.0]) #Don't want values of 0 in variance
-    ########### Correct for luminosity bins that are only partially included #########
-    if not correct_low: return Lavg, lfbinorig, var
-    zarr = np.linspace(0.9*minz,1.1*maxz,201)
-    Lminarr = np.zeros_like(zarr)
-    for i,zi in enumerate(zarr):
-        Lminarr[i] = get_L_constF(Fmin,zi)
-    Lminarr = np.log10(Lminarr)
-    Lminzf = interp1d(zarr,Lminarr,kind='cubic')
-    for j in range(len(lfbinorig)):
-        mult = get_mult_factor(Larr[j],Larr[j+1],Lminzf,minz,maxz)
-        # print "mult[%d]=%.2f"%(j,mult)
-        if abs(mult-1.0)<1.0e-8:
-            break
-        lfbinorig[j]*=mult
-        var[j]*=mult**2
     return Lavg, lfbinorig, var
 
 def getBootErr(L,phi,minz,maxz,nboot=100,nbin=25,Fmin=0.0):
