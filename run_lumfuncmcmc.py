@@ -165,10 +165,11 @@ def read_input_file(args):
     datfile = Table.read(args.filename,format='ascii')
     interp_comp = makeCompFunc()
     flux, fluxe, dist = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
-    mag = cgs2magAB(1.0e-17*flux, 3.0e18/args.wav_filt)
-    comps = interp_comp((dist, mag))
+    cond_init = flux>0.0
+    mag = cgs2magAB(1.0e-17*flux[cond_init], 3.0e18/args.wav_filt)
+    comps = interp_comp((dist[cond_init], mag))
     cond = comps>=args.min_comp_frac
-    return flux[cond], fluxe[cond], None, None, dist[cond], interp_comp, dist, comps[cond]
+    return flux[cond_init][cond], fluxe[cond_init][cond], None, None, dist[cond_init][cond], interp_comp, dist[cond_init], comps[cond]
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
