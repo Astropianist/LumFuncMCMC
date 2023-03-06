@@ -168,7 +168,7 @@ def read_input_file(args):
     mag = cgs2magAB(flux)
     comps = interp_comp((dist, mag))
     cond = comps>=args.min_comp_frac
-    return flux[cond], fluxe[cond], None, None, dist[cond], interp_comp, dist
+    return flux[cond], fluxe[cond], None, None, dist[cond], interp_comp, dist, comps[cond]
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -182,7 +182,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig, comps = read_input_file(args)
     print("Read Input File")
 
     # Initialize LumFuncMCMC class
@@ -201,7 +201,7 @@ def main(argv=None):
                         field_name=args.field_name, 
                         diff_rand=not args.same_rand, 
                         interp_comp=interp_comp, dist_orig=dist_orig, 
-                        dist=dist, maglow=args.maglow, maghigh=args.maghigh)
+                        dist=dist, maglow=args.maglow, maghigh=args.maghigh, comps=comps)
     print("Initialized LumFuncMCMC class")
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again

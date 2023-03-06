@@ -87,10 +87,13 @@ def Omega(logL,dLz,compfunc,Omega_0):
     -------
     Omega(logL,z0) : Float or 1-D array (same size as logL)
     '''
-    L = 10**logL
-    flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
-    mags = cgs2magAB(flux_cgs)
-    comp = compfunc(mags)
+    if callable(compfunc): 
+        L = 10**logL
+        flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
+        mags = cgs2magAB(flux_cgs)
+        comp = compfunc(mags)
+    else: 
+        comp = compfunc
     return Omega_0/V.sqarcsec * comp
 
 class LumFuncMCMC:
@@ -102,7 +105,8 @@ class LumFuncMCMC:
                  nwalkers=100,nsteps=1000,fix_sch_al=False,
                  min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
                  interp_comp=None,dist_orig=None,dist=None,
-                 maglow=26.0,maghigh=19.0,magnum=15,distnum=100):
+                 maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
+                 size_ln=1001):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -161,8 +165,10 @@ class LumFuncMCMC:
             Array of distances from center of field
         maglow, maghigh: Floats
             Min and max magnitudes for distance-averaging
+        comps: 1-D Numpy Array
+            Array of completeness values for all objects
         '''
-        self.z = z
+        self.z, self.del_red = z, del_red
         self.min_comp_frac = min_comp_frac
         self.line_name = line_name
         self.line_plot_name = line_plot_name
@@ -179,6 +185,7 @@ class LumFuncMCMC:
         self.field_name = field_name
         self.dist, self.dist_orig = dist, dist_orig
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
+        self.comps, self.size_ln = comps, size_ln
         
         self.setDLdVdz()
         if flux is not None: 
@@ -215,46 +222,15 @@ class LumFuncMCMC:
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
-        self.Omega_arr = Omega(self.lum,self.DL,self.comp1df,self.Omega_0)
+        self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0)
+        self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
+        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0)
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.dVdz(self.z)
-
-    def setlnsimple(self):
-        '''Makes arrays needed for faster calculation of lnlike'''
-        if self.fix_comp: self.size_ln = 201
-        else: self.size_ln = 101
-        self.zarr = np.linspace(self.zmin,self.zmax,self.size_ln)
-        self.DL_zarr = self.DLf(self.zarr)
-        self.volume_part = self.dVdzf(self.zarr)
-        self.logL, self.integ_part = [], []
-        self.logLi = np.empty((self.size_ln,self.size_ln))
-        self.zarr_rep = np.repeat(self.zarr[None],self.size_ln,axis=0)
-        for ii in range(self.nfields):
-            minlumsi = self.minlumf[ii](self.zarr)
-            minlumsi[minlumsi<np.min(self.lum)] = np.min(self.lum)
-            for i in range(self.size_ln):
-                self.logLi[:,i] = np.linspace(minlumsi[i],self.Lh,self.size_ln)
-            self.logL.append(self.logLi)
-            Om_part = self.Omegaf[ii].ev(self.logLi,self.zarr_rep)
-            self.integ_part.append(self.volume_part * Om_part)
-        self.Om_arr = Omega(self.lum,self.z,self.DLf,self.Omega_0_arr,1.0e-17*self.Flims_arr,self.alpha,self.fcmin)
-
-    def setlncomp(self):
-        '''Sets the necessary arrays for lnlike in not fixed case and calculates integral part'''
-        fullint = 0.0
-        for ii in range(self.nfields):
-            minlumsi = np.log10(4.0*np.pi*(self.DL_zarr*3.086e24)**2 * self.roots_ln[ii])
-            # minlumsi[minlumsi<np.min(self.lum)] = np.min(self.lum)
-            for i in range(self.size_ln):
-                self.logLi[:,i] = np.linspace(minlumsi[i],self.Lh,self.size_ln)
-            tlf = TrueLumFunc(self.logLi,self.sch_al,self.Lstar,self.phistar)
-            Om_part = Omega(self.logLi,self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            integ = tlf * self.volume_part * Om_part
-            fullint += trapz(trapz(integ,self.logLi,axis=0),self.zarr)
-        return fullint
+        self.volume = self.dVdz * self.del_red # Actual total volume of survey (redshift integral separate from luminosity function integral)
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -338,27 +314,9 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*Omega(self.lum,self.dL,self.comp1df,self.Omega_0)).sum()
-        fullint = 0.0
-        for ii in range(self.nfields):
-            integ_part = self.volume_part * Omega(self.logL[ii],self.zarr_rep,self.DLf,self.Omega_0[ii],1.0e-17*self.Flim[ii],self.alpha,self.fcmin)
-            integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * integ_part
-            fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
-        return lnpart - fullint
-
-    def lnlike_fix_comp(self):
-        ''' Calculate the log likelihood and return the value and stellar mass of the model as well as other derived parameters when completeness parameters are fixed (faster)
-
-        Returns
-        -------
-        log likelihood (float)
-            The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        self.getFlim()
-        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.Om_arr).sum()
-        fullint = 0.0
-        for ii in range(self.nfields):
-            integ = TrueLumFunc(self.logL[ii],self.sch_al,self.Lstar,self.phistar) * self.integ_part[ii]
-            fullint += trapz(trapz(integ,self.logL[ii],axis=0),self.zarr)
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.Omega_arr).sum()
+        integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
+        fullint = self.volume * trapz(integ,self.logL)
         return lnpart - fullint
 
     def lnprob(self, theta):
@@ -377,21 +335,6 @@ class LumFuncMCMC:
         else:
             return -np.inf
 
-    def lnprob_fix_comp(self, theta):
-        ''' Calculate the log probability for fixed completeness
-
-        Returns
-        -------
-        log prior + log likelihood, (float)
-            The log probability is just the sum of the logs of the prior and likelihood. '''
-        self.set_parameters_from_list(theta)
-        lp = self.lnprior()
-        if np.isfinite(lp):
-            lnl = self.lnlike_fix_comp()
-            return lnl+lp
-        else:
-            return -np.inf
-
     def get_init_walker_values(self, num=None):
         ''' Before running emcee, this function generates starting points
         for each walker in the MCMC process.
@@ -404,9 +347,6 @@ class LumFuncMCMC:
         # theta = [self.sch_al, self.Lstar, self.phistar]
         theta_lims = np.vstack((self.Lstar_lims,self.phistar_lims))
         if not self.fix_sch_al: theta_lims = np.vstack((theta_lims,self.sch_al_lims))
-        if not self.fix_comp:
-            for i in range(self.nfields): theta_lims = np.vstack((theta_lims,self.Flim_lims))
-            theta_lims = np.vstack((theta_lims,self.alpha_lims))
         if num is None:
             num = self.nwalkers
         if self.diff_rand: pos_part1 = np.random.rand(num,len(theta_lims))
@@ -424,9 +364,6 @@ class LumFuncMCMC:
         '''
         names = [r'$\log L_*$',r'$\log \phi_*$']
         if not self.fix_sch_al: names += [r'$\alpha$']
-        if not self.fix_comp:
-            for i in range(self.nfields): names += [r'$F_{{\rm 50},%d}$'%(i)]
-            names += [r'$\alpha_C$']
         return names
 
     def get_params(self):
@@ -439,9 +376,6 @@ class LumFuncMCMC:
         '''
         vals = [self.Lstar,self.phistar]
         if not self.fix_sch_al: vals += [self.sch_al]
-        if not self.fix_comp:
-            vals += list(self.Flim)
-            vals += [self.alpha]
         self.nfreeparams = len(vals)
         return vals
 
@@ -453,8 +387,7 @@ class LumFuncMCMC:
         pos = self.get_init_walker_values()
         ndim = pos.shape[1]
         start = time.time()
-        if self.fix_comp: func = 'lnprob_fix_comp'
-        else: func = 'lnprob'
+        func = 'lnprob'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
