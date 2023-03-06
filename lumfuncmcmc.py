@@ -20,6 +20,8 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                "ytick.major.size":12, "ytick.minor.size":4,
                })
 
+c = 3.0e18 # Speed of light in Angstroms/s
+
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
         self.interp = RGIScipy(points, values, method=method,
@@ -41,11 +43,15 @@ def makeCompFunc(file_name='cosmos_completeness_grid.pickle'):
     interp_comp = RGINNExt((dist, mag), comp)
     return interp_comp
 
-def cgs2magAB(cgs, freq):
-    return -2.5*np.log10(cgs/freq)-48.6
+def cgs2magAB(cgs, wave, dwave):
+    Flam = cgs/dwave
+    Fnu = Flam*wave**2/c
+    return -2.5*np.log10(Fnu)-48.6
 
-def magAB2cgs(mag, freq):
-    return freq * 10**(-0.4*(mag+48.6)) 
+def magAB2cgs(mag, wave, dwave):
+    Fnu = 10**(-0.4*(mag+48.6))
+    Flam = Fnu*c/wave**2
+    return Flam * dwave
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -69,7 +75,7 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 # 
-def Omega(logL,dLz,compfunc,Omega_0,freq):
+def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
     Input
@@ -90,7 +96,7 @@ def Omega(logL,dLz,compfunc,Omega_0,freq):
     if callable(compfunc): 
         L = 10**logL
         flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
-        mags = cgs2magAB(flux_cgs, freq)
+        mags = cgs2magAB(flux_cgs, wave, dwave)
         comp = compfunc(mags)
     else: 
         comp = compfunc
@@ -106,7 +112,7 @@ class LumFuncMCMC:
                  min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
                  interp_comp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
-                 size_ln=1001, wav_filt=5015.0):
+                 size_ln=1001, wav_filt=5015.0, filt_width=73.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -188,7 +194,7 @@ class LumFuncMCMC:
         self.dist, self.dist_orig, self.distnum = dist, dist_orig, distnum
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
-        self.freq_filt = 3.0e18/self.wav_filt
+        self.filt_width = filt_width
         
         self.setDLdVdz()
         if flux is not None: 
@@ -200,7 +206,7 @@ class LumFuncMCMC:
             self.getFluxes()
         if lum is None: 
             self.getLumin()
-        self.mags = cgs2magAB(self.flux, self.freq_filt) # For the completeness
+        self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
         if interp_comp is None: self.interp_comp = makeCompFunc()
         else: self.interp_comp = interp_comp
         self.comps = self.interp_comp((self.dist, self.mags))
@@ -219,14 +225,14 @@ class LumFuncMCMC:
         for i in range(self.distnum):
             func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1])) # Nearest neighbor outside
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
-        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.freq_filt))
+        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.wav_filt, self.filt_width))
         self.minlum = np.average(minlums)
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
-        self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.freq_filt)
+        self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
-        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.freq_filt)
+        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''

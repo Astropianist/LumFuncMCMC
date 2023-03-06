@@ -120,7 +120,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width']
 
     for arg_i in arg_inputs:
         try:
@@ -166,7 +166,7 @@ def read_input_file(args):
     interp_comp = makeCompFunc()
     flux, fluxe, dist = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     cond_init = flux>0.0
-    mag = cgs2magAB(1.0e-17*flux[cond_init], 3.0e18/args.wav_filt)
+    mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
     comps = interp_comp((dist[cond_init], mag))
     cond = comps>=args.min_comp_frac
     return flux[cond_init][cond], fluxe[cond_init][cond], None, None, dist[cond_init][cond], interp_comp, dist[cond_init], comps[cond]
@@ -202,7 +202,7 @@ def main(argv=None):
                         field_name=args.field_name, 
                         diff_rand=not args.same_rand, 
                         interp_comp=interp_comp, dist_orig=dist_orig, 
-                        dist=dist, maglow=args.maglow, maghigh=args.maghigh, comps=comps, wav_filt=args.wav_filt)
+                        dist=dist, maglow=args.maglow, maghigh=args.maghigh, comps=comps, wav_filt=args.wav_filt, filt_width=args.filt_width)
     print("Initialized LumFuncMCMC class")
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
