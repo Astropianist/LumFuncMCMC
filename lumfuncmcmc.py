@@ -45,7 +45,7 @@ def cgs2magAB(cgs, freq):
     return -2.5*np.log10(cgs/freq)-48.6
 
 def magAB2cgs(mag, freq):
-    return freq * 10^(-0.4*(mag+48.6)) 
+    return freq * 10**(-0.4*(mag+48.6)) 
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -218,7 +218,7 @@ class LumFuncMCMC:
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
             func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1])) # Nearest neighbor outside
-            roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [23.0])[0]
+            roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
         minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.freq_filt))
         self.minlum = np.average(minlums)
         comp_avg_dist = np.average(comps,axis=0)
