@@ -36,7 +36,7 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(file_name='cosmos_completeness_grid.pickle'):
+def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle'):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
