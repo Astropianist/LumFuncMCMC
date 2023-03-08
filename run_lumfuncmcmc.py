@@ -120,7 +120,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim']
 
     for arg_i in arg_inputs:
         try:
@@ -165,7 +165,7 @@ def read_input_file(args):
     datfile = Table.read(args.filename,format='ascii')
     interp_comp = makeCompFunc()
     flux, fluxe, dist = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
-    cond_init = flux>0.0
+    cond_init = np.logical_and(flux>0.0,flux<args.flux_lim)
     mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
     comps = interp_comp((dist[cond_init], mag))
     cond = comps>=args.min_comp_frac

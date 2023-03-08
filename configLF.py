@@ -25,6 +25,7 @@ filt_width = 73.0
 del_red = 0.06
 field_name = 'COSMOS'
 maglow, maghigh = 26., 19.
+flux_lim = 600.0
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
 
