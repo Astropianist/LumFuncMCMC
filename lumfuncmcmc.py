@@ -23,6 +23,23 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 
 c = 3.0e18 # Speed of light in Angstroms/s
 
+def getTransPDF(lam, tra, pdflen=10000):
+    il, ir = 0, len(tra)-1
+    while tra[il+1]-tra[il]>0.0: il+=1
+    while tra[ir-1]-tra[ir]>0.0: ir-=1
+
+    fl = interp1d(tra[:il],lam[:,il],kind='cubic')
+    fr = interp1d(tra[ir:],lam[ir:],kind='cubic')
+
+    tra_arr = np.linspace(max(tra[:il].min(),tra[ir:].min()), min(tra[:il].max(),tra[ir:].max()),pdflen)
+    tra_arr_diff = np.diff(tra_arr)
+    pdf_arr = np.hstack([0.0, np.diff(fl(tra_arr))/tra_arr_diff - np.diff(fr(tra_arr)/tra_arr_diff)])
+    tra_arr = np.append(tra_arr, tra.max())
+    pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
+    pdf_arr / trapz(pdf_arr, tra_arr) # Normalize
+
+    return interp1d(tra_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False)
+
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
         self.interp = RGIScipy(points, values, method=method,
@@ -211,7 +228,7 @@ class LumFuncMCMC:
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
         if interp_comp is None: self.interp_comp = makeCompFunc()
         else: self.interp_comp = interp_comp
-        self.comps = self.interp_comp((self.dist, self.mags))
+        if self.comps is None: self.comps = self.interp_comp((self.dist, self.mags))
         
         self.get1DComp()
         self.setup_logging()
