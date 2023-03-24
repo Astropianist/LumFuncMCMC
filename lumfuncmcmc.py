@@ -6,6 +6,7 @@ from uncertainties import unumpy, ufloat
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
+from scipy.stats import binned_statistic
 import time
 import matplotlib.pyplot as plt
 import corner
@@ -112,7 +113,8 @@ class LumFuncMCMC:
                  min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
                  interp_comp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
-                 size_ln=1001, wav_filt=5015.0, filt_width=73.0):
+                 size_ln=1001,wav_filt=5015.0,filt_width=73.0,
+                 binned_stat_num=50):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -194,7 +196,7 @@ class LumFuncMCMC:
         self.dist, self.dist_orig, self.distnum = dist, dist_orig, distnum
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
-        self.filt_width = filt_width
+        self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         
         self.setDLdVdz()
         if flux is not None: 
@@ -247,9 +249,14 @@ class LumFuncMCMC:
         if self.flux_e is not None: 
             ulum = unumpy.log10(4.0*np.pi*(self.DL*3.086e24)**2 * unumpy.uarray(self.flux,self.flux_e))
             self.lum, self.lum_e = unumpy.nominal_values(ulum), unumpy.std_devs(ulum)
+            self.lum_bin_edges = np.percentile(self.lum,np.linspace(0.,100.,self.binned_stat_num+1))
+            self.lum_err_bins, _, _ = binned_statistic(self.lum, self.lum_e, statistic='median',bins=self.lum_bin_edges)
+            self.lum_bin_mid = np.array([(self.lum_bin_edges[i]+self.lum_bin_edges[i+1])/2.0 for i in range(self.binned_stat_num)])
+            self.lum_err_func = interp1d(self.lum_bin_mid, self.lum_err_bins, bounds_error=False, fill_value=(self.lum_err_bins[0],self.lum_err_bins[-1]))
         else:
             self.lum = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * self.flux)
             self.lum_e = None
+            self.lum_bin_edges, self.lum_err_bins, self.lum_bin_mid, self.lum_err_func = None, None, None, None
 
     def getFluxes(self):
         ''' Set sample fluxes based on luminosities if not available '''
