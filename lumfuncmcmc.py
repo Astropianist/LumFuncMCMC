@@ -7,6 +7,7 @@ from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
 from scipy.stats import binned_statistic
+from astropy.table import Table
 import time
 import matplotlib.pyplot as plt
 import corner
@@ -39,6 +40,17 @@ def getTransPDF(lam, tra, pdflen=10000):
     pdf_arr / trapz(pdf_arr, tra_arr) # Normalize
 
     return interp1d(tra_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False)
+
+def getBoundsTransPDF(mag_width=5.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000):
+    trans_dat = Table.read(file_name, format='ascii')
+    lam, trans = trans_dat['lambda'], trans_dat['transmission']
+    transf = interp1d(lam, trans, kind='cubic', bounds_error=False, fill_value=0.0)
+    lam_full = np.linspace(lam[0],lam[-1],fulllen)
+    trans_min = 10**(-0.4*mag_width) * trans.max()
+    trans_full = transf(lam_full)
+    left_ind = np.argmin(abs(trans_full[:np.argmax(trans_full)]-trans_min))
+    right_ind = np.argmin(abs(trans_full[np.argmax(trans_full):]-trans_min))
+    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen)
 
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
@@ -120,6 +132,9 @@ def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
         comp = compfunc
     return Omega_0/V.sqarcsec * comp
 
+def normalFunc(x,mu,sig):
+    return 1.0/(np.sqrt(2.0*np.pi)*sig) * np.exp(-(x-mu)**2/(2.0*sig**2))
+
 class LumFuncMCMC:
     def __init__(self,z,del_red=None,flux=None,flux_e=None,line_name="OIII",
                  line_plot_name=r'[OIII] $\lambda 5007$',lum=None,
@@ -131,7 +146,7 @@ class LumFuncMCMC:
                  interp_comp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
-                 binned_stat_num=50):
+                 binned_stat_num=50,err_corr=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -214,6 +229,7 @@ class LumFuncMCMC:
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
+        self.err_corr = err_corr
         
         self.setDLdVdz()
         if flux is not None: 
