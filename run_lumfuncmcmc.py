@@ -111,7 +111,7 @@ def parse_args(argv=None):
                         help='''Same random starting point''',
                         action='count',default=0)
     
-    parser.add_argument("-ec", "--error_corr",
+    parser.add_argument("-ec", "--err_corr",
                         help='''Whether or not to use convolution''',
                         action='count',default=0)
 
