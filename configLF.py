@@ -21,6 +21,7 @@ Lh=46.0
 min_comp_frac = 0.0
 redshift = 3.1
 wav_filt = 5015.0
+wav_rest = 1215.67 # Lya
 filt_width = 77.3
 filt_name = 'N501'
 del_red = 0.06

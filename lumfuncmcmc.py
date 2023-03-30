@@ -25,32 +25,46 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 c = 3.0e18 # Speed of light in Angstroms/s
 
 def getTransPDF(lam, tra, pdflen=10000):
-    il, ir = 0, len(tra)-1
-    while tra[il+1]-tra[il]>0.0: il+=1
-    while tra[ir-1]-tra[ir]>0.0: ir-=1
+    del_logL = np.log10(tra.max()) - np.log10(tra)
+    il, ir = 0, len(del_logL)-1
+    while del_logL[il+1]-tra[il]<0.0: il+=1
+    while del_logL[ir-1]-del_logL[ir]<0.0: ir-=1
 
-    fl = interp1d(tra[:il],lam[:,il],kind='cubic')
-    fr = interp1d(tra[ir:],lam[ir:],kind='cubic')
+    fl = interp1d(del_logL[:il],lam[:,il],kind='cubic')
+    fr = interp1d(del_logL[ir:],lam[ir:],kind='cubic')
 
-    tra_arr = np.linspace(max(tra[:il].min(),tra[ir:].min()), min(tra[:il].max(),tra[ir:].max()),pdflen)
-    tra_arr_diff = np.diff(tra_arr)
-    pdf_arr = np.hstack([0.0, np.diff(fl(tra_arr))/tra_arr_diff - np.diff(fr(tra_arr)/tra_arr_diff)])
-    tra_arr = np.append(tra_arr, tra.max())
-    pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
-    pdf_arr / trapz(pdf_arr, tra_arr) # Normalize
+    del_logL_arr = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
+    del_logL_arr_diff = np.diff(del_logL_arr)
+    pdf_arr = np.hstack([0.0, np.diff(fr(del_logL_arr)/del_logL_arr_diff) - np.diff(fl(del_logL_arr))/del_logL_arr_diff])
+    # del_logL_arr = np.append(del_logL_arr, tra.max())
+    # pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
+    del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
+    pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
+    pdf_arr / trapz(pdf_arr, del_logL_arr) # Normalize
 
-    return interp1d(tra_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False)
+    return interp1d(del_logL_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False), 
 
-def getBoundsTransPDF(mag_width=5.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000):
+def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000, wav_rest=1215.67, maglen=101):
     trans_dat = Table.read(file_name, format='ascii')
     lam, trans = trans_dat['lambda'], trans_dat['transmission']
     transf = interp1d(lam, trans, kind='cubic', bounds_error=False, fill_value=0.0)
     lam_full = np.linspace(lam[0],lam[-1],fulllen)
-    trans_min = 10**(-0.4*mag_width) * trans.max()
+    trans_max = trans.max()
+    trans_min = 10**(-1.0*logL_width) * trans_max
     trans_full = transf(lam_full)
-    left_ind = np.argmin(abs(trans_full[:np.argmax(trans_full)]-trans_min))
-    right_ind = np.argmin(abs(trans_full[np.argmax(trans_full):]-trans_min))
-    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen)
+    tfam = np.argmax(trans_full)
+    left_ind = np.argmin(abs(trans_full[:tfam+1]-trans_min))
+    right_ind = np.argmin(abs(trans_full[tfam:]-trans_min)) + tfam
+
+    logLs = np.linspace(0.0,logL_width,maglen)
+    delz = np.zeros_like(logLs)
+    for i, logL in enumerate(logLs):
+        trans_mini = 10**(-1.0*logL) * trans_max
+        left_indi = np.argmin(abs(trans_full[:tfam+1]-trans_mini))
+        right_indi = np.argmin(abs(trans_full[tfam:]-trans_mini)) + tfam
+        delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
+
+    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen), interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
@@ -146,7 +160,7 @@ class LumFuncMCMC:
                  interp_comp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
-                 binned_stat_num=50,err_corr=False):
+                 binned_stat_num=50,err_corr=False,wav_rest=1215.67):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -229,7 +243,8 @@ class LumFuncMCMC:
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
-        self.err_corr = err_corr
+        self.err_corr, self.wav_rest = err_corr, wav_rest
+        self.transf, self.delzf = getBoundsTransPDF(wav_rest=self.wav_rest)
         
         self.setDLdVdz()
         if flux is not None: 
@@ -262,11 +277,13 @@ class LumFuncMCMC:
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
         minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.wav_filt, self.filt_width))
         self.minlum = np.average(minlums)
+        self.minlum_conv = self.minlum - 3.0*self.lum_err_func(self.minlum)
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
         self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
+        self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
     def setDLdVdz(self):
@@ -366,6 +383,9 @@ class LumFuncMCMC:
         integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
         fullint = self.volume * trapz(integ,self.logL)
         return lnpart - fullint
+    
+    def lnlike_conv(self):
+        tlf = 0.0
 
     def lnprob(self, theta):
         ''' Calculate the log probability 

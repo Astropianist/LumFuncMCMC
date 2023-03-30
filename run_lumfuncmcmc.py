@@ -120,7 +120,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name', 'wav_rest']
 
     for arg_i in arg_inputs:
         try:
@@ -202,7 +202,7 @@ def main(argv=None):
                         field_name=args.field_name, 
                         diff_rand=not args.same_rand, 
                         interp_comp=interp_comp, dist_orig=dist_orig, 
-                        dist=dist, maglow=args.maglow, maghigh=args.maghigh, comps=comps, wav_filt=args.wav_filt, filt_width=args.filt_width)
+                        dist=dist, maglow=args.maglow, maghigh=args.maghigh, comps=comps, wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest)
     print("Initialized LumFuncMCMC class")
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
