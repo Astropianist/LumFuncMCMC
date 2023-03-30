@@ -35,7 +35,7 @@ def getTransPDF(lam, tra, pdflen=10000):
 
     del_logL_arr = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
     del_logL_arr_diff = np.diff(del_logL_arr)
-    pdf_arr = np.hstack([0.0, np.diff(fr(del_logL_arr)/del_logL_arr_diff) - np.diff(fl(del_logL_arr))/del_logL_arr_diff])
+    pdf_arr = np.hstack([0.0, np.diff(fr(del_logL_arr))/del_logL_arr_diff - np.diff(fl(del_logL_arr))/del_logL_arr_diff])
     # del_logL_arr = np.append(del_logL_arr, tra.max())
     # pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
     del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
