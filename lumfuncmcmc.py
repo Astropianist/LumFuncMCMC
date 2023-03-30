@@ -27,10 +27,10 @@ c = 3.0e18 # Speed of light in Angstroms/s
 def getTransPDF(lam, tra, pdflen=10000):
     del_logL = np.log10(tra.max()) - np.log10(tra)
     il, ir = 0, len(del_logL)-1
-    while del_logL[il+1]-tra[il]<0.0: il+=1
-    while del_logL[ir-1]-del_logL[ir]<0.0: ir-=1
+    while del_logL[il+1]-del_logL[il]<0.0 or del_logL[il+1]>(del_logL.max()-del_logL.min())/2.0: il+=1
+    while del_logL[ir-1]-del_logL[ir]<0.0 or del_logL[ir-1]>(del_logL.max()-del_logL.min())/2.0: ir-=1
 
-    fl = interp1d(del_logL[:il],lam[:,il],kind='cubic')
+    fl = interp1d(del_logL[:il],lam[:il],kind='cubic')
     fr = interp1d(del_logL[ir:],lam[ir:],kind='cubic')
 
     del_logL_arr = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
