@@ -41,8 +41,8 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
     del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
     pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
     pdf_arr / trapz(pdf_arr, del_logL_arr) # Normalize
-    
-    f_reverse = interp1d(pdf_arr,del_logL_arr,kind='cubic',fill_value=0.0,bounds_error=False)
+    pdf_arr_sort, indsort = np.unique(pdf_arr, return_index=True)
+    f_reverse = interp1d(pdf_arr_sort,del_logL_arr[indsort],kind='cubic',fill_value=0.0,bounds_error=False)
     pdf_even_space = np.linspace(pdf_arr.min(), pdf_arr.max(), num_discrete)
     logL_discrete = f_reverse(pdf_even_space)
 
