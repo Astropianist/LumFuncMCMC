@@ -42,7 +42,7 @@ def getTransPDF(lam, tra, pdflen=10000):
     pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
     pdf_arr / trapz(pdf_arr, del_logL_arr) # Normalize
 
-    return interp1d(del_logL_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False), 
+    return interp1d(del_logL_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False)
 
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000, wav_rest=1215.67, maglen=101):
     trans_dat = Table.read(file_name, format='ascii')
@@ -56,15 +56,15 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=1000
     left_ind = np.argmin(abs(trans_full[:tfam+1]-trans_min))
     right_ind = np.argmin(abs(trans_full[tfam:]-trans_min)) + tfam
 
-    logLs = np.linspace(0.0,logL_width,maglen)
-    delz = np.zeros_like(logLs)
-    for i, logL in enumerate(logLs):
-        trans_mini = 10**(-1.0*logL) * trans_max
-        left_indi = np.argmin(abs(trans_full[:tfam+1]-trans_mini))
-        right_indi = np.argmin(abs(trans_full[tfam:]-trans_mini)) + tfam
-        delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
+    # logLs = np.linspace(0.0,logL_width,maglen)
+    # delz = np.zeros_like(logLs)
+    # for i, logL in enumerate(logLs):
+    #     trans_mini = 10**(-1.0*logL) * trans_max
+    #     left_indi = np.argmin(abs(trans_full[:tfam+1]-trans_mini))
+    #     right_indi = np.argmin(abs(trans_full[tfam:]-trans_mini)) + tfam
+    #     delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
 
-    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen), interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
+    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen), (lam[right_ind]-lam[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
@@ -160,7 +160,8 @@ class LumFuncMCMC:
                  interp_comp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
-                 binned_stat_num=50,err_corr=False,wav_rest=1215.67):
+                 binned_stat_num=50,err_corr=False,wav_rest=1215.67,
+                 size_ln_conv=101, size_lprime=41, logL_width=2.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -242,9 +243,10 @@ class LumFuncMCMC:
         self.dist, self.dist_orig, self.distnum = dist, dist_orig, distnum
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
         self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
+        self.size_ln_conv, self.size_lprime = size_ln_conv, size_lprime
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
-        self.err_corr, self.wav_rest = err_corr, wav_rest
-        self.transf, self.delzf = getBoundsTransPDF(wav_rest=self.wav_rest)
+        self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
+        self.transf, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest)
         
         self.setDLdVdz()
         if flux is not None: 
@@ -283,14 +285,23 @@ class LumFuncMCMC:
         self.comps1d = self.comp1df(self.mags)
         self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
-        self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
+        ########### For convolution part ###########
+        self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln_conv)
+        self.logL_conv_all = np.zeros((self.size_ln_conv,self.size_lprime))
+        for i in range(self.size_ln_conv):
+            self.logL_conv_all[i] = np.linspace(self.logL_conv[i],self.logL_conv[i]+self.logL_width,self.size_lprime)
+        del_logL = self.logL_conv_all-self.logL_conv[:,None]
+        self.comp_conv = self.comp1df(self.logL_conv_all)
+        self.trans_conv = self.transf(del_logL)
+        self.norm_vals = normalFunc(self.logL_conv[None],self.lum[:,None],self.lum_e[:,None])
+        
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.dVdz(self.z)
-        self.volume = self.dVdz * self.del_red # Actual total volume of survey (redshift integral separate from luminosity function integral)--divided by 4pi (since we don't divide by 4pi for Omega)
+        self.volume = self.dVdz * self.del_red_eff # Actual total volume of survey (redshift integral separate from luminosity function integral)--divided by 4pi (since we don't divide by 4pi for Omega)
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -385,7 +396,13 @@ class LumFuncMCMC:
         return lnpart - fullint
     
     def lnlike_conv(self):
-        tlf = 0.0
+        tlf = TrueLumFunc(self.logL_conv_all,self.sch_al,self.Lstar,self.phistar)
+        not_norm = tlf*self.comp_conv*self.trans_conv
+        
+        trapz_inner = trapz(not_norm,self.logL_conv_all)
+        numer = trapz(trapz_inner*self.norm_vals, self.logL_conv)
+        denom = trapz(trapz_inner, self.logL_conv)
+        return np.log((numer/denom)).sum()
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
@@ -398,6 +415,22 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike()
+            # pdb.set_trace()
+            return lnl+lp
+        else:
+            return -np.inf
+        
+    def lnprob_conv(self, theta):
+        ''' Calculate the log probability 
+
+        Returns
+        -------
+        log prior + log likelihood, (float)
+            The log probability is just the sum of the logs of the prior and likelihood. '''
+        self.set_parameters_from_list(theta)
+        lp = self.lnprior()
+        if np.isfinite(lp):
+            lnl = self.lnlike_conv()
             # pdb.set_trace()
             return lnl+lp
         else:
@@ -455,7 +488,8 @@ class LumFuncMCMC:
         pos = self.get_init_walker_values()
         ndim = pos.shape[1]
         start = time.time()
-        func = 'lnprob'
+        if self.err_corr: func = 'lnprob_conv'
+        else: func = 'lnprob'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
