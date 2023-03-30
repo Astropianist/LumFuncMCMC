@@ -64,7 +64,7 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=1000
     #     right_indi = np.argmin(abs(trans_full[tfam:]-trans_mini)) + tfam
     #     delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
 
-    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen), (lam[right_ind]-lam[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
+    return getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen), (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
