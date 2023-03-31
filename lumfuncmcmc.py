@@ -41,7 +41,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
     # pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
     del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
     pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
-    pdf_arr / trapz(pdf_arr, del_logL_arr) # Normalize
+    pdf_arr /= trapz(pdf_arr, del_logL_arr) # Normalize
     log_pdf = np.log10(pdf_arr)
     diff_log = np.hstack([abs(np.diff(log_pdf)),0.0])
     diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
@@ -267,6 +267,7 @@ class LumFuncMCMC:
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
         self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime)
+        self.filt_width_eff = self.del_red_eff * self.wav_rest
         
         self.setDLdVdz()
         if flux is not None: 
@@ -312,7 +313,10 @@ class LumFuncMCMC:
         self.logL_conv_all = np.zeros((self.size_ln_conv,self.size_lprime))
         for i in range(self.size_ln_conv):
             self.logL_conv_all[i] = np.linspace(self.logL_conv[i],self.logL_conv[i]+self.logL_width,self.size_lprime)
-        self.comp_conv = self.comp1df(self.logL_conv_all)
+        L_all = 10**self.logL_conv_all
+        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        self.comp_conv = self.comp1df(mags)
         self.trans_conv = self.transf(self.logL_discrete)
         self.norm_vals = normalFunc(self.logL_conv[None],self.lum[:,None],self.lum_e[:,None])
         
