@@ -47,8 +47,12 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
     diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
     logL_discrete = np.zeros(num_discrete)
     logL_discrete[-1] = del_logL_arr.max()
+    indi_arr = np.zeros(del_logL_arr.size,dtype=int)
     for i in range(1,num_discrete-1):
         indi = np.argmin(abs(diff_cumsum-i/num_discrete))
+        if indi<=indi_arr[i-1]:
+            while indi<=indi_arr[i-1]: indi+=1
+        indi_arr[i] = indi
         logL_discrete[i] = del_logL_arr[indi]
 
     # pdf_arr_sort, indsort = np.unique(pdf_arr, return_index=True)
