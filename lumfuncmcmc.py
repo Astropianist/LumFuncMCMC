@@ -35,18 +35,28 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
 
     del_logL_arr = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
     del_logL_arr_diff = np.diff(del_logL_arr)
-    pdf_arr = np.hstack([np.diff(fr(del_logL_arr))/del_logL_arr_diff - np.diff(fl(del_logL_arr))/del_logL_arr_diff, 0.0])
+    pdf_arr = np.diff(fr(del_logL_arr))/del_logL_arr_diff - np.diff(fl(del_logL_arr))/del_logL_arr_diff
+    pdf_arr = np.append(pdf_arr, pdf_arr[-1])
     # del_logL_arr = np.append(del_logL_arr, tra.max())
     # pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
     del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
     pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
     pdf_arr / trapz(pdf_arr, del_logL_arr) # Normalize
-    pdf_arr_sort, indsort = np.unique(pdf_arr, return_index=True)
-    f_reverse = interp1d(pdf_arr_sort,del_logL_arr[indsort],kind='cubic',fill_value=0.0,bounds_error=False)
-    pdf_even_space = np.linspace(pdf_arr.min(), pdf_arr.max(), num_discrete)
-    logL_discrete = f_reverse(pdf_even_space)
+    log_pdf = np.log10(pdf_arr)
+    diff_log = np.hstack([abs(np.diff(log_pdf)),0.0])
+    diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
+    logL_discrete = np.zeros(num_discrete)
+    logL_discrete[-1] = del_logL_arr.max()
+    for i in range(1,num_discrete-1):
+        indi = np.argmin(abs(diff_cumsum-i/num_discrete))
+        logL_discrete[i] = del_logL_arr[indi]
 
-    return interp1d(del_logL_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False), np.sort(logL_discrete)
+    # pdf_arr_sort, indsort = np.unique(pdf_arr, return_index=True)
+    # f_reverse = interp1d(pdf_arr_sort,del_logL_arr[indsort],kind='cubic',fill_value=0.0,bounds_error=False)
+    # pdf_even_space = np.linspace(pdf_arr.min(), pdf_arr.max(), num_discrete)
+    # logL_discrete = f_reverse(pdf_even_space)
+
+    return interp1d(del_logL_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False), logL_discrete
 
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')

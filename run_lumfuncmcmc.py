@@ -211,11 +211,11 @@ def main(argv=None):
     print("Initialized LumFuncMCMC class")
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
-    fn = '%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac))
+    fn = '%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr)
     if op.isfile(fn):
         dat = Table.read(fn,format='ascii')
         LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
-        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr), imgtype = args.output_dict['image format'])
         # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
         #             names=['Luminosity', 'BinLF', 'BinLFErr'])
         # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
@@ -243,7 +243,7 @@ def main(argv=None):
     print("Finished fitting model and about to create outputs")
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
-        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr), imgtype = args.output_dict['image format'])
         print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
     else:
         LFmod.set_median_fit()
@@ -251,19 +251,19 @@ def main(argv=None):
     names.append('Ln Prob')
     if args.output_dict['fitposterior']: 
         T = Table(LFmod.samples, names=names)
-        T.write('%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        T.write('%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing fitposterior file")
     if args.output_dict['bestfitLF']:
         T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
                     names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
-        T.write('%s/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        T.write('%s/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing bestfitLF file")
     if args.output_dict['VeffLF']:
         T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                     names=['Luminosity', 'BinLF', 'BinLFErr'])
-        T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing VeffLF file")
 
