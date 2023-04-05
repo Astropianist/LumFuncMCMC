@@ -181,7 +181,8 @@ class LumFuncMCMC:
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
-                 size_ln_conv=101, size_lprime=51, logL_width=2.0):
+                 size_ln_conv=101,size_lprime=51,logL_width=2.0,
+                 trans_only=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -266,6 +267,7 @@ class LumFuncMCMC:
         self.size_ln_conv, self.size_lprime = size_ln_conv, size_lprime
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
+        self.trans_only = trans_only
         self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime)
         self.filt_width_eff = self.del_red_eff * self.wav_rest
         
@@ -324,11 +326,21 @@ class LumFuncMCMC:
         self.logL_trans_lnpart = self.lum[:,None] + self.logL_discrete
         self.logL_trans_integ = self.logL[:,None] + self.logL_discrete
         
+        L_all = 10**self.logL_trans_lnpart
+        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        self.comps_trans_lnpart = self.comp1df(mags)
+
+        L_all = 10**self.logL_trans_integ
+        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        self.comps_trans_integ = self.comp1df(mags)
+        
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.cosmo.differential_comoving_volume(self.z).value
-        if self.err_corr: self.volume = self.dVdz * self.del_red_eff
+        if self.err_corr or self.trans_only: self.volume = self.dVdz * self.del_red_eff
         else: self.volume = self.dVdz * self.del_red # Actual total volume per steradian of the survey (redshift integral separate from luminosity function integral)
 
     def getLumin(self):
@@ -434,6 +446,9 @@ class LumFuncMCMC:
 
     def lnlike_trans(self):
         tlf = TrueLumFunc(self.logL_trans_lnpart,self.sch_al,self.Lstar,self.phistar)
+        lnpart = np.log(trapz(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
+        integ = TrueLumFunc(self.logL_trans_integ,self.sch_al,self.Lstar,self.phistar) * self.comps_trans_integ * self.trans_conv
+        return lnpart - self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
@@ -462,6 +477,22 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike_conv()
+            # pdb.set_trace()
+            return lnl+lp
+        else:
+            return -np.inf
+        
+    def lnprob_trans(self, theta):
+        ''' Calculate the log probability 
+
+        Returns
+        -------
+        log prior + log likelihood, (float)
+            The log probability is just the sum of the logs of the prior and likelihood. '''
+        self.set_parameters_from_list(theta)
+        lp = self.lnprior()
+        if np.isfinite(lp):
+            lnl = self.lnlike_trans()
             # pdb.set_trace()
             return lnl+lp
         else:
@@ -521,6 +552,7 @@ class LumFuncMCMC:
         start = time.time()
         if self.err_corr: func = 'lnprob_conv'
         else: func = 'lnprob'
+        if self.trans_only: func = 'lnprob_trans'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
