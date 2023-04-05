@@ -457,7 +457,7 @@ class LumFuncMCMC:
         tlf = TrueLumFunc(self.logL_conv,self.sch_al,self.Lstar,self.phistar)
         not_norm = tlf*self.comps_conv*self.trans_conv
         trapz_inner = trapz(not_norm,self.logL_conv)
-        numer = trapz(trapz_inner*self.norm_vals, self.logL_norm)
+        numer = trapz(trapz_inner*self.norm_vals_norm, self.logL_norm)
         # denom = trapz(trapz_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
         # fullint = self.Omega_0/V.sqarcsec * self.volume * denom
