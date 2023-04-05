@@ -181,7 +181,7 @@ class LumFuncMCMC:
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
-                 size_ln_conv=101,size_lprime=51,logL_width=2.0,
+                 size_ln_conv=41,size_lprime=31,logL_width=2.0,
                  trans_only=False,norm_only=False):
         ''' Initialize LumFuncMCMC class
 
@@ -268,7 +268,6 @@ class LumFuncMCMC:
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
         self.trans_only, self.norm_only = trans_only, norm_only
-        if norm_only: self.size_ln_conv = 51
         self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime)
         self.filt_width_eff = self.del_red_eff * self.wav_rest
         
@@ -312,16 +311,16 @@ class LumFuncMCMC:
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
         ########### For convolution part ###########
-        self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln_conv)
-        self.logL_conv_all = np.zeros((self.size_ln_conv,self.size_lprime))
-        for i in range(self.size_ln_conv):
-            self.logL_conv_all[i] = np.linspace(self.logL_conv[i],self.logL_conv[i]+self.logL_width,self.size_lprime)
-        L_all = 10**self.logL_conv_all
-        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
-        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
-        self.comp_conv = self.comp1df(mags)
-        self.trans_conv = self.transf(self.logL_discrete)
-        self.norm_vals = normalFunc(self.logL_conv[None],self.lum[:,None],self.lum_e[:,None])
+        # self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln_conv)
+        # self.logL_conv_all = np.zeros((self.size_ln_conv,self.size_lprime))
+        # for i in range(self.size_ln_conv):
+        #     self.logL_conv_all[i] = np.linspace(self.logL_conv[i],self.logL_conv[i]+self.logL_width,self.size_lprime)
+        # L_all = 10**self.logL_conv_all
+        # flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        # mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        # self.comp_conv = self.comp1df(mags)
+        # self.trans_conv = self.transf(self.logL_discrete)
+        # self.norm_vals = normalFunc(self.logL_conv[None],self.lum[:,None],self.lum_e[:,None])
 
         ####### Just transmission convolution #######
         self.logL_trans_lnpart = self.lum[:,None] + self.logL_discrete
@@ -340,12 +339,20 @@ class LumFuncMCMC:
         ###### Just normal convolution #####
         self.logL_norm = np.zeros((self.lum.size,self.size_ln_conv))
         for i in range(self.lum.size):
-            self.logL_norm[i] = np.linspace(-3.0*self.lum_e,3.0*self.lum_e,self.size_ln_conv)
+            self.logL_norm[i] = np.linspace(-3.0*self.lum_e[i],3.0*self.lum_e[i],self.size_ln_conv)
         self.norm_vals_norm = normalFunc(self.logL_norm,self.lum[:,None],self.lum_e[:,None])
         L_all = 10**self.logL_norm
         flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_norm = self.comp1df(mags)
+
+        ###### New combination of everything that is centered for normal distribution around the mean #####
+        self.logL_conv = self.logL_norm[:,:,None] + self.logL_discrete
+        L_all = 10**self.logL_conv
+        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        self.comps_conv = self.comp1df(mags)
+        self.trans_conv = self.transf(self.logL_discrete)
         
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
@@ -447,14 +454,15 @@ class LumFuncMCMC:
         return lnpart - fullint
     
     def lnlike_conv(self):
-        tlf = TrueLumFunc(self.logL_conv_all,self.sch_al,self.Lstar,self.phistar)
-        not_norm = tlf*self.comp_conv*self.trans_conv
-        
-        trapz_inner = trapz(not_norm,self.logL_conv_all)
-        numer = trapz(trapz_inner*self.norm_vals, self.logL_conv)
-        denom = trapz(trapz_inner, self.logL_conv)
+        tlf = TrueLumFunc(self.logL_conv,self.sch_al,self.Lstar,self.phistar)
+        not_norm = tlf*self.comps_conv*self.trans_conv
+        trapz_inner = trapz(not_norm,self.logL_conv)
+        numer = trapz(trapz_inner*self.norm_vals, self.logL_norm)
+        # denom = trapz(trapz_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
-        fullint = self.Omega_0/V.sqarcsec * self.volume * denom
+        # fullint = self.Omega_0/V.sqarcsec * self.volume * denom
+        integ = tlf[len(self.lum)//2] * self.comps_trans_integ * self.trans_conv
+        fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans(self):
