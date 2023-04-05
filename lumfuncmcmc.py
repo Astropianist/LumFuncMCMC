@@ -358,8 +358,8 @@ class LumFuncMCMC:
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.cosmo.differential_comoving_volume(self.z).value
-        if self.err_corr or self.trans_only: self.volume = self.dVdz * self.del_red_eff
-        else: self.volume = self.dVdz * self.del_red # Actual total volume per steradian of the survey (redshift integral separate from luminosity function integral)
+        # if self.err_corr or self.trans_only: self.volume = self.dVdz * self.del_red_eff
+        self.volume = self.dVdz * self.del_red # Actual total volume per steradian of the survey (redshift integral separate from luminosity function integral)
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
