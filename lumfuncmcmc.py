@@ -339,7 +339,7 @@ class LumFuncMCMC:
         ###### Just normal convolution #####
         self.logL_norm = np.zeros((self.lum.size,self.size_ln_conv))
         for i in range(self.lum.size):
-            self.logL_norm[i] = np.linspace(-3.0*self.lum_e[i],3.0*self.lum_e[i],self.size_ln_conv)
+            self.logL_norm[i] = self.lum[i] + np.linspace(-3.0*self.lum_e[i],3.0*self.lum_e[i],self.size_ln_conv)
         self.norm_vals_norm = normalFunc(self.logL_norm,self.lum[:,None],self.lum_e[:,None])
         L_all = 10**self.logL_norm
         flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
@@ -473,7 +473,7 @@ class LumFuncMCMC:
         return lnpart - fullint
     
     def lnlike_norm(self):
-        tlf = TrueLumFunc(self.logL_conv,self.sch_al,self.Lstar,self.phistar)
+        tlf = TrueLumFunc(self.logL_norm,self.sch_al,self.Lstar,self.phistar)
         lnpart = np.log(trapz(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
         integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
         fullint = self.volume * trapz(integ,self.logL)
