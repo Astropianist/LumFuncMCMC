@@ -319,13 +319,17 @@ class LumFuncMCMC:
         self.comp_conv = self.comp1df(mags)
         self.trans_conv = self.transf(self.logL_discrete)
         self.norm_vals = normalFunc(self.logL_conv[None],self.lum[:,None],self.lum_e[:,None])
+
+        ####### Just transmission convolution #######
+        self.logL_trans_lnpart = self.lum[:,None] + self.logL_discrete
+        self.logL_trans_integ = self.logL[:,None] + self.logL_discrete
         
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
         self.DL = V.cosmo.luminosity_distance(self.z).value
-        self.dVdz = V.dVdz(self.z)
+        self.dVdz = V.cosmo.differential_comoving_volume(self.z).value
         if self.err_corr: self.volume = self.dVdz * self.del_red_eff
-        else: self.volume = self.dVdz * self.del_red # Actual total volume of survey (redshift integral separate from luminosity function integral)--divided by 4pi (since we don't divide by 4pi for Omega)
+        else: self.volume = self.dVdz * self.del_red # Actual total volume per steradian of the survey (redshift integral separate from luminosity function integral)
 
     def getLumin(self):
         ''' Set the sample log luminosities (and error if flux errors available)
@@ -426,7 +430,10 @@ class LumFuncMCMC:
         trapz_inner = trapz(not_norm,self.logL_conv_all)
         numer = trapz(trapz_inner*self.norm_vals, self.logL_conv)
         denom = trapz(trapz_inner, self.logL_conv)
-        return np.log(numer).sum() - denom
+        return np.log(numer).sum() - self.Omega_0/V.sqarcsec * self.volume * denom
+
+    def lnlike_trans(self):
+        tlf = TrueLumFunc(self.logL_trans_lnpart,self.sch_al,self.Lstar,self.phistar)
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
