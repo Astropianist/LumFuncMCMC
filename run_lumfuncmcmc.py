@@ -118,6 +118,10 @@ def parse_args(argv=None):
     parser.add_argument("-to", "--trans_only",
                         help='''Whether or not to use transmission pdf only''',
                         action='count',default=0)
+    
+    parser.add_argument("-no", "--norm_only",
+                        help='''Whether or not to use normal (error) pdf only''',
+                        action='count',default=0)
 
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
@@ -211,7 +215,8 @@ def main(argv=None):
                         diff_rand=not args.same_rand, 
                         interp_comp=interp_comp, dist_orig=dist_orig, 
                         dist=dist, maglow=args.maglow, maghigh=args.maghigh, comps=comps, wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
-                        err_corr=args.err_corr, trans_only=args.trans_only)
+                        err_corr=args.err_corr, trans_only=args.trans_only,
+                        norm_only=args.norm_only)
     print("Initialized LumFuncMCMC class")
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again

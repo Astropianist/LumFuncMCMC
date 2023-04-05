@@ -182,7 +182,7 @@ class LumFuncMCMC:
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
                  size_ln_conv=101,size_lprime=51,logL_width=2.0,
-                 trans_only=False):
+                 trans_only=False,norm_only=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -267,7 +267,8 @@ class LumFuncMCMC:
         self.size_ln_conv, self.size_lprime = size_ln_conv, size_lprime
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
-        self.trans_only = trans_only
+        self.trans_only, self.norm_only = trans_only, norm_only
+        if norm_only: self.size_ln_conv = 51
         self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime)
         self.filt_width_eff = self.del_red_eff * self.wav_rest
         
@@ -335,6 +336,16 @@ class LumFuncMCMC:
         flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_trans_integ = self.comp1df(mags)
+
+        ###### Just normal convolution #####
+        self.logL_norm = np.zeros((self.lum.size,self.size_ln_conv))
+        for i in range(self.lum.size):
+            self.logL_norm[i] = np.linspace(-3.0*self.lum_e,3.0*self.lum_e,self.size_ln_conv)
+        self.norm_vals_norm = normalFunc(self.logL_norm,self.lum[:,None],self.lum_e[:,None])
+        L_all = 10**self.logL_norm
+        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        self.comps_norm = self.comp1df(mags)
         
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
@@ -452,6 +463,13 @@ class LumFuncMCMC:
         integ = TrueLumFunc(self.logL_trans_integ,self.sch_al,self.Lstar,self.phistar) * self.comps_trans_integ * self.trans_conv
         fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
+    
+    def lnlike_norm(self):
+        tlf = TrueLumFunc(self.logL_conv,self.sch_al,self.Lstar,self.phistar)
+        lnpart = np.log(trapz(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
+        integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
+        fullint = self.volume * trapz(integ,self.logL)
+        return integ - fullint
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
@@ -470,12 +488,6 @@ class LumFuncMCMC:
             return -np.inf
         
     def lnprob_conv(self, theta):
-        ''' Calculate the log probability 
-
-        Returns
-        -------
-        log prior + log likelihood, (float)
-            The log probability is just the sum of the logs of the prior and likelihood. '''
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
@@ -486,16 +498,20 @@ class LumFuncMCMC:
             return -np.inf
         
     def lnprob_trans(self, theta):
-        ''' Calculate the log probability 
-
-        Returns
-        -------
-        log prior + log likelihood, (float)
-            The log probability is just the sum of the logs of the prior and likelihood. '''
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike_trans()
+            # pdb.set_trace()
+            return lnl+lp
+        else:
+            return -np.inf
+        
+    def lnprob_norm(self, theta):
+        self.set_parameters_from_list(theta)
+        lp = self.lnprior()
+        if np.isfinite(lp):
+            lnl = self.lnlike_norm()
             # pdb.set_trace()
             return lnl+lp
         else:
@@ -556,6 +572,7 @@ class LumFuncMCMC:
         if self.err_corr: func = 'lnprob_conv'
         else: func = 'lnprob'
         if self.trans_only: func = 'lnprob_trans'
+        if self.norm_only: func = 'lnprob_norm'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
