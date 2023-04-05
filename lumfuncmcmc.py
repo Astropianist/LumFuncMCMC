@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import corner
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
+from multiprocessing import Pool
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -23,6 +24,7 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                })
 
 c = 3.0e18 # Speed of light in Angstroms/s
+num_cores = 20 #In Joel's thingy
 
 def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
     del_logL = np.log10(tra.max()) - np.log10(tra)
@@ -576,19 +578,20 @@ class LumFuncMCMC:
         self.log.info('Fitting Schechter model to true luminosity function using emcee')
         pos = self.get_init_walker_values()
         ndim = pos.shape[1]
-        start = time.time()
         if self.err_corr: func = 'lnprob_conv'
         else: func = 'lnprob'
         if self.trans_only: func = 'lnprob_trans'
         if self.norm_only: func = 'lnprob_norm'
-        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
-        # Do real run
-        sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
-        end = time.time()
-        elapsed = end - start
+        with Pool(num_cores) as pool:
+            sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func), pool=pool)
+            # Do real run
+            start = time.time()
+            sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
+            end = time.time()
+            elapsed = end - start
         self.log.info("Total time taken: %0.2f s" % elapsed)
         self.log.info("Time taken per step per walker: %0.2f ms" %
-                      (elapsed / (self.nsteps) * 1000. /
+                        (elapsed / (self.nsteps) * 1000. /
                        self.nwalkers))
         # Calculate how long the run should last
         tau = np.max(sampler.acor)
