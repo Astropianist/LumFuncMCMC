@@ -430,7 +430,7 @@ class LumFuncMCMC:
         -------
         log likelihood (float)
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
-        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.Omega_arr).sum()
+        lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.comps).sum()
         integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
         fullint = self.volume * trapz(integ,self.logL)
         return lnpart - fullint
@@ -442,13 +442,16 @@ class LumFuncMCMC:
         trapz_inner = trapz(not_norm,self.logL_conv_all)
         numer = trapz(trapz_inner*self.norm_vals, self.logL_conv)
         denom = trapz(trapz_inner, self.logL_conv)
-        return np.log(numer).sum() - self.Omega_0/V.sqarcsec * self.volume * denom
+        lnpart = np.log(numer).sum()
+        fullint = self.Omega_0/V.sqarcsec * self.volume * denom
+        return lnpart - fullint
 
     def lnlike_trans(self):
         tlf = TrueLumFunc(self.logL_trans_lnpart,self.sch_al,self.Lstar,self.phistar)
         lnpart = np.log(trapz(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
         integ = TrueLumFunc(self.logL_trans_integ,self.sch_al,self.Lstar,self.phistar) * self.comps_trans_integ * self.trans_conv
-        return lnpart - self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        return lnpart - fullint
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
