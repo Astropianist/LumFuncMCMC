@@ -140,6 +140,9 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     '''
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
+def TrueLumFuncNoPhi(logL,alpha,logLstar):
+    return 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
+
 # 
 def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
@@ -456,28 +459,28 @@ class LumFuncMCMC:
         return lnpart - fullint
     
     def lnlike_conv(self):
-        tlf = TrueLumFunc(self.logL_conv,self.sch_al,self.Lstar,self.phistar)
+        tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_conv,self.sch_al,self.Lstar)
         not_norm = tlf*self.comps_conv*self.trans_conv
         trapz_inner = trapz(not_norm,self.logL_conv)
         numer = trapz(trapz_inner*self.norm_vals_norm, self.logL_norm)
         # denom = trapz(trapz_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
         # fullint = self.Omega_0/V.sqarcsec * self.volume * denom
-        integ = TrueLumFunc(self.logL_trans_integ,self.sch_al,self.Lstar,self.phistar) * self.comps_trans_integ * self.trans_conv
+        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.comps_trans_integ * self.trans_conv
         fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans(self):
-        tlf = TrueLumFunc(self.logL_trans_lnpart,self.sch_al,self.Lstar,self.phistar)
+        tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
         lnpart = np.log(trapz(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
-        integ = TrueLumFunc(self.logL_trans_integ,self.sch_al,self.Lstar,self.phistar) * self.comps_trans_integ * self.trans_conv
+        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.comps_trans_integ * self.trans_conv
         fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
     
     def lnlike_norm(self):
-        tlf = TrueLumFunc(self.logL_norm,self.sch_al,self.Lstar,self.phistar)
+        tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
         lnpart = np.log(trapz(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
-        integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
+        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL,self.sch_al,self.Lstar) * self.Omega_gen
         fullint = self.volume * trapz(integ,self.logL)
         return integ - fullint
 
@@ -608,64 +611,6 @@ class LumFuncMCMC:
         self.log.info("Shape of self.samples")
         self.log.info(self.samples.shape)
         self.log.info("Median lnprob: %.5f; Max lnprob: %.5f"%(np.median(sampler.lnprobability), np.amax(sampler.lnprobability)))
-
-    def fit_model_mc_simp(self):
-        pos = self.get_init_walker_values()
-        ndim = pos.shape[1]
-        if self.err_corr: func = 'lnprob_conv'
-        else: func = 'lnprob'
-        if self.trans_only: func = 'lnprob_trans'
-        if self.norm_only: func = 'lnprob_norm'
-        with Pool(num_cores) as pool:
-            sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func), pool=pool)
-            # Do real run
-            start = time.time()
-            sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
-            end = time.time()
-            elapsed = end - start
-            self.log.info("Total time taken: %0.2f s" % elapsed)
-            self.log.info("Time taken per step per walker: %0.2f ms" %
-                            (elapsed / (self.nsteps) * 1000. /
-                        self.nwalkers))
-
-    def fit_model_mc(self):
-        ''' Using emcee to find parameter estimations for given set of
-        data measurements and errors
-        '''
-        self.log.info('Fitting Schechter model to true luminosity function using emcee')
-        pos = self.get_init_walker_values()
-        ndim = pos.shape[1]
-        if self.err_corr: func = 'lnprob_conv'
-        else: func = 'lnprob'
-        if self.trans_only: func = 'lnprob_trans'
-        if self.norm_only: func = 'lnprob_norm'
-        with Pool(num_cores) as pool:
-            sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func), pool=pool)
-            # Do real run
-            start = time.time()
-            sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
-            end = time.time()
-            elapsed = end - start
-            self.log.info("Total time taken: %0.2f s" % elapsed)
-            self.log.info("Time taken per step per walker: %0.2f ms" %
-                            (elapsed / (self.nsteps) * 1000. /
-                        self.nwalkers))
-            # Calculate how long the run should last
-            tau = np.max(sampler.acor)
-            burnin_step = int(tau*3)
-            if burnin_step>self.nsteps//2: burnin_step = self.nsteps//2
-            self.log.info("Mean acceptance fraction: %0.2f" %
-                        (np.mean(sampler.acceptance_fraction)))
-            self.log.info("AutoCorrelation Steps: %i, Number of Burn-in Steps: %i"
-                        % (np.round(tau), burnin_step))
-            new_chain = np.zeros((self.nwalkers, self.nsteps, ndim+1))
-            new_chain[:, :, :-1] = sampler.chain
-            self.chain = sampler.chain
-            new_chain[:, :, -1] = sampler.lnprobability
-            self.samples = new_chain[:, burnin_step:, :].reshape((-1, ndim+1))
-            self.log.info("Shape of self.samples")
-            self.log.info(self.samples.shape)
-            self.log.info("Median lnprob: %.5f; Max lnprob: %.5f"%(np.median(sampler.lnprobability), np.amax(sampler.lnprobability)))
 
     def VeffLF(self):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''

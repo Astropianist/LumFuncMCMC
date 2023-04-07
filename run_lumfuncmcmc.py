@@ -123,10 +123,6 @@ def parse_args(argv=None):
                         help='''Whether or not to use normal (error) pdf only''',
                         action='count',default=0)
 
-    parser.add_argument("-mc", "--multi_core",
-                        help='''Whether or not to use multiple cores''',
-                        action='count',default=0)
-
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
                          type=str, default=None)               
@@ -257,10 +253,7 @@ def main(argv=None):
                               ['f8']*(len(labels)-1))
     print("Finished making names and labels for LF table and about to start fitting the model!")
     #### Run the actual model!!! ####
-    if args.multi_core: 
-        LFmod.fit_model_mc_simp()
-        breakpoint()
-    else: LFmod.fit_model()
+    LFmod.fit_model()
     print("Finished fitting model and about to create outputs")
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
