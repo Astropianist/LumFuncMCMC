@@ -123,6 +123,10 @@ def parse_args(argv=None):
                         help='''Whether or not to use normal (error) pdf only''',
                         action='count',default=0)
 
+    parser.add_argument("-mc", "--multi_core",
+                        help='''Whether or not to use multiple cores''',
+                        action='count',default=0)
+
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
                          type=str, default=None)               
@@ -219,12 +223,17 @@ def main(argv=None):
                         norm_only=args.norm_only)
     print("Initialized LumFuncMCMC class")
 
+    if args.err_corr: ecnum = 1
+    elif args.trans_only: ecnum = 2
+    elif args.norm_only: ecnum = 3
+    else: ecnum = 0
+
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
-    fn = '%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr)
+    fn = '%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum)
     if op.isfile(fn):
         dat = Table.read(fn,format='ascii')
         LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
-        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
         # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
         #             names=['Luminosity', 'BinLF', 'BinLFErr'])
         # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
@@ -248,11 +257,12 @@ def main(argv=None):
                               ['f8']*(len(labels)-1))
     print("Finished making names and labels for LF table and about to start fitting the model!")
     #### Run the actual model!!! ####
-    LFmod.fit_model()
+    if args.multi_core: LFmod.fit_model_mc()
+    else: LFmod.fit_model()
     print("Finished fitting model and about to create outputs")
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
-        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
         print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
     else:
         LFmod.set_median_fit()
@@ -260,19 +270,19 @@ def main(argv=None):
     names.append('Ln Prob')
     if args.output_dict['fitposterior']: 
         T = Table(LFmod.samples, names=names)
-        T.write('%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr),
+        T.write('%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing fitposterior file")
     if args.output_dict['bestfitLF']:
         T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
                     names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
-        T.write('%s/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr),
+        T.write('%s/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing bestfitLF file")
     if args.output_dict['VeffLF']:
         T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                     names=['Luminosity', 'BinLF', 'BinLFErr'])
-        T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), args.err_corr),
+        T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing VeffLF file")
 

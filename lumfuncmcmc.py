@@ -570,8 +570,46 @@ class LumFuncMCMC:
         if not self.fix_sch_al: vals += [self.sch_al]
         self.nfreeparams = len(vals)
         return vals
-
+    
     def fit_model(self):
+        ''' Using emcee to find parameter estimations for given set of
+        data measurements and errors
+        '''
+        self.log.info('Fitting Schechter model to true luminosity function using emcee')
+        pos = self.get_init_walker_values()
+        ndim = pos.shape[1]
+        if self.err_corr: func = 'lnprob_conv'
+        else: func = 'lnprob'
+        if self.trans_only: func = 'lnprob_trans'
+        if self.norm_only: func = 'lnprob_norm'
+        sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
+        # Do real run
+        start = time.time()
+        sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
+        end = time.time()
+        elapsed = end - start
+        self.log.info("Total time taken: %0.2f s" % elapsed)
+        self.log.info("Time taken per step per walker: %0.2f ms" %
+                        (elapsed / (self.nsteps) * 1000. /
+                       self.nwalkers))
+        # Calculate how long the run should last
+        tau = np.max(sampler.acor)
+        burnin_step = int(tau*3)
+        if burnin_step>self.nsteps//2: burnin_step = self.nsteps//2
+        self.log.info("Mean acceptance fraction: %0.2f" %
+                      (np.mean(sampler.acceptance_fraction)))
+        self.log.info("AutoCorrelation Steps: %i, Number of Burn-in Steps: %i"
+                      % (np.round(tau), burnin_step))
+        new_chain = np.zeros((self.nwalkers, self.nsteps, ndim+1))
+        new_chain[:, :, :-1] = sampler.chain
+        self.chain = sampler.chain
+        new_chain[:, :, -1] = sampler.lnprobability
+        self.samples = new_chain[:, burnin_step:, :].reshape((-1, ndim+1))
+        self.log.info("Shape of self.samples")
+        self.log.info(self.samples.shape)
+        self.log.info("Median lnprob: %.5f; Max lnprob: %.5f"%(np.median(sampler.lnprobability), np.amax(sampler.lnprobability)))
+
+    def fit_model_mc(self):
         ''' Using emcee to find parameter estimations for given set of
         data measurements and errors
         '''
