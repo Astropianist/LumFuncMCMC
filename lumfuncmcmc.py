@@ -143,7 +143,14 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
 def TrueLumFuncNoPhi(logL,alpha,logLstar):
     return 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
-# 
+def MakeTLFInterp(logL_range, alpha_range, logLstar_range, num_dim=201):
+    logL = np.linspace(logL_range[0],logL_range[1],num_dim)
+    alpha = np.linspace(alpha_range[0],alpha_range[1],num_dim)
+    logLstar = np.linspace(logLstar_range[0],logLstar_range[1],num_dim)
+    Lg, ag, Lsg = np.meshgrid(logL, alpha, logLstar, indexing='ij', sparse=True)
+    tlf = TrueLumFuncNoPhi(Lg, ag, Lsg)
+    return RGIScipy((logL, alpha, logLstar), tlf, method='cubic', bounds_error=False, fill_value = 0.0)
+
 def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
 
@@ -292,6 +299,9 @@ class LumFuncMCMC:
         if self.comps is None: self.comps = self.interp_comp((self.dist, self.mags))
         
         self.get1DComp()
+        logL_min = self.logL_norm.min()
+        logL_max = self.logL_norm.max() + self.logL_discrete.max()
+        self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
         self.setup_logging()
 
     def get1DComp(self):
