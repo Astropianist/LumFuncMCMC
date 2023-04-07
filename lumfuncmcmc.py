@@ -609,6 +609,25 @@ class LumFuncMCMC:
         self.log.info(self.samples.shape)
         self.log.info("Median lnprob: %.5f; Max lnprob: %.5f"%(np.median(sampler.lnprobability), np.amax(sampler.lnprobability)))
 
+    def fit_model_mc_simp(self):
+        pos = self.get_init_walker_values()
+        ndim = pos.shape[1]
+        if self.err_corr: func = 'lnprob_conv'
+        else: func = 'lnprob'
+        if self.trans_only: func = 'lnprob_trans'
+        if self.norm_only: func = 'lnprob_norm'
+        with Pool(num_cores) as pool:
+            sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func), pool=pool)
+            # Do real run
+            start = time.time()
+            sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
+            end = time.time()
+            elapsed = end - start
+            self.log.info("Total time taken: %0.2f s" % elapsed)
+            self.log.info("Time taken per step per walker: %0.2f ms" %
+                            (elapsed / (self.nsteps) * 1000. /
+                        self.nwalkers))
+
     def fit_model_mc(self):
         ''' Using emcee to find parameter estimations for given set of
         data measurements and errors

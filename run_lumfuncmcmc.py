@@ -257,7 +257,9 @@ def main(argv=None):
                               ['f8']*(len(labels)-1))
     print("Finished making names and labels for LF table and about to start fitting the model!")
     #### Run the actual model!!! ####
-    if args.multi_core: LFmod.fit_model_mc()
+    if args.multi_core: 
+        LFmod.fit_model_mc_simp()
+        breakpoint()
     else: LFmod.fit_model()
     print("Finished fitting model and about to create outputs")
     #### Get desired outputs ####
