@@ -492,7 +492,7 @@ class LumFuncMCMC:
         lnpart = np.log(trapz(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL,self.sch_al,self.Lstar) * self.Omega_gen
         fullint = self.volume * trapz(integ,self.logL)
-        return integ - fullint
+        return lnpart - fullint
 
     def lnprob(self, theta):
         ''' Calculate the log probability 
