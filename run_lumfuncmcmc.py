@@ -122,6 +122,10 @@ def parse_args(argv=None):
     parser.add_argument("-no", "--norm_only",
                         help='''Whether or not to use normal (error) pdf only''',
                         action='count',default=0)
+    
+    parser.add_argument("-vo", "--veff_only",
+                        help='''Whether or not to only do V_eff method''',
+                        action='count',default=0)
 
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
@@ -223,6 +227,10 @@ def main(argv=None):
     elif args.trans_only: ecnum = 2
     elif args.norm_only: ecnum = 3
     else: ecnum = 0
+
+    if args.veff_only:
+        LFmod.plotVeff('%s/Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
+        return
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
     fn = '%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum)

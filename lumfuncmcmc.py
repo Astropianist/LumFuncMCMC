@@ -673,6 +673,15 @@ class LumFuncMCMC:
         ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
         ax1.minorticks_on()
 
+    def plotVeff(self, outname, imgtype='png'):
+        self.VeffLF()
+        fig, ax = plt.subplots()
+        self.add_LumFunc_plot(ax)
+        cond_veff = self.Lavg >= self.minlum
+        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
+        ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
+        fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
+
     def add_subplots(self,ax1,nsamples,rndsamples=200):
         ''' Add Subplots to Triangle plot below '''
         lf = []
