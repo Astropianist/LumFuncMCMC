@@ -91,6 +91,10 @@ def parse_args(argv=None):
                         help='''Minimum completeness fraction considered''',
                         type=float, default=None)  
     
+    parser.add_argument("-fl", "--flux_lim",
+                        help='''Max flux considered''',
+                        type=float, default=None)
+    
     parser.add_argument("-z", "--redshift",
                         help='''Redshift of sample (narrow-band)''',
                         type=float, default=None)  
