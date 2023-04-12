@@ -194,7 +194,7 @@ class LumFuncMCMC:
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
                  size_ln_conv=41,size_lprime=31,logL_width=2.0,
-                 trans_only=False,norm_only=False):
+                 trans_only=False,norm_only=False,trans_file='N501_with_atm.txt'):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -280,7 +280,7 @@ class LumFuncMCMC:
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
         self.trans_only, self.norm_only = trans_only, norm_only
-        self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime)
+        self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime,file_name=trans_file)
         self.filt_width_eff = self.del_red_eff * self.wav_rest
         
         self.setDLdVdz()
