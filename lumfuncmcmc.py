@@ -26,14 +26,16 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 c = 3.0e18 # Speed of light in Angstroms/s
 num_cores = 20 #In Joel's thingy
 
-def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
+def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
     del_logL = np.log10(tra.max()) - np.log10(tra)
     il, ir = 0, len(del_logL)-1
     while del_logL[il+1]-del_logL[il]<0.0 or del_logL[il+1]>(del_logL.max()-del_logL.min())/2.0: il+=1
     while del_logL[ir-1]-del_logL[ir]<0.0 or del_logL[ir-1]>(del_logL.max()-del_logL.min())/2.0: ir-=1
 
-    fl = interp1d(del_logL[:il],lam[:il],kind='cubic')
-    fr = interp1d(del_logL[ir:],lam[ir:],kind='cubic')
+    flat_frac = (lam[ir]-lam[il])/(lam[-1]-lam[0])
+
+    fl = interp1d(del_logL[:il],lam[:il],kind=interp_type)
+    fr = interp1d(del_logL[ir:],lam[ir:],kind=interp_type)
 
     del_logL_arr = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
     del_logL_arr_diff = np.diff(del_logL_arr)
@@ -41,9 +43,12 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
     pdf_arr = np.append(pdf_arr, pdf_arr[-1])
     # del_logL_arr = np.append(del_logL_arr, tra.max())
     # pdf_arr = np.append(pdf_arr, pdf_arr[-1]) # Assume the PDF stays constant for the small sliver constituting the mostly flat top
-    del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
-    pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
-    pdf_arr /= trapz(pdf_arr, del_logL_arr) # Normalize
+    if del_logL_arr[0]-del_logL.min()>1.0e-12:
+        del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
+        pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
+    integ = trapz(pdf_arr[1:], del_logL_arr[1:])
+    pdf_arr[1:] *= (1.0-flat_frac) / integ # Normalize
+    pdf_arr[0] = flat_frac/(1.0-flat_frac) * integ / (del_logL_arr[1]-del_logL_arr[0])
     log_pdf = np.log10(pdf_arr)
     diff_log = np.hstack([abs(np.diff(log_pdf)),0.0])
     diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
@@ -62,7 +67,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51):
     # pdf_even_space = np.linspace(pdf_arr.min(), pdf_arr.max(), num_discrete)
     # logL_discrete = f_reverse(pdf_even_space)
 
-    return interp1d(del_logL_arr, pdf_arr, kind='cubic', fill_value=0.0, bounds_error=False), logL_discrete
+    return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=0.0, bounds_error=False), logL_discrete
 
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')
