@@ -133,7 +133,11 @@ def parse_args(argv=None):
 
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
-                         type=str, default=None)               
+                         type=str, default=None)
+
+    parser.add_argument("-tf", "--trans_file",
+                         help='''Name of transmission file''',
+                         type=str, default=None)    
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)

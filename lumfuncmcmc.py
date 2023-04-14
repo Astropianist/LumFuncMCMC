@@ -26,7 +26,7 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 c = 3.0e18 # Speed of light in Angstroms/s
 num_cores = 20 #In Joel's thingy
 
-def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
+def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wav_rest=1215.67):
     del_logL = np.log10(tra.max()) - np.log10(tra)
     il, ir = 0, len(del_logL)-1
     while del_logL[il+1]-del_logL[il]<0.0 or del_logL[il+1]>(del_logL.max()-del_logL.min())/2.0: il+=1
@@ -37,7 +37,10 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
     fl = interp1d(del_logL[:il],lam[:il],kind=interp_type)
     fr = interp1d(del_logL[ir:],lam[ir:],kind=interp_type)
 
-    del_logL_arr = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
+    del_logL_arr_orig = np.linspace(max(del_logL[:il].min(),del_logL[ir:].min()), min(del_logL[:il].max(),del_logL[ir:].max()),pdflen)
+    del_z_arr = (fr(del_logL_arr_orig) - fl(del_logL_arr_orig))/wav_rest
+    del_logL_arr = 1.0 * del_logL_arr_orig
+
     del_logL_arr_diff = np.diff(del_logL_arr)
     pdf_arr = np.diff(fr(del_logL_arr))/del_logL_arr_diff - np.diff(fl(del_logL_arr))/del_logL_arr_diff
     pdf_arr = np.append(pdf_arr, pdf_arr[-1])
@@ -69,7 +72,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
     # pdf_even_space = np.linspace(pdf_arr.min(), pdf_arr.max(), num_discrete)
     # logL_discrete = f_reverse(pdf_even_space)
 
-    return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=0.0, bounds_error=False), logL_discrete
+    return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=0.0, bounds_error=False), logL_discrete, interp1d(del_logL_arr_orig, del_z_arr, kind=interp_type, fill_value=(del_z_arr[0],del_z_arr[-1]), bounds_error=False)
 
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')
@@ -90,11 +93,10 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=1000
     #     left_indi = np.argmin(abs(trans_full[:tfam+1]-trans_mini))
     #     right_indi = np.argmin(abs(trans_full[tfam:]-trans_mini)) + tfam
     #     delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
-    if 'perfect' in file_name.lower(): interp_type = 'linear'
-    else: interp_type = 'cubic'
-    transpdf, logL_discrete = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete, interp_type=interp_type)
+    interp_type = 'linear'
+    transpdf, logL_discrete, delzf = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete, interp_type=interp_type, wav_rest=wav_rest)
     
-    return transpdf, logL_discrete, (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
+    return transpdf, logL_discrete, delzf # (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
     def __init__( self, points, values, method='cubic' ):
@@ -201,7 +203,7 @@ class LumFuncMCMC:
                  maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
-                 size_ln_conv=41,size_lprime=31,logL_width=2.0,
+                 size_ln_conv=41,size_lprime=51,logL_width=2.0,
                  trans_only=False,norm_only=False,trans_file='N501_with_atm.txt'):
         ''' Initialize LumFuncMCMC class
 
@@ -288,8 +290,8 @@ class LumFuncMCMC:
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
         self.trans_only, self.norm_only = trans_only, norm_only
-        self.transf, self.logL_discrete, self.del_red_eff = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime,file_name=trans_file)
-        self.filt_width_eff = self.del_red_eff * self.wav_rest
+        self.transf, self.logL_discrete, self.delzf = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime,file_name=trans_file)
+        # self.filt_width_eff = self.del_red_eff * self.wav_rest
         
         self.setDLdVdz()
         if flux is not None: 
@@ -346,6 +348,7 @@ class LumFuncMCMC:
         # self.norm_vals = normalFunc(self.logL_conv[None],self.lum[:,None],self.lum_e[:,None])
 
         ####### Just transmission convolution #######
+        self.trans_conv = self.transf(self.logL_discrete)
         self.logL_trans_lnpart = self.lum[:,None] + self.logL_discrete
         self.logL_trans_integ = self.logL[:,None] + self.logL_discrete
         
@@ -358,6 +361,9 @@ class LumFuncMCMC:
         flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_trans_integ = self.comp1df(mags)
+
+        self.delz_trans = self.delzf(self.logL_trans_integ-self.minlum)
+        self.not_tlf = self.comps_trans_integ * self.delz_trans * self.trans_conv
 
         ###### Just normal convolution #####
         self.logL_norm = np.zeros((self.lum.size,self.size_ln_conv))
@@ -375,7 +381,6 @@ class LumFuncMCMC:
         flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_conv = self.comp1df(mags)
-        self.trans_conv = self.transf(self.logL_discrete)
         
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
@@ -484,15 +489,15 @@ class LumFuncMCMC:
         # denom = trapz(trapz_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
         # fullint = self.Omega_0/V.sqarcsec * self.volume * denom
-        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.comps_trans_integ * self.trans_conv
-        fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
+        fullint = self.Omega_0/V.sqarcsec * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
         lnpart = np.log(trapz(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
-        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.comps_trans_integ * self.trans_conv
-        fullint = self.Omega_0/V.sqarcsec * self.volume * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
+        fullint = self.Omega_0/V.sqarcsec * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
     
     def lnlike_norm(self):
