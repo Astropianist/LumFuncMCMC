@@ -50,6 +50,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
     pdf_arr[1:] *= (1.0-flat_frac) / integ # Normalize
     # pdf_arr[0] = flat_frac/(1.0-flat_frac) * integ / (del_logL_arr[1]-del_logL_arr[0])
     pdf_arr[0] = flat_frac / (del_logL_arr[1]-del_logL_arr[0])
+    pdf_arr /= trapz(pdf_arr, del_logL_arr) # Just normalize again since the trapezoid rule is not a perfect integrator by any means
     log_pdf = np.log10(pdf_arr)
     diff_log = np.hstack([abs(np.diff(log_pdf)),0.0])
     diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
@@ -70,7 +71,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
 
     return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=0.0, bounds_error=False), logL_discrete
 
-def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=10000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
+def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, trans = trans_dat['lambda'], trans_dat['transmission']
     transf = interp1d(lam, trans, kind='cubic', bounds_error=False, fill_value=0.0)
@@ -89,8 +90,9 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=1000
     #     left_indi = np.argmin(abs(trans_full[:tfam+1]-trans_mini))
     #     right_indi = np.argmin(abs(trans_full[tfam:]-trans_mini)) + tfam
     #     delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
-
-    transpdf, logL_discrete = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete)
+    if 'perfect' in file_name.lower(): interp_type = 'linear'
+    else: interp_type = 'cubic'
+    transpdf, logL_discrete = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete, interp_type=interp_type)
     
     return transpdf, logL_discrete, (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
