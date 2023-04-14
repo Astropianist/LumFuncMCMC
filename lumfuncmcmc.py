@@ -48,7 +48,8 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic'):
         pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
     integ = trapz(pdf_arr[1:], del_logL_arr[1:])
     pdf_arr[1:] *= (1.0-flat_frac) / integ # Normalize
-    pdf_arr[0] = flat_frac/(1.0-flat_frac) * integ / (del_logL_arr[1]-del_logL_arr[0])
+    # pdf_arr[0] = flat_frac/(1.0-flat_frac) * integ / (del_logL_arr[1]-del_logL_arr[0])
+    pdf_arr[0] = flat_frac / (del_logL_arr[1]-del_logL_arr[0])
     log_pdf = np.log10(pdf_arr)
     diff_log = np.hstack([abs(np.diff(log_pdf)),0.0])
     diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
