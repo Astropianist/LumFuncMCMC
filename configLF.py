@@ -18,7 +18,7 @@ phistar=-2.0
 phistar_lims=[-8.0,5.0]
 Lc=40.0
 Lh=46.0
-min_comp_frac = 0.0
+min_comp_frac = 0.5
 redshift = 3.1
 wav_filt = 5015.0
 wav_rest = 1215.67 # Lya
@@ -34,7 +34,7 @@ param_percentiles = [5, 16, 50, 84, 95]
 
 output_dict = {'parameters'    : True,
                'settings'      : True, 
-               'fitposterior'  : True,
+               'fitposterior'  : False,
                'bestfitLF'     : True,
                'VeffLF'        : True,
                'triangle plot' : True,

@@ -58,9 +58,9 @@ def parse_args(argv=None):
                         help='''File to be read for galaxy data''',
                         type=str, default=None)
 
-    parser.add_argument("-o", "--output_filename",
-                        help='''Output filename for given run''',
-                        type=str, default='test.dat')
+    parser.add_argument("-o", "--output_name",
+                        help='''Output name for given run''',
+                        type=str, default='test')
     
     parser.add_argument("-fn", "--field_name",
                         help='''Name of field''',
@@ -189,7 +189,9 @@ def read_input_file(args):
     datfile = Table.read(args.filename,format='ascii')
     interp_comp = makeCompFunc()
     flux, fluxe, dist = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
-    cond_init = np.logical_and(flux>0.0,flux<args.flux_lim)
+    if args.flux_lim<0.0: flux_lim = np.inf
+    else: flux_lim = args.flux_lim
+    cond_init = np.logical_and(flux>0.0,flux<flux_lim)
     mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
     comps = interp_comp((dist[cond_init], mag))
     cond = comps>=args.min_comp_frac
@@ -197,15 +199,23 @@ def read_input_file(args):
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
-    # Make output folder if it doesn't exist
-    dir_name = 'LFMCMCOdin'
-    mkpath(dir_name)
     # Get Inputs
     if argv == None:
         argv = sys.argv
         argv.remove('run_lumfuncmcmc.py')
 
     args = parse_args(argv)
+
+    # Make output folder if it doesn't exist
+    if args.err_corr: ecnum = 1
+    elif args.trans_only: ecnum = 2
+    elif args.norm_only: ecnum = 3
+    else: ecnum = 0
+    dir_name_first = 'LFMCMCOdin'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_mcf{int(100*args.min_comp_frac)}_fl{int(args.flux_lim)}_ec{ecnum}'
+    dir_name = op.join(dir_name_first, output_filename)
+    mkpath(dir_name)
+    
     # Read input file into arrays
     flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig, comps = read_input_file(args)
     print("Read Input File")
@@ -231,24 +241,19 @@ def main(argv=None):
                         norm_only=args.norm_only, trans_file=args.trans_file)
     print("Initialized LumFuncMCMC class")
 
-    if args.err_corr: ecnum = 1
-    elif args.trans_only: ecnum = 2
-    elif args.norm_only: ecnum = 3
-    else: ecnum = 0
-
     if args.veff_only:
-        LFmod.plotVeff('%s/Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
+        LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
         return
 
     # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
-    fn = '%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum)
+    fn = '%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum)
     if op.isfile(fn):
         dat = Table.read(fn,format='ascii')
         LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
-        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
         # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
         #             names=['Luminosity', 'BinLF', 'BinLFErr'])
-        # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+        # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
         #         overwrite=True, format='ascii.fixed_width_two_line')
         # print("Finished writing VeffLF file")
         return
@@ -273,7 +278,7 @@ def main(argv=None):
     print("Finished fitting model and about to create outputs")
     #### Get desired outputs ####
     if args.output_dict['triangle plot']:
-        LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
+        LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
         print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
     else:
         LFmod.set_median_fit()
@@ -281,19 +286,19 @@ def main(argv=None):
     names.append('Ln Prob')
     if args.output_dict['fitposterior']: 
         T = Table(LFmod.samples, names=names)
-        T.write('%s/fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
+        T.write('%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing fitposterior file")
     if args.output_dict['bestfitLF']:
         T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
                     names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
-        T.write('%s/bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
+        T.write('%s/%s_bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing bestfitLF file")
     if args.output_dict['VeffLF']:
         T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                     names=['Luminosity', 'BinLF', 'BinLFErr'])
-        T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_filename.split('.')[0], args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
+        T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum),
                 overwrite=True, format='ascii.fixed_width_two_line')
         print("Finished writing VeffLF file")
 
@@ -302,12 +307,12 @@ def main(argv=None):
     print(LFmod.table)
 
     if args.output_dict['parameters']:
-        LFmod.table.write('%s/%s' %(dir_name, args.output_filename),
+        LFmod.table.write('%s/%s_%s.dat' %(dir_name, args.output_name, output_filename),
                           format='ascii.fixed_width_two_line',
                           formats=formats, overwrite=True)
         print("Finished writing LF main table")
     if args.output_dict['settings']:
-        filename = open('%s/%s.args' %(dir_name, args.output_filename), 'w')
+        filename = open('%s/%s_%s.dat.args' %(dir_name, args.output_name, output_filename), 'w')
         del args.log
         filename.write( str( vars(args) ) )
         filename.close()
