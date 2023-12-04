@@ -27,7 +27,7 @@ filt_name = 'N501'
 del_red = 0.06
 field_name = 'COSMOS'
 maglow, maghigh = 26., 19.
-flux_lim = 20.0
+flux_lim = 15.0
 trans_file = 'N501_with_atm.txt'
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
