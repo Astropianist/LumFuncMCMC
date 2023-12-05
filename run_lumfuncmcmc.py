@@ -5,6 +5,7 @@ import os.path as op
 import logging
 from astropy.table import Table
 from scipy.interpolate import interp1d
+from scipy.stats import ks_2samp
 from lumfuncmcmc import LumFuncMCMC, makeCompFunc, cgs2magAB
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
@@ -194,7 +195,7 @@ def read_input_file(args):
         Interpolation function for completeness
     """
     
-    fluxs, fluxes, dists, distos, compss = [], [], [], [], []
+    fluxs, fluxes, dists, distos, compss, denss = [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
     interp_comp = makeCompFunc()
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
@@ -213,8 +214,8 @@ def read_input_file(args):
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
         comps = interp_comp((dist[cond_init], mag))
         cond = comps>=args.min_comp_frac
-        fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond])
-    return fluxs, fluxes, None, None, dists, interp_comp, distos, compss, dens_vals
+        fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(dens[cond_env][cond_init][cond])
+    return fluxs, fluxes, None, None, dists, interp_comp, distos, compss, dens_vals, denss
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -236,11 +237,15 @@ def main(argv=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig, comps, dens_vals = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig, comps, dens_vals, dens = read_input_file(args)
     print("Read Input File")
-    if args.environment and args.veff_only:
+    if not args.veff_only: lumlf, bestlf = [], []
+    else: lumlf, bestlf = None, None
+    if args.environment:
         lavg, lfbinorig, var, minlum, labels_env = [], [], [], [], []
-
+        for k in range(len(flux)):
+            for kk in range(k+1, len(flux)):
+                print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
 
         # Initialize LumFuncMCMC class
@@ -271,7 +276,7 @@ def main(argv=None):
                 labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
                 continue
             LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
-            return
+            continue
 
         # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
         fn = '%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1)
@@ -279,12 +284,13 @@ def main(argv=None):
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
             LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
+            lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
             # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
             #             names=['Luminosity', 'BinLF', 'BinLFErr'])
             # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
             #         overwrite=True, format='ascii.fixed_width_two_line')
             # print("Finished writing VeffLF file")
-            return
+            continue
 
         # Build names for parameters and labels for table
         names = LFmod.get_param_names()
@@ -330,6 +336,9 @@ def main(argv=None):
                     overwrite=True, format='ascii.fixed_width_two_line')
             print("Finished writing VeffLF file")
 
+        lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+        lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
+
         LFmod.table.add_row([args.line_name] + [0.]*(len(labels)-1))
         LFmod.add_fitinfo_to_table(percentiles)
         print(LFmod.table)
@@ -346,8 +355,8 @@ def main(argv=None):
             filename.close()
             print("Finished writing settings to file")
     
-    if args.environment and args.veff_only:
-        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env_split_%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.num_env_bins), imgtype=args.output_dict['image format'])
+    if args.environment:
+        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env_split_%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.num_env_bins), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
 
 if __name__ == '__main__':
     main()

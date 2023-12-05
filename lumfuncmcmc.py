@@ -695,15 +695,17 @@ class LumFuncMCMC:
         ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
-    def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+']):
+    def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+'], lflums=None, lfs=None, linestyle_seq=['-', '--', '-*', ':', '-', '--', '-*', ':']):
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         ilist = np.arange(len(Lavgs))
         for i, Lavg, lfbinorig, var, minlum in zip(ilist, Lavgs, lfbinorigs, vars, minlums):
+            col = fmt_seq[i][0]
             cond_veff = Lavg >= minlum
             ax.plot(Lavg[cond_veff],lfbinorig[cond_veff],fmt_seq[i],linestyle='none',label=labels[i])
-            ax.errorbar(Lavg[cond_veff],lfbinorig[cond_veff],yerr=np.sqrt(var[cond_veff]),fmt='none',ecolor=fmt_seq[i][0],label='',alpha=0.1)
+            ax.errorbar(Lavg[cond_veff],lfbinorig[cond_veff],yerr=np.sqrt(var[cond_veff]),fmt='none',ecolor=col,label='',alpha=0.1)
             ax.errorbar(Lavg[~cond_veff],lfbinorig[~cond_veff],yerr=np.sqrt(var[~cond_veff]),fmt=fmt_seq[i],alpha=0.1,label='')
+            if lfs is not None: ax.plot(lflums[i], lfs[i], col+linestyle_seq[i], label='')
         ax.legend(loc='best', frameon=False, fontsize='small')
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
