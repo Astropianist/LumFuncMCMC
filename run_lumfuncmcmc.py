@@ -242,6 +242,8 @@ def main(argv=None):
     if not args.veff_only: lumlf, bestlf = [], []
     else: lumlf, bestlf = None, None
     if args.environment:
+        dir_name = op.join(dir_name, args.num_env_bins)
+        mkpath(dir_name)
         lavg, lfbinorig, var, minlum, labels_env = [], [], [], [], []
         for k in range(len(flux)):
             for kk in range(k+1, len(flux)):
