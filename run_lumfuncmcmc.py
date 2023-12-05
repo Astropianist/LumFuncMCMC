@@ -242,7 +242,7 @@ def main(argv=None):
     if not args.veff_only: lumlf, bestlf = [], []
     else: lumlf, bestlf = None, None
     if args.environment:
-        dir_name = op.join(dir_name, args.num_env_bins)
+        dir_name = op.join(dir_name, str(args.num_env_bins))
         mkpath(dir_name)
         lavg, lfbinorig, var, minlum, labels_env = [], [], [], [], []
         for k in range(len(flux)):
@@ -286,7 +286,7 @@ def main(argv=None):
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
             LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
-            lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+            if args.environment: lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
             # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
             #             names=['Luminosity', 'BinLF', 'BinLFErr'])
             # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
@@ -338,8 +338,9 @@ def main(argv=None):
                     overwrite=True, format='ascii.fixed_width_two_line')
             print("Finished writing VeffLF file")
 
-        lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
-        lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
+        if args.environment:
+            lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+            lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
 
         LFmod.table.add_row([args.line_name] + [0.]*(len(labels)-1))
         LFmod.add_fitinfo_to_table(percentiles)
