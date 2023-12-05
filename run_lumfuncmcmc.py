@@ -286,7 +286,10 @@ def main(argv=None):
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
             LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
-            if args.environment: lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+            if args.environment: 
+                lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+                lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
+                labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
             # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
             #             names=['Luminosity', 'BinLF', 'BinLFErr'])
             # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
@@ -341,6 +344,7 @@ def main(argv=None):
         if args.environment:
             lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
             lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
+            labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
 
         LFmod.table.add_row([args.line_name] + [0.]*(len(labels)-1))
         LFmod.add_fitinfo_to_table(percentiles)
@@ -353,7 +357,8 @@ def main(argv=None):
             print("Finished writing LF main table")
         if args.output_dict['settings']:
             filename = open('%s/%s_%s_env%d_bin%d.dat.args' %(dir_name, args.output_name, output_filename, args.environment, i+1), 'w')
-            del args.log
+            try: del args.log
+            except: pass
             filename.write( str( vars(args) ) )
             filename.close()
             print("Finished writing settings to file")
