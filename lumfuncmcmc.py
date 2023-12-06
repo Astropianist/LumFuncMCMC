@@ -705,7 +705,10 @@ class LumFuncMCMC:
             ax.plot(Lavg[cond_veff],lfbinorig[cond_veff],fmt_seq[i],linestyle='none',label=labels[i])
             ax.errorbar(Lavg[cond_veff],lfbinorig[cond_veff],yerr=np.sqrt(var[cond_veff]),fmt='none',ecolor=col,label='',alpha=0.1)
             ax.errorbar(Lavg[~cond_veff],lfbinorig[~cond_veff],yerr=np.sqrt(var[~cond_veff]),fmt=fmt_seq[i],alpha=0.1,label='')
-            if lfs is not None: ax.plot(lflums[i], lfs[i], col+linestyle_seq[i], label='')
+            if lfs is not None: 
+                lfli, lfi = lflums[i], lfs[i]
+                indsort = np.argsort(lfli)
+                ax.plot(lfli[indsort], lfi[indsort], col+linestyle_seq[i], label='')
         ax.legend(loc='best', frameon=False, fontsize='small')
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
