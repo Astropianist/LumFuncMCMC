@@ -695,7 +695,7 @@ class LumFuncMCMC:
         ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
-    def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+'], lflums=None, lfs=None, linestyle_seq=['-', '--', '-*', ':', '-', '--', '-*', ':']):
+    def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+'], lflums=None, lfs=None, linestyle_seq=['-', '--', '-.', ':', '-', '--', '-.', ':']):
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         ilist = np.arange(len(Lavgs))

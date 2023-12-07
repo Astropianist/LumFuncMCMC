@@ -232,7 +232,7 @@ def main(argv=None):
     elif args.norm_only: ecnum = 3
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
-    output_filename = f'ODIN_fsa{args.fix_sch_al}_mcf{int(100*args.min_comp_frac)}_fl{int(args.flux_lim)}_ec{ecnum}'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_fl{int(args.flux_lim)}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
     
