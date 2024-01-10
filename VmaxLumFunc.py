@@ -36,7 +36,8 @@ orig_palette_arr = sns.color_palette()
 orig_palette = cycle(tuple(orig_palette_arr))
 markers = cycle(tuple(['o','^','*','s','+','v','<','>']))
 
-h, OmegaM, OmegaL, a0 = 0.6778,  0.30821, 0.69179, 1.0
+# h, OmegaM, OmegaL, a0 = 0.6778,  0.30821, 0.69179, 1.0
+h, OmegaM, OmegaL, a0 = 0.7, 0.27, 0.73, 1.0
 H0 = 0.000333562*h #H0=100h km/s/Mpc in units Mpc^-1
 n = 100 #For bootstrap analysis
 # sqarcsec = 4.0*np.pi * (180./np.pi * 3600.0)**2

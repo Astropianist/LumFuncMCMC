@@ -5,7 +5,7 @@ nboot = 100
 
 line_name="Lya"
 line_plot_name=r'${\rm{Ly\alpha}}$'
-Omega_0_sqarcmin = 43200.0
+Omega_0_sqarcmin = 36000.0
 frac_use = 1.0
 conv_minsec = 3600
 Omega_0 = Omega_0_sqarcmin*frac_use*conv_minsec
