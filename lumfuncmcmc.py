@@ -26,6 +26,26 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 c = 3.0e18 # Speed of light in Angstroms/s
 num_cores = 20 #In Joel's thingy
 
+def consecutive(data, stepsize=1):
+    return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
+
+def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
+    trans_dat = Table.read(file_name, format='ascii')
+    lam, tra = trans_dat['lambda'], trans_dat['transmission']
+    zs = (lam-wav_rest) / wav_rest
+    if 'perfect' in file_name.lower():
+        zmin, zmax = zs.min(), zs.max()
+        return lambda x: np.piecewise(x, [x<=zmin, x<zmax, x>=zmax], [np.inf, 0.0, np.inf])
+    del_logL = np.log10(tra.max()) - np.log10(tra)
+    del_logL_lin = np.linspace(del_logL.min(), del_logL.max(), delznum)
+    delz = np.zeros_like(del_logL_lin)
+    for i, tv in enumerate(del_logL_lin):
+        inds = np.where(del_logL<=tv)[0]
+        inds_consec = consecutive(inds)
+        zs_consec = [zs[indsi] for indsi in inds_consec]
+        delz[i] = sum([zsi[-1] - zsi[0] for zsi in zs_consec])
+    return interp1d(zs, del_logL, kind=interp_type, bounds_error=False, fill_value = (del_logL[0], del_logL[-1])), interp1d(del_logL_lin, delz, kind=interp_type, bounds_error=False, fill_value = (0, delz.max()))
+
 def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wav_rest=1215.67):
     del_logL = np.log10(tra.max()) - np.log10(tra)
     il, ir = 0, len(del_logL)-1
@@ -200,11 +220,12 @@ class LumFuncMCMC:
                  nwalkers=100,nsteps=1000,fix_sch_al=False,
                  min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
                  interp_comp=None,dist_orig=None,dist=None,
-                 maglow=26.0,maghigh=19.0,magnum=15,distnum=100,comps=None,
+                 maglow=26.0,maghigh=19.0,magnum=25,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
                  size_ln_conv=41,size_lprime=51,logL_width=2.0,
-                 trans_only=False,norm_only=False,trans_file='N501_with_atm.txt'):
+                 trans_only=False,norm_only=False,trans_file='N501_with_atm.txt',
+                 maxlum=None, minlum=None, transsim=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -292,8 +313,10 @@ class LumFuncMCMC:
         self.trans_only, self.norm_only = trans_only, norm_only
         self.transf, self.logL_discrete, self.delzf = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime,file_name=trans_file)
         # self.filt_width_eff = self.del_red_eff * self.wav_rest
+        self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
         
         self.setDLdVdz()
+        print("Finished DL, dVdz")
         if flux is not None: 
             self.flux = 1.0e-17*flux
             if flux_e is not None:
@@ -303,19 +326,26 @@ class LumFuncMCMC:
             self.getFluxes()
         if lum is None: 
             self.getLumin()
+        print("Finished getting fluxes and luminosities")
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
         if interp_comp is None: self.interp_comp = makeCompFunc()
         else: self.interp_comp = interp_comp
         if self.comps is None: self.comps = self.interp_comp((self.dist, self.mags))
+        print("Got completeness")
         
-        self.get1DComp()
-        logL_min = self.logL_norm.min()
-        logL_max = self.logL_norm.max() + self.logL_discrete.max()
-        self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
+        if not self.transsim:
+            self.get1DComp()
+            logL_min = self.logL_norm.min()
+            logL_max = self.logL_norm.max() + self.logL_discrete.max()
+            self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
+        else:
+            self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
+            print("Finished getting Omega array")
         self.setup_logging()
 
     def get1DComp(self):
         ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''
+        print("Setting the computational arrays")
         maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
         distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
         distg, magg = np.meshgrid(distgrid, maggrid, indexing='ij')
@@ -323,7 +353,7 @@ class LumFuncMCMC:
         comps = comps.reshape(self.distnum, self.magnum)
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
-            func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1])) # Nearest neighbor outside
+            func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1]))
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
         minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.wav_filt, self.filt_width))
         self.minlum = np.average(minlums)
@@ -384,6 +414,7 @@ class LumFuncMCMC:
         
     def setDLdVdz(self):
         ''' Create 1-D interpolated functions for luminosity distance (cm) and comoving volume differential (Mpc^3); also get function for minimum luminosity considered '''
+        print("Setting DL and dVdz")
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.cosmo.differential_comoving_volume(self.z).value
         # if self.err_corr or self.trans_only: self.volume = self.dVdz * self.del_red_eff
@@ -635,10 +666,12 @@ class LumFuncMCMC:
         self.log.info(self.samples.shape)
         self.log.info("Median lnprob: %.5f; Max lnprob: %.5f"%(np.median(sampler.lnprobability), np.amax(sampler.lnprobability)))
 
-    def VeffLF(self):
+    def VeffLF(self, varying=False):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
-        self.phifunc = 1.0/(self.volume * self.Omega_arr)
-        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,Lmin=self.minlum)
+        print("Ready to calculate V effective method")
+        if varying: self.phifunc = 1.0/(self.dVdz * self.delzf(self.lum - self.minlum) * self.Omega_arr)
+        else: self.phifunc = 1.0/(self.volume * self.Omega_arr)
+        self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,Lmin=self.minlum, Lmax=self.maxlum)
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
@@ -686,8 +719,8 @@ class LumFuncMCMC:
         ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
         ax1.minorticks_on()
 
-    def plotVeff(self, outname, imgtype='png'):
-        self.VeffLF()
+    def plotVeff(self, outname, imgtype='png', varying=False):
+        self.VeffLF(varying=varying)
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         cond_veff = self.Lavg >= self.minlum

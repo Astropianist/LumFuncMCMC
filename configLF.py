@@ -15,7 +15,7 @@ sch_al_lims=[-3.0,1.0]
 Lstar=42.5
 Lstar_lims=[40.0,45.0]
 phistar=-2.0
-phistar_lims=[-8.0,5.0]
+phistar_lims=[-5.0,-1.0]
 Lc=40.0
 Lh=46.0
 min_comp_frac = 0.5
@@ -26,7 +26,7 @@ filt_width = 77.3
 filt_name = 'N501'
 del_red = 0.06
 field_name = 'COSMOS'
-maglow, maghigh = 26., 19.
+maglow, maghigh = 30., 19.
 flux_lim = 15.0
 trans_file = 'N501_with_atm.txt'
 # percentiles of each parameter to report in the output file
