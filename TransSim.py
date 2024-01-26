@@ -56,14 +56,14 @@ def add_LumFunc_plot(ax1):
     ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
     ax1.minorticks_on()
 
-def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, image_dir=op.join('TransExp', 'VeffPlots')):
+def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_dir=op.join('TransExp', 'VeffPlots')):
     mkpath(image_dir)
     fig, ax = plt.subplots()
     add_LumFunc_plot(ax)
     ax.errorbar(logLs, lfs[0], yerr=np.sqrt(vars[0]), fmt='bs', linestyle='none', label='Original')
     ax.errorbar(logLs, lfs[1], yerr=np.sqrt(vars[1]), fmt='r^', linestyle='none', label='Convolved')
     ax.legend(loc='best', frameon=False)
-    fig.savefig(op.join(image_dir, f'VeffComp_al{alpha}_delz{delz}_ml{minlum_use:0.2f}.png'), bbox_inches='tight', dpi=200)
+    fig.savefig(op.join(image_dir, f'VeffComp_ng{ngal}_bn{bn}_al{alpha}_delz{delz}_ml{minlum_use:0.2f}_Lc{lc}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
 def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp'):
@@ -161,7 +161,8 @@ def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', inter
     plot_hists(lums, lums_mod, delz, al, logLs)
     mkpath(image_dir)
     # outname_list = [f'Veff_al{al}_delz{delz}_vary{varying}', f'VeffTrans_al{al}_delz{delz}_vary{varying}']
-    minlum_use = max(Lc, minlum_onered)
+    # minlum_use = max(Lc, minlum_onered)
+    minlum_use = minlum_onered
     print("minlum_use:", minlum_use)
     delz_eff = [np.average(delzf(lums-minlum_use)), np.average(delzf(lums_mod-minlum_use))]
     delz_use = [C.del_red, 2*delz]
@@ -173,7 +174,7 @@ def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', inter
         lumobj.VeffLF(varying=varying)
         lf.append(lumobj.lfbinorig)
         vars.append(lumobj.var)
-    plotVeffComp(lumobj.Lavg, lf, vars, delz, al, minlum_use)
+    plotVeffComp(lumobj.Lavg, lf, vars, delz, al, minlum_use, Lc, numgal, binnum)
     lf0 = unumpy.uarray(lf[0], np.sqrt(vars[0]))
     lf1 = unumpy.uarray(lf[1], np.sqrt(vars[1]))
     print("vars[0]:", vars[0])
@@ -212,12 +213,12 @@ def main():
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
     bin_centers, corr_n501, minlum_use = get_corrections(*this_work, delz=delz, varying=varying, interp_type=interp_type, min_comp_frac=min_comp_frac, Lc=Lc, numlum=numgal, numgal=numgal, binnum=binnum)
-    plot_corr(bin_centers, corr_n501, f'N501CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}.png', image_dir=image_dir)
+    plot_corr(bin_centers, corr_n501, f'N501CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}.png', image_dir=image_dir)
 
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'N501Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}.dat'), format='ascii')
+    dat.write(op.join(image_dir, f'N501Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}.dat'), format='ascii')
 
 if __name__ == '__main__':
     main()
