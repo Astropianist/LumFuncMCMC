@@ -11,6 +11,7 @@ import configLF as C
 import os.path as op
 from distutils.dir_util import mkpath
 from astropy.table import Table
+from itertools import cycle
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -19,6 +20,13 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                "xtick.major.size":12, "xtick.minor.size":4,
                "ytick.major.size":12, "ytick.minor.size":4,
                })
+### color palettes
+colors = ["windows blue", "amber", "greyish", "faded green", "dusty purple"]
+colors += ["cloudy blue", "browny orange", "dark sea green"]
+sns.set_palette(sns.xkcd_palette(colors))
+orig_palette_arr = sns.color_palette()
+orig_palette = cycle(tuple(orig_palette_arr))
+markers = cycle(tuple(['o','^','*','s','+','v','<','>']))
 
 def parse_args():
     '''Parse arguments from commandline or a manually passed list
@@ -190,14 +198,33 @@ def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', inter
     # breakpoint()
     return lumobj.Lavg, corr, minlum_use
 
-def plot_corr(bin_centers, corr, plotname, image_dir='TransExp'):
+def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs=None):
     mkpath(image_dir)
     fig, ax = plt.subplots()
-    ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
+    if type(bin_centers)==list:
+        for bc, co, coe, lc in zip(bin_centers, corr, corre, lcs):
+            ax.errorbar(bc, co, coe, color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
+        ax.legend(loc='best', frameon=False)
+    else: ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
     ax.set_xlabel('Log Luminosity (erg/s)')
     ax.set_ylabel('Log Correction (True/Obs)')
     fig.savefig(op.join(image_dir, plotname), bbox_inches='tight', dpi=300)
     plt.close('all')
+
+def showAllCorr():
+    image_dir = 'TransExp'
+    Lcvals = [40.46, 41.0, 42.0, 42.5, 42.8, 43.1]
+    fn_base = 'N501Corr_ng2500000_bn20_al-1.6_delz0.2_ml40.46'
+    fn_base43 = 'N501Corr_ng2500000_bn8_al-1.6_delz0.2_ml40.46'
+    bcall, corrall, correall = [], [], []
+    for Lc in Lcvals:
+        if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
+        elif Lc>43: fn = op.join(image_dir, f'{fn_base43}_Lc{Lc}.dat')
+        else: fn = op.join(image_dir, f'{fn_base}_Lc{Lc}.dat')
+        dat = Table.read(fn, format='ascii')
+        bc, co, coe = dat['logL'], dat['Corr'], dat['CorrErr']
+        bcall.append(bc); corrall.append(co); correall.append(coe)
+    plot_corr(bcall, corrall, plotname='MixCorrs.png', image_dir=image_dir, corre=correall, lcs=Lcvals)
 
 def main():
     args = parse_args()
@@ -221,4 +248,5 @@ def main():
     dat.write(op.join(image_dir, f'N501Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}.dat'), format='ascii')
 
 if __name__ == '__main__':
-    main()
+    # main()
+    showAllCorr()
