@@ -198,9 +198,13 @@ def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', inter
     # breakpoint()
     return lumobj.Lavg, corr, minlum_use
 
-def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs=None):
+def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None):
     mkpath(image_dir)
     fig, ax = plt.subplots()
+    if corrfull is not None: 
+        col = next(orig_palette)
+        ax.plot(bcs, corrfull, color=col, linestyle='--', marker='none', label='Overall')
+        ax.fill_between(bcs, corrfull-correfull, corrfull+correfull, color=col, alpha=0.2, label='')
     if type(bin_centers)==list:
         for bc, co, coe, lc in zip(bin_centers, corr, corre, lcs):
             ax.errorbar(bc, co, coe, color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
@@ -210,6 +214,26 @@ def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs
     ax.set_ylabel('Log Correction (True/Obs)')
     fig.savefig(op.join(image_dir, plotname), bbox_inches='tight', dpi=300)
     plt.close('all')
+
+def getOverallCorr(bcall, corrall, correall, num=1001):
+    corrfs, correfs = [], []
+    corrs, corres = np.zeros((len(bcall), num)), np.zeros((len(bcall), num))
+    bcmin, bcmax = np.inf, -np.inf
+    for i in range(len(bcall)):
+        cond = ~np.isnan(corrall[i])
+        bcmin = min(bcmin, bcall[i][cond].min())
+        bcmax = max(bcmax, bcall[i][cond].max())
+    bcs = np.linspace(bcmin, bcmax, num)
+    for i in range(len(bcall)):
+        corrfs.append(interp1d(bcall[i], corrall[i], kind='cubic', bounds_error=False, fill_value=np.nan))
+        correfs.append(interp1d(bcall[i], correall[i], kind='cubic', bounds_error=False, fill_value=np.nan))
+        corrs[i] = corrfs[i](bcs)
+        corres[i] = correfs[i](bcs)
+    ws = 1/corres
+    corrfull = np.nansum(corrs*ws, axis=0) / np.nansum(ws, axis=0)
+    correfull = np.sqrt(len(bcall)) / np.nansum(ws, axis=0)
+
+    return bcs, corrfull, correfull
 
 def showAllCorr():
     image_dir = 'TransExp'
@@ -224,7 +248,13 @@ def showAllCorr():
         dat = Table.read(fn, format='ascii')
         bc, co, coe = dat['logL'], dat['Corr'], dat['CorrErr']
         bcall.append(bc); corrall.append(co); correall.append(coe)
-    plot_corr(bcall, corrall, plotname='MixCorrs.png', image_dir=image_dir, corre=correall, lcs=Lcvals)
+    bcs, corrfull, correfull = getOverallCorr(bcall, corrall, correall)
+    corrdat = Table()
+    corrdat['logL'] = bcs
+    corrdat['Corr'] = corrfull
+    corrdat['CorrErr'] = correfull
+    corrdat.write(op.join(image_dir, 'CorrFull.dat'), format='ascii')
+    plot_corr(bcall, corrall, plotname='MixCorrsOverall.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
