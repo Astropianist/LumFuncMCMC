@@ -225,7 +225,8 @@ class LumFuncMCMC:
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
                  size_ln_conv=41,size_lprime=51,logL_width=2.0,
                  trans_only=False,norm_only=False,trans_file='N501_with_atm.txt',
-                 maxlum=None, minlum=None, transsim=False):
+                 maxlum=None, minlum=None, transsim=False,
+                 corrf=None, corref=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -314,6 +315,7 @@ class LumFuncMCMC:
         self.transf, self.logL_discrete, self.delzf = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime,file_name=trans_file)
         # self.filt_width_eff = self.del_red_eff * self.wav_rest
         self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
+        self.corrf, self.corref = corrf, corref
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -672,6 +674,13 @@ class LumFuncMCMC:
         if varying: self.phifunc = 1.0/(self.dVdz * self.delzf(self.lum - self.minlum) * self.Omega_arr)
         else: self.phifunc = 1.0/(self.volume * self.Omega_arr)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,Lmin=self.minlum, Lmax=self.maxlum)
+        if self.corrf is not None:
+            ucorr_orig = unumpy.uarray(self.corrf(self.Lavg), self.corref(self.Lavg))
+            ulf = unumpy.uarray(self.lfbinorig, np.sqrt(self.var))
+            ulf_new = 10 ** (unumpy.log10(ulf) + ucorr_orig)
+            self.lfbinorig_orig, self.var_orig = self.lfbinorig*1.0, self.var*1.0 #Want to show original values
+            self.lfbinorig = unumpy.nominal_values(ulf_new)
+            self.var = unumpy.std_devs(ulf_new) ** 2
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
@@ -724,8 +733,12 @@ class LumFuncMCMC:
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         cond_veff = self.Lavg >= self.minlum
-        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
-        ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
+        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label='Measured LF')
+        ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='')
+        if self.corrf is not None:
+            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='rs', label='LF without Transmission Correction')
+            ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='rs',alpha=0.2, label='')
+            ax.legend(loc='best', frameon=False)
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
     def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+'], lflums=None, lfs=None, linestyle_seq=['-', '--', '-.', ':', '-', '--', '-.', ':']):

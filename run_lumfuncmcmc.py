@@ -135,6 +135,10 @@ def parse_args(argv=None):
     parser.add_argument("-e", "--environment",
                         help='''Whether or not to divide sample by environment''',
                         action='count',default=0)
+    
+    parser.add_argument("-c", "--corr",
+                        help='''Whether or not to correct result for the transmission effects''',
+                        action='count',default=0)
 
     parser.add_argument("-neb", "--num_env_bins",
                         help='''Number of bins for environment designation''',
@@ -153,7 +157,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name', 'wav_rest', 'trans_file']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file']
 
     for arg_i in arg_inputs:
         try:
@@ -239,6 +243,13 @@ def main(argv=None):
     # Read input file into arrays
     flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig, comps, dens_vals, dens = read_input_file(args)
     print("Read Input File")
+    if args.corr: 
+        corrfile = Table.read(args.corr_file, format='ascii')
+        logL, corr, corre = corrfile['logL'], corrfile['Corr'], corrfile['CorrErr']
+        corrf = interp1d(logL, corr, kind='linear', bounds_error=False, fill_value=(corr[0], corr[-1]))
+        corref = interp1d(logL, corre, kind='linear', bounds_error=False, fill_value=(corre[0], corre[-1]))
+    else:
+        corrf, corref = None, None
     if not args.veff_only: lumlf, bestlf = [], []
     else: lumlf, bestlf = None, None
     if args.environment:
@@ -268,8 +279,10 @@ def main(argv=None):
                             interp_comp=interp_comp, dist_orig=dist_orig[i], 
                             dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
                             err_corr=args.err_corr, trans_only=args.trans_only,
-                            norm_only=args.norm_only, trans_file=args.trans_file)
+                            norm_only=args.norm_only, trans_file=args.trans_file,
+                            corrf=corrf, corref=corref)
         print("Initialized LumFuncMCMC class")
+        breakpoint()
 
         if args.veff_only:
             if args.environment: 
@@ -277,7 +290,13 @@ def main(argv=None):
                 lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
                 labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
                 continue
-            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum), imgtype = args.output_dict['image format'])
+            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.corr), imgtype = args.output_dict['image format'])
+            if args.output_dict['VeffLF']:
+                T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
+                            names=['Luminosity', 'BinLF', 'BinLFErr'])
+                T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr),
+                        overwrite=True, format='ascii.fixed_width_two_line')
+                print("Finished writing VeffLF file")
             continue
 
         # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again

@@ -48,6 +48,7 @@ def parse_args():
     parser.add_argument("-it", "--interp_type", help='''Method for interpolation''', type=str, default='cubic')
     parser.add_argument("-dz", "--delz", help='''Width in redshift distribution''', type=float, default=0.1)
     parser.add_argument("-v", "--varying", help='''Vary the volume used in Veff''', action='count', default=0)
+    parser.add_argument("-c", "--corrf", help='''Add correction for reverse experiment (kind of)''', action='count', default=0)
     parser.add_argument("-af", "--alpha_fixed", help='''Fixed alpha used in run that fit the Schechter curve used''', type=float, default=-1.6)
     parser.add_argument("-mcf", "--min_comp_frac", help='''Minimum completeness fraction considered''', type=float, default=1.0e-6)
     parser.add_argument("-Lc", "--Lc", help='''Lower value used for limiting luminosities''', type=float, default=40.0)
@@ -107,7 +108,7 @@ def calc_lum(mag, dL):
     lum = flux * (4.0*np.pi*(3.086e24*dL)**2)
     return np.log10(lum)
 
-def select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=44.0, zc=3.125, maglow=30.0):
+def select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=44.0, zc=3.125, maglow=30.0, corrf=None):
     # zmin, zmax = (wavmin - C.wav_rest) / C.wav_rest, (wavmax - C.wav_rest) / C.wav_rest
     reds = np.random.uniform(zmin, zmax, numgal)
     logL = np.random.uniform(Lc, Lh, numlum)
@@ -116,6 +117,9 @@ def select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=100
     dL = cosmo.luminosity_distance(zc).value
     mags = calc_mags(logL, dL)
     tlf *= comps1df(mags)
+    if corrf is not None: 
+        corrs = corrf(logL)
+        tlf *= 10**corrs
     lums = np.random.choice(logL, size=numgal, p=tlf/tlf.sum())
     # breakpoint()
     return reds, lums, comps1df, dL
@@ -151,14 +155,14 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp'):
     fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz}_al{al}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
-def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', interp_type='cubic', numgal=100000, numlum=100000, Lc=40.0, Lh=44.0, binnum=20, minlumorig=41.5, varying=0, image_dir='TransExp', min_comp_frac=1.0e-6, maglow=30.0):
+def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', interp_type='cubic', numgal=100000, numlum=100000, Lc=40.0, Lh=44.0, binnum=20, minlumorig=41.5, varying=0, image_dir='TransExp', min_comp_frac=1.0e-6, maglow=30.0, corrf=None):
     minlum = max(Lc, minlumorig)
     interp_comp = L.makeCompFunc()
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(numlum))
     zcent = (C.wav_filt - C.wav_rest) / C.wav_rest
     zmin, zmax = zcent - delz, zcent + delz
-    reds, lums, comps1df, dL = select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow)
+    reds, lums, comps1df, dL = select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow, corrf=corrf)
     maxlum = lums.max()
     # dL_full = cosmo.luminosity_distance(reds).value
     # minlums_accept = calc_lum(maglow, dL_full)
@@ -269,14 +273,20 @@ def main():
     # plotTransCurve()
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
-    bin_centers, corr_n501, minlum_use = get_corrections(*this_work, delz=delz, varying=varying, interp_type=interp_type, min_comp_frac=min_comp_frac, Lc=Lc, numlum=numgal, numgal=numgal, binnum=binnum)
-    plot_corr(bin_centers, corr_n501, f'N501CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}.png', image_dir=image_dir)
+    if args.corrf:
+        corrfile = Table.read(op.join(image_dir, 'CorrFull.dat'), format='ascii')
+        logL, corr = corrfile['logL'], corrfile['Corr']
+        corrf = interp1d(logL, corr, kind='linear', bounds_error=False, fill_value=(corr[0], corr[-1]))
+    else: 
+        corrf = None
+    bin_centers, corr_n501, minlum_use = get_corrections(*this_work, delz=delz, varying=varying, interp_type=interp_type, min_comp_frac=min_comp_frac, Lc=Lc, numlum=numgal, numgal=numgal, binnum=binnum, corrf=corrf)
+    plot_corr(bin_centers, corr_n501, f'N501CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.png', image_dir=image_dir)
 
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'N501Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}.dat'), format='ascii')
+    dat.write(op.join(image_dir, f'N501Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.dat'), format='ascii')
 
 if __name__ == '__main__':
-    # main()
-    showAllCorr()
+    main()
+    # showAllCorr()
