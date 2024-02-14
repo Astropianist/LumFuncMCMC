@@ -448,6 +448,31 @@ class LumFuncMCMC:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
 
+    def calclikeLsal(self, alnum=50, lsnum=50):
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+        compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
+        L_all = 10**self.logL_trans_integ.ravel()
+        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        for i, dist in enumerate(self.dist):
+            comps = self.interp_comp((np.repeat(dist, self.logL_trans_integ.size), mags))
+            compgrid[i] = comps.reshape(*self.logL_trans_integ.shape)
+        compG = compgrid * self.trans_conv[None,None]
+
+        ldo = len(self.dist)
+        likes = np.zeros((alnum, lsnum))
+        for i in range(alnum):
+            for j in range(lsnum):
+                tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
+                integ = tlf[None] * compG
+                phiobs = trapz(integ, self.logL_trans_integ[None], axis=2)
+                phiobs /= trapz(phiobs, self.logL, axis=1)
+                likeij = np.zeros(ldo)
+                for k in range(ldo):
+                    likeij[k] = np.interp(self.lum[k], self.logL, phiobs[k])
+                likes[i,j] = np.log(likeij).sum()
+
     def setup_logging(self):
         '''Setup Logging for MCSED
 
@@ -532,7 +557,11 @@ class LumFuncMCMC:
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
         fullint = self.Omega_0/V.sqarcsec * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
-    
+
+    def lnlike_trans_new(self):
+        tlf = TrueLumFuncNoPhi(self.logL_trans_integ, self.sch_al, self.Lstar)
+
+
     def lnlike_norm(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
         lnpart = np.log(trapz(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()

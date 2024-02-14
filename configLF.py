@@ -11,9 +11,9 @@ conv_minsec = 3600
 Omega_0 = Omega_0_sqarcmin*frac_use*conv_minsec
 
 sch_al=-1.49
-sch_al_lims=[-3.0,1.0]
+sch_al_lims=[-3.0,0.0]
 Lstar=42.5
-Lstar_lims=[40.0,45.0]
+Lstar_lims=[41.5,43.5]
 phistar=-2.0
 phistar_lims=[-5.0,-1.0]
 Lc=40.0
