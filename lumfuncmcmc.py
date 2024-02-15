@@ -8,7 +8,7 @@ from scipy.integrate import trapz
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
 from scipy.stats import binned_statistic
 from astropy.table import Table
-import time
+from time import time
 import matplotlib.pyplot as plt
 import corner
 import VmaxLumFunc as V
@@ -137,7 +137,8 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle'):
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
     interp_comp = RGINNExt((dist, mag), comp)
-    return interp_comp
+    interp_comp_simp = RectBivariateSpline(dist, mag, comp)
+    return interp_comp, interp_comp_simp
 
 def cgs2magAB(cgs, wave, dwave):
     Flam = cgs/dwave
@@ -219,7 +220,7 @@ class LumFuncMCMC:
                  phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,
                  nwalkers=100,nsteps=1000,fix_sch_al=False,
                  min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
-                 interp_comp=None,dist_orig=None,dist=None,
+                 interp_comp=None,interp_comp_simp=None,dist_orig=None,dist=None,
                  maglow=26.0,maghigh=19.0,magnum=25,distnum=100,comps=None,
                  size_ln=1001,wav_filt=5015.0,filt_width=73.0,
                  binned_stat_num=50,err_corr=False,wav_rest=1215.67,
@@ -330,9 +331,9 @@ class LumFuncMCMC:
             self.getLumin()
         print("Finished getting fluxes and luminosities")
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
-        if interp_comp is None: self.interp_comp = makeCompFunc()
-        else: self.interp_comp = interp_comp
-        if self.comps is None: self.comps = self.interp_comp((self.dist, self.mags))
+        if interp_comp is None: self.interp_comp, self.interp_comp_simp = makeCompFunc()
+        else: self.interp_comp, self.interp_comp_simp = interp_comp, interp_comp_simp
+        if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         print("Got completeness")
         
         if not self.transsim:
@@ -351,14 +352,15 @@ class LumFuncMCMC:
         maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
         distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
         distg, magg = np.meshgrid(distgrid, maggrid, indexing='ij')
-        comps = self.interp_comp((distg.ravel(), magg.ravel()))
+        comps = self.interp_comp_simp.ev(distg.ravel(), magg.ravel())
         comps = comps.reshape(self.distnum, self.magnum)
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
             func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1]))
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
-        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * magAB2cgs(roots, self.wav_filt, self.filt_width))
-        self.minlum = np.average(minlums)
+        fluxes = magAB2cgs(roots, self.wav_filt, self.filt_width)
+        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * fluxes)
+        self.minflux, self.minlum = np.average(fluxes), np.average(minlums)
         self.minlum_conv = self.minlum - 3.0*self.lum_err_func(self.minlum)
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
@@ -456,22 +458,25 @@ class LumFuncMCMC:
         flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         for i, dist in enumerate(self.dist):
-            comps = self.interp_comp((np.repeat(dist, self.logL_trans_integ.size), mags))
+            if i%400==0: print(f"Got to i={i} for calculating comps grid")
+            comps = self.interp_comp_simp.ev(dist, mags)
             compgrid[i] = comps.reshape(*self.logL_trans_integ.shape)
         compG = compgrid * self.trans_conv[None,None]
 
         ldo = len(self.dist)
         likes = np.zeros((alnum, lsnum))
         for i in range(alnum):
+            print(f"Got to i={i} in main al ls loop")
             for j in range(lsnum):
                 tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
                 integ = tlf[None] * compG
                 phiobs = trapz(integ, self.logL_trans_integ[None], axis=2)
-                phiobs /= trapz(phiobs, self.logL, axis=1)
+                phiobs /= trapz(phiobs, self.logL, axis=1)[:,None]
                 likeij = np.zeros(ldo)
                 for k in range(ldo):
                     likeij[k] = np.interp(self.lum[k], self.logL, phiobs[k])
                 likes[i,j] = np.log(likeij).sum()
+        return als, lss, likes
 
     def setup_logging(self):
         '''Setup Logging for MCSED
@@ -672,9 +677,9 @@ class LumFuncMCMC:
         if self.norm_only: func = 'lnprob_norm'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
-        start = time.time()
+        start = time()
         sampler.run_mcmc(pos, self.nsteps, rstate0=np.random.get_state())
-        end = time.time()
+        end = time()
         elapsed = end - start
         self.log.info("Total time taken: %0.2f s" % elapsed)
         self.log.info("Time taken per step per walker: %0.2f ms" %
@@ -749,6 +754,14 @@ class LumFuncMCMC:
             lf.append(modlum)
         self.medianLF = np.median(np.array(lf), axis=0)
         self.VeffLF()
+
+    def plotPracLumFunc(self, tlft, phiobs):
+        fig, ax = plt.subplots()
+        self.add_LumFunc_plot(ax)
+        ax.plot(self.logL, tlft, 'b-', label='True Luminosity Function')
+        ax.plot(self.logL, phiobs, 'r-', label='Observed Luminosity Function')
+        ax.set_ylim(bottom=1.0e-10)
+        plt.show()
 
     def add_LumFunc_plot(self,ax1):
         """ Set up the plot for the luminosity function """

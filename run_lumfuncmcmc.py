@@ -11,6 +11,7 @@ import VmaxLumFunc as V
 from scipy.optimize import fsolve
 import configLF
 from distutils.dir_util import mkpath
+import pickle
 
 def setup_logging():
     '''Setup Logging for LumFuncMCMC, which allows us to track status of calls and
@@ -139,6 +140,10 @@ def parse_args(argv=None):
     parser.add_argument("-c", "--corr",
                         help='''Whether or not to correct result for the transmission effects''',
                         action='count',default=0)
+    
+    parser.add_argument("-a", "--alls",
+                        help='''Whether or not to create al ls file''',
+                        action='count',default=0)
 
     parser.add_argument("-neb", "--num_env_bins",
                         help='''Number of bins for environment designation''',
@@ -201,7 +206,7 @@ def read_input_file(args):
     
     fluxs, fluxes, dists, distos, compss, denss = [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
-    interp_comp = makeCompFunc()
+    interp_comp, interp_comp_simp = makeCompFunc()
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Surface_density']
     if args.flux_lim<0.0: flux_lim = np.inf
@@ -219,7 +224,7 @@ def read_input_file(args):
         comps = interp_comp((dist[cond_init], mag))
         cond = comps>=args.min_comp_frac
         fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(dens[cond_env][cond_init][cond])
-    return fluxs, fluxes, None, None, dists, interp_comp, distos, compss, dens_vals, denss
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -241,7 +246,7 @@ def main(argv=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, dist_orig, comps, dens_vals, dens = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -276,13 +281,19 @@ def main(argv=None):
                             min_comp_frac=args.min_comp_frac, 
                             field_name=args.field_name, 
                             diff_rand=not args.same_rand, 
-                            interp_comp=interp_comp, dist_orig=dist_orig[i], 
+                            interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, dist_orig=dist_orig[i], 
                             dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref)
         print("Initialized LumFuncMCMC class")
-        breakpoint()
+
+        if args.alls:
+            als, lss, likes = LFmod.calclikeLsal()
+            alls_output = {}
+            alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
+            pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}.pickle', 'wb'))
+            return
 
         if args.veff_only:
             if args.environment: 
