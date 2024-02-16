@@ -285,7 +285,8 @@ def main(argv=None):
                             dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
-                            corrf=corrf, corref=corref, flux_lim=args.flux_lim)
+                            corrf=corrf, corref=corref, flux_lim=args.flux_lim,
+                            logL_width=4.0)
         print("Initialized LumFuncMCMC class")
 
         if args.alls:
@@ -313,6 +314,8 @@ def main(argv=None):
         # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
         fn = '%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1)
         if op.isfile(fn):
+            if args.fix_sch_al: LFmod.nfreeparams = 2
+            else: LFmod.nfreeparams = 3
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
             LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
@@ -347,7 +350,7 @@ def main(argv=None):
         print("Finished fitting model and about to create outputs")
         #### Get desired outputs ####
         if args.output_dict['triangle plot']:
-            LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
+            LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
             print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
         else:
             LFmod.set_median_fit()
@@ -367,7 +370,7 @@ def main(argv=None):
         if args.output_dict['VeffLF']:
             T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                         names=['Luminosity', 'BinLF', 'BinLFErr'])
-            T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1),
+            T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr),
                     overwrite=True, format='ascii.fixed_width_two_line')
             print("Finished writing VeffLF file")
 
@@ -394,7 +397,7 @@ def main(argv=None):
             print("Finished writing settings to file")
     
     if args.environment:
-        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env_split_%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.num_env_bins), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
+        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
 
 if __name__ == '__main__':
     main()

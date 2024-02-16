@@ -35,7 +35,7 @@ param_percentiles = [5, 16, 50, 84, 95]
 
 output_dict = {'parameters'    : True,
                'settings'      : True, 
-               'fitposterior'  : False,
+               'fitposterior'  : True,
                'bestfitLF'     : True,
                'VeffLF'        : True,
                'triangle plot' : True,

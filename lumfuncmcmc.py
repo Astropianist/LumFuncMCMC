@@ -6,8 +6,8 @@ from uncertainties import unumpy, ufloat
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
-from scipy.stats import binned_statistic, poisson
-from math import factorial, lgamma
+from scipy.stats import binned_statistic
+from math import lgamma
 from astropy.table import Table
 from time import time
 import matplotlib.pyplot as plt
@@ -346,7 +346,6 @@ class LumFuncMCMC:
         if lum is None: 
             self.getLumin()
         self.N = self.lum.size
-        self.rv = poisson(self.N)
         print("Finished getting fluxes and luminosities")
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
         if interp_comp is None: self.interp_comp, self.interp_comp_simp = makeCompFunc()
@@ -401,6 +400,7 @@ class LumFuncMCMC:
         self.comps_full = np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
         self.trans_mult = 10**(-self.logLfuncz(self.zarr)) * self.dVdzs
         self.ptransmult = self.Omega_0_sr * self.comps_full[:,None] * self.trans_mult
+        # self.ptransmult = self.Omega_0_sr * self.comps_full * np.average(self.dVdzs)
 
         ########### For convolution part ###########
         # self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln_conv)
@@ -604,13 +604,16 @@ class LumFuncMCMC:
         # time2 = time()
         tlf = TrueLumFunc(self.logL, self.sch_al, self.Lstar, self.phistar)
         integ = tlf[:,None] * self.ptransmult
+        # integ = tlf * self.ptransmult
         # time3 = time()
         num = trapz(trapz(integ, self.zarr), self.logL)
+        # num = self.del_red * trapz(integ, self.logL)
         # time4 = time()
         # like_phi = np.log(self.rv.pmf(np.average(nums).astype(int)))
         like_phi = poisson_lnpmf(int(num), self.N)
         # time5 = time()
         # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4)
+        breakpoint()
         return like_alls + like_phi
 
     def lnlike_norm(self):
@@ -812,17 +815,21 @@ class LumFuncMCMC:
         ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
         ax1.minorticks_on()
 
+    def VeffPlotCommands(self, ax):
+        markersize = self.nfreeparams * 1
+        cond_veff = self.Lavg >= self.minlum
+        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label='Measured LF', markersize=markersize)
+        ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='', markersize=markersize)
+        if self.corrf is not None:
+            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='rs', label='LF without Transmission Correction', markersize=markersize)
+            ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='rs',alpha=0.2, label='', markersize=markersize)
+            ax.legend(loc='best', frameon=False, fontsize='xx-small')
+
     def plotVeff(self, outname, imgtype='png', varying=False):
         self.VeffLF(varying=varying)
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
-        cond_veff = self.Lavg >= self.minlum
-        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label='Measured LF')
-        ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='')
-        if self.corrf is not None:
-            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='rs', label='LF without Transmission Correction')
-            ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='rs',alpha=0.2, label='')
-            ax.legend(loc='best', frameon=False)
+        self.VeffPlotCommands(ax)
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
     def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+'], lflums=None, lfs=None, linestyle_seq=['-', '--', '-.', ':', '-', '--', '-.', ':']):
@@ -853,13 +860,13 @@ class LumFuncMCMC:
             lstars[i] = self.Lstar
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
-            ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1)
+            ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1, label='')
         self.medianLF = np.median(np.array(lf), axis=0)
         self.VeffLF()
-        ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid')
-        cond_veff = self.Lavg >= self.minlum
-        ax1.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^')
-        ax1.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2)
+        if self.corrf is not None: label = 'Best-fit'
+        else: label = ''
+        ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid',label=label)
+        self.VeffPlotCommands(ax1)
         xmin = self.minlum
         xmax = min(max(self.lum),np.median(lstars)+1.0)
         ax1.set_xlim(left=xmin,right=xmax)
