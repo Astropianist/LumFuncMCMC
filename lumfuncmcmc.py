@@ -6,7 +6,8 @@ from uncertainties import unumpy, ufloat
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapz
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
-from scipy.stats import binned_statistic
+from scipy.stats import binned_statistic, poisson
+from math import factorial, lgamma
 from astropy.table import Table
 from time import time
 import matplotlib.pyplot as plt
@@ -26,10 +27,13 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 c = 3.0e18 # Speed of light in Angstroms/s
 num_cores = 20 #In Joel's thingy
 
+def poisson_lnpmf(k, mu):
+    return k*np.log(mu) - lgamma(k+1) - mu
+
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
+def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1215.67, delznum=51, logL_width=None):
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     zs = (lam-wav_rest) / wav_rest
@@ -44,7 +48,10 @@ def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1
         inds_consec = consecutive(inds)
         zs_consec = [zs[indsi] for indsi in inds_consec]
         delz[i] = sum([zsi[-1] - zsi[0] for zsi in zs_consec])
-    return interp1d(zs, del_logL, kind=interp_type, bounds_error=False, fill_value = (del_logL[0], del_logL[-1])), interp1d(del_logL_lin, delz, kind=interp_type, bounds_error=False, fill_value = (0, delz.max()))
+    delzf = interp1d(del_logL_lin, delz, kind=interp_type, bounds_error=False, fill_value = (0, delz.max()))
+    if logL_width is not None: delz_use = delzf(logL_width)
+    else: delz_use = None
+    return interp1d(zs, del_logL, kind=interp_type, bounds_error=False, fill_value = (del_logL[0], del_logL[-1])), delzf, delz_use, zs[np.argmax(tra)]
 
 def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wav_rest=1215.67):
     del_logL = np.log10(tra.max()) - np.log10(tra)
@@ -150,6 +157,12 @@ def magAB2cgs(mag, wave, dwave):
     Flam = Fnu*c/wave**2
     return Flam * dwave
 
+def lum2cgs(lum, DL):
+    return 10**lum / (4.0*np.pi*(3.086e24*DL)**2)
+
+def cgs2lum(cgs, DL):
+    return np.log10(cgs * 4.0*np.pi*(3.086e24*DL)**2)
+
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
 
@@ -227,7 +240,7 @@ class LumFuncMCMC:
                  size_ln_conv=41,size_lprime=51,logL_width=2.0,
                  trans_only=False,norm_only=False,trans_file='N501_with_atm.txt',
                  maxlum=None, minlum=None, transsim=False,
-                 corrf=None, corref=None):
+                 corrf=None, corref=None, flux_lim=15.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -297,6 +310,7 @@ class LumFuncMCMC:
         self.line_plot_name = line_plot_name
         self.Lc, self.Lh = Lc, Lh
         self.Omega_0 = Omega_0
+        self.Omega_0_sr = Omega_0/V.sqarcsec
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
         self.Lstar, self.Lstar_lims = Lstar, Lstar_lims
@@ -317,6 +331,8 @@ class LumFuncMCMC:
         # self.filt_width_eff = self.del_red_eff * self.wav_rest
         self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
         self.corrf, self.corref = corrf, corref
+        self.flux_lim = flux_lim
+        self.logLfuncz, _, self.delz_use, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime, logL_width=self.logL_width)
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -329,12 +345,15 @@ class LumFuncMCMC:
             self.getFluxes()
         if lum is None: 
             self.getLumin()
+        self.N = self.lum.size
+        self.rv = poisson(self.N)
         print("Finished getting fluxes and luminosities")
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
         if interp_comp is None: self.interp_comp, self.interp_comp_simp = makeCompFunc()
         else: self.interp_comp, self.interp_comp_simp = interp_comp, interp_comp_simp
         if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         print("Got completeness")
+        self.getalls()
         
         if not self.transsim:
             self.get1DComp()
@@ -345,6 +364,13 @@ class LumFuncMCMC:
             self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
             print("Finished getting Omega array")
         self.setup_logging()
+
+    def getalls(self):
+        alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}.pickle'
+        with open(alls_file_name, 'rb') as f:
+            alls_output = pickle.load(f)
+        als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
+        self.likeallsf = RectBivariateSpline(als, lss, likes)
 
     def get1DComp(self):
         ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''
@@ -368,6 +394,13 @@ class LumFuncMCMC:
         self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
+
+        ########### Things for new version of transmission convolution ###########
+        cgs = lum2cgs(self.logL, self.DL)
+        mags = cgs2magAB(cgs, self.wav_filt, self.filt_width)
+        self.comps_full = np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
+        self.trans_mult = 10**(-self.logLfuncz(self.zarr)) * self.dVdzs
+        self.ptransmult = self.Omega_0_sr * self.comps_full[:,None] * self.trans_mult
 
         ########### For convolution part ###########
         # self.logL_conv = np.linspace(self.minlum_conv,self.Lh,self.size_ln_conv)
@@ -422,6 +455,8 @@ class LumFuncMCMC:
         self.DL = V.cosmo.luminosity_distance(self.z).value
         self.dVdz = V.cosmo.differential_comoving_volume(self.z).value
         # if self.err_corr or self.trans_only: self.volume = self.dVdz * self.del_red_eff
+        self.zarr = np.linspace(self.ztmax-0.55*self.delz_use, self.ztmax+0.55*self.delz_use, self.size_lprime)
+        self.dVdzs = V.cosmo.differential_comoving_volume(self.zarr).value
         self.volume = self.dVdz * self.del_red # Actual total volume per steradian of the survey (redshift integral separate from luminosity function integral)
 
     def getLumin(self):
@@ -551,21 +586,32 @@ class LumFuncMCMC:
         numer = trapz(trapz_inner*self.norm_vals_norm, self.logL_norm)
         # denom = trapz(trapz_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
-        # fullint = self.Omega_0/V.sqarcsec * self.volume * denom
+        # fullint = self.Omega_0_sr * self.volume * denom
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
-        fullint = self.Omega_0/V.sqarcsec * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        fullint = self.Omega_0_sr * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
         lnpart = np.log(trapz(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
-        fullint = self.Omega_0/V.sqarcsec * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        fullint = self.Omega_0_sr * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans_new(self):
-        tlf = TrueLumFuncNoPhi(self.logL_trans_integ, self.sch_al, self.Lstar)
-
+        # time1 = time()
+        like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
+        # time2 = time()
+        tlf = TrueLumFunc(self.logL, self.sch_al, self.Lstar, self.phistar)
+        integ = tlf[:,None] * self.ptransmult
+        # time3 = time()
+        num = trapz(trapz(integ, self.zarr), self.logL)
+        # time4 = time()
+        # like_phi = np.log(self.rv.pmf(np.average(nums).astype(int)))
+        like_phi = poisson_lnpmf(int(num), self.N)
+        # time5 = time()
+        # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4)
+        return like_alls + like_phi
 
     def lnlike_norm(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
@@ -585,7 +631,6 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike()
-            # pdb.set_trace()
             return lnl+lp
         else:
             return -np.inf
@@ -595,7 +640,6 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike_conv()
-            # pdb.set_trace()
             return lnl+lp
         else:
             return -np.inf
@@ -604,8 +648,7 @@ class LumFuncMCMC:
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
-            lnl = self.lnlike_trans()
-            # pdb.set_trace()
+            lnl = self.lnlike_trans_new()
             return lnl+lp
         else:
             return -np.inf
@@ -615,7 +658,6 @@ class LumFuncMCMC:
         lp = self.lnprior()
         if np.isfinite(lp):
             lnl = self.lnlike_norm()
-            # pdb.set_trace()
             return lnl+lp
         else:
             return -np.inf

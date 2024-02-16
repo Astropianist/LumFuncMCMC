@@ -13,8 +13,6 @@ from scipy.optimize import fsolve
 from mpmath import gammainc
 from astropy.cosmology import LambdaCDM
 import astropy.units as u
-cosmo = LambdaCDM(H0=70 * u.km / u.s / u.Mpc, 
-                  Tcmb0=2.725 * u.K, Om0=0.3,Ode0=.7)
 # import sys
 # import os
 # sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
@@ -42,6 +40,8 @@ H0 = 0.000333562*h #H0=100h km/s/Mpc in units Mpc^-1
 n = 100 #For bootstrap analysis
 # sqarcsec = 4.0*np.pi * (180./np.pi * 3600.0)**2
 sqarcsec = (180./np.pi * 3600.0)**2
+cosmo = LambdaCDM(H0=100*h * u.km / u.s / u.Mpc, 
+                  Tcmb0=2.725 * u.K, Om0=OmegaM,Ode0=OmegaL)
 
 def get_bins(arr, numbins):
     ''' Divide objects into bins with equal number of objects per bin'''

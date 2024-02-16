@@ -125,7 +125,7 @@ def select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=100
     return reds, lums, comps1df, dL
 
 def calc_new_lums(lums, reds, file_name='N501_with_atm.txt', interp_type='cubic'):
-    logLfuncz, delzf = L.getRealLumRed(file_name, interp_type, C.wav_rest)
+    logLfuncz, delzf, _, _ = L.getRealLumRed(file_name, interp_type, C.wav_rest)
     logLs = logLfuncz(reds)
     # mags = calc_mags(logLs, dL)
     # comp = comps1df(mags)

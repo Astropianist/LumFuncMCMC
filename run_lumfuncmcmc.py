@@ -221,7 +221,7 @@ def read_input_file(args):
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
         cond_init = np.logical_and(flux>0.0,flux<flux_lim)
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
-        comps = interp_comp((dist[cond_init], mag))
+        comps = interp_comp_simp.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
         fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(dens[cond_env][cond_init][cond])
     return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss
@@ -285,7 +285,7 @@ def main(argv=None):
                             dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
-                            corrf=corrf, corref=corref)
+                            corrf=corrf, corref=corref, flux_lim=args.flux_lim)
         print("Initialized LumFuncMCMC class")
 
         if args.alls:
