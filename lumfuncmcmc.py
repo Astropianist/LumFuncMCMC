@@ -613,7 +613,6 @@ class LumFuncMCMC:
         like_phi = poisson_lnpmf(int(num), self.N)
         # time5 = time()
         # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4)
-        breakpoint()
         return like_alls + like_phi
 
     def lnlike_norm(self):
