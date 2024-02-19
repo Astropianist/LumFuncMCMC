@@ -288,6 +288,7 @@ def main(argv=None):
                             corrf=corrf, corref=corref, flux_lim=args.flux_lim,
                             logL_width=4.0)
         print("Initialized LumFuncMCMC class")
+        _ = LFmod.get_params()
 
         if args.alls:
             als, lss, likes = LFmod.calclikeLsal()
@@ -314,8 +315,6 @@ def main(argv=None):
         # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
         fn = '%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1)
         if op.isfile(fn):
-            if args.fix_sch_al: LFmod.nfreeparams = 2
-            else: LFmod.nfreeparams = 3
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
             LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
