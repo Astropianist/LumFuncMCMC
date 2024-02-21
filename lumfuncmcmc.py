@@ -33,7 +33,7 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1215.67, delznum=51, logL_width=None):
+def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     zs = (lam-wav_rest) / wav_rest
@@ -49,9 +49,7 @@ def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1
         zs_consec = [zs[indsi] for indsi in inds_consec]
         delz[i] = sum([zsi[-1] - zsi[0] for zsi in zs_consec])
     delzf = interp1d(del_logL_lin, delz, kind=interp_type, bounds_error=False, fill_value = (0, delz.max()))
-    if logL_width is not None: delz_use = delzf(logL_width)
-    else: delz_use = None
-    return interp1d(zs, del_logL, kind=interp_type, bounds_error=False, fill_value = (del_logL[0], del_logL[-1])), delzf, delz_use, zs[np.argmax(tra)]
+    return interp1d(zs, del_logL, kind=interp_type, bounds_error=False, fill_value = (del_logL[0], del_logL[-1])), delzf, zs[np.argmax(tra)]
 
 def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wav_rest=1215.67):
     del_logL = np.log10(tra.max()) - np.log10(tra)
@@ -332,7 +330,8 @@ class LumFuncMCMC:
         self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
         self.corrf, self.corref = corrf, corref
         self.flux_lim = flux_lim
-        self.logLfuncz, self.delzfv2, self.delz_use, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime, logL_width=self.logL_width)
+        self.logLfuncz, self.delzfv2, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime)
+        self.delz_use = self.delzf(self.logL_width)
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -399,9 +398,9 @@ class LumFuncMCMC:
         ########### Things for new version of transmission convolution ###########
         cgs = lum2cgs(self.logL, self.DL)
         mags = cgs2magAB(cgs, self.wav_filt, self.filt_width)
-        self.comps_full = np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
+        self.Omega_full = self.Omega_0_sr * np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
         self.trans_mult = 10**(-self.logLfuncz(self.zarr)) * self.dVdzs
-        self.ptransmult = self.Omega_0_sr * self.comps_full[:,None] * self.trans_mult
+        # self.ptransmult = self.Omega_0_sr * self.comps_full[:,None] * self.trans_mult
         # self.ptransmult = self.Omega_0_sr * self.comps_full * np.average(self.dVdzs)
 
         ########### For convolution part ###########
@@ -612,16 +611,20 @@ class LumFuncMCMC:
         like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
         # time2 = time()
         tlf = TrueLumFunc(self.logL, self.sch_al, self.Lstar, self.phistar)
-        integ = tlf[:,None] * self.ptransmult
-        # integ = tlf * self.ptransmult
+        integ = tlf[:,None] * self.trans_mult
+        zinteg = trapz(integ, self.zarr)
         # time3 = time()
-        num = trapz(trapz(integ, self.zarr), self.logL)
+        num = trapz(zinteg * self.Omega_full, self.logL)
+        # integ = tlf[:,None] * self.ptransmult
+        # integ = tlf * self.ptransmult
+        
+        # num = trapz(trapz(integ, self.zarr), self.logL)
         # num = self.del_red * trapz(integ, self.logL)
         # time4 = time()
         # like_phi = np.log(self.rv.pmf(np.average(nums).astype(int)))
         like_phi = poisson_lnpmf(int(num), self.N)
         # time5 = time()
-        # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4)
+        # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4, "Total:", time5-time1)
         return like_alls + like_phi
 
     def lnlike_norm(self):
