@@ -366,10 +366,12 @@ class LumFuncMCMC:
 
     def getalls(self):
         alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}_better.pickle'
-        with open(alls_file_name, 'rb') as f:
-            alls_output = pickle.load(f)
-        als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
-        self.likeallsf = RectBivariateSpline(als, lss, likes)
+        try:
+            with open(alls_file_name, 'rb') as f:
+                alls_output = pickle.load(f)
+            als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
+            self.likeallsf = RectBivariateSpline(als, lss, likes)
+        except: pass
 
     def get1DComp(self):
         ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''

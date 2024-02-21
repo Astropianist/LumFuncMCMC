@@ -291,7 +291,7 @@ def main(argv=None):
         _ = LFmod.get_params()
 
         if args.alls:
-            als, lss, likes = LFmod.calclikeLsal()
+            als, lss, likes = LFmod.calclikeLsal(alnum=101, lsnum=101)
             alls_output = {}
             alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
             pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'wb'))
