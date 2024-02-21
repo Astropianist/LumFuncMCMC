@@ -332,7 +332,7 @@ class LumFuncMCMC:
         self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
         self.corrf, self.corref = corrf, corref
         self.flux_lim = flux_lim
-        self.logLfuncz, _, self.delz_use, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime, logL_width=self.logL_width)
+        self.logLfuncz, self.delzfv2, self.delz_use, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime, logL_width=self.logL_width)
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -365,7 +365,7 @@ class LumFuncMCMC:
         self.setup_logging()
 
     def getalls(self):
-        alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}.pickle'
+        alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}_better.pickle'
         with open(alls_file_name, 'rb') as f:
             alls_output = pickle.load(f)
         als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
@@ -488,29 +488,36 @@ class LumFuncMCMC:
     def calclikeLsal(self, alnum=50, lsnum=50):
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
-        compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
-        L_all = 10**self.logL_trans_integ.ravel()
-        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
+        compgrid = np.zeros((self.dist.size, self.logL.size))
+        # L_all = 10**self.logL_trans_integ.ravel()
+        flux_cgs = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         for i, dist in enumerate(self.dist):
             if i%400==0: print(f"Got to i={i} for calculating comps grid")
-            comps = self.interp_comp_simp.ev(dist, mags)
-            compgrid[i] = comps.reshape(*self.logL_trans_integ.shape)
-        compG = compgrid * self.trans_conv[None,None]
+            compgrid[i] = self.interp_comp_simp.ev(dist, mags)
+            # compgrid[i] = comps.reshape(*self.logL_trans_integ.shape)
+        # compG = compgrid * self.trans_conv[None,None]
 
         ldo = len(self.dist)
         likes = np.zeros((alnum, lsnum))
         for i in range(alnum):
             print(f"Got to i={i} in main al ls loop")
             for j in range(lsnum):
+                # time1 = time()
                 tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
-                integ = tlf[None] * compG
-                phiobs = trapz(integ, self.logL_trans_integ[None], axis=2)
-                phiobs /= trapz(phiobs, self.logL, axis=1)[:,None]
+                # integ = tlf[None] * compG
+                # phiobs = trapz(integ, self.logL_trans_integ[None], axis=2)
+                phimed = trapz(tlf*self.trans_conv[None], self.logL_trans_integ, axis=1)
+                phiobs = compgrid * phimed
+                phiobsnorm = phiobs / trapz(phiobs, self.logL, axis=1)[:,None]
                 likeij = np.zeros(ldo)
                 for k in range(ldo):
-                    likeij[k] = np.interp(self.lum[k], self.logL, phiobs[k])
+                    likeij[k] = np.interp(self.lum[k], self.logL, phiobsnorm[k])
                 likes[i,j] = np.log(likeij).sum()
+                # time2 = time()
+                # print("Time taken for one iteration:", time2-time1)
+                # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
         return als, lss, likes
 
     def setup_logging(self):
@@ -799,12 +806,17 @@ class LumFuncMCMC:
         self.medianLF = np.median(np.array(lf), axis=0)
         self.VeffLF()
 
-    def plotPracLumFunc(self, tlft, phiobs):
+    def plotPracLumFunc(self, tlft, phiobs, al, ls):
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         ax.plot(self.logL, tlft, 'b-', label='True Luminosity Function')
         ax.plot(self.logL, phiobs, 'r-', label='Observed Luminosity Function')
-        ax.set_ylim(bottom=1.0e-10)
+        ax.text(0, 0, f'Alpha: {al:0.2f}; Lstar: {ls:0.2f}', transform=ax.transAxes)
+        ax.legend(loc='best', frameon=False)
+        miny = 1.0e-8
+        ax.set_ylim(miny, max(tlft.max(), phiobs.max()))
+        cond = np.logical_or(tlft>miny, phiobs>miny)
+        ax.set_xlim(self.logL.min(), self.logL[cond].max())
         plt.show()
 
     def add_LumFunc_plot(self,ax1):
