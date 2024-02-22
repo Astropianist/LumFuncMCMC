@@ -238,7 +238,7 @@ class LumFuncMCMC:
                  size_ln_conv=41,size_lprime=51,logL_width=2.0,
                  trans_only=False,norm_only=False,trans_file='N501_with_atm.txt',
                  maxlum=None, minlum=None, transsim=False,
-                 corrf=None, corref=None, flux_lim=15.0):
+                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -332,6 +332,7 @@ class LumFuncMCMC:
         self.flux_lim = flux_lim
         self.logLfuncz, self.delzfv2, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime)
         self.delz_use = self.delzf(self.logL_width)
+        self.T_EL = T_EL
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -372,34 +373,55 @@ class LumFuncMCMC:
             self.likeallsf = RectBivariateSpline(als, lss, likes)
         except: pass
 
-    def get1DComp(self):
-        ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''
-        print("Setting the computational arrays")
-        maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
-        distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
-        distg, magg = np.meshgrid(distgrid, maggrid, indexing='ij')
-        comps = self.interp_comp_simp.ev(distg.ravel(), magg.ravel())
-        comps = comps.reshape(self.distnum, self.magnum)
+    def getCompInfo(self):
+        self.maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
+        # distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
+        self.distgrid = np.linspace(self.dist_orig.min(), self.dist_orig.max(), num=self.distnum)
+        self.distg, self.magg = np.meshgrid(self.distgrid, self.maggrid, indexing='ij')
+        comps = self.interp_comp_simp.ev(self.distg, self.magg)
+        # comps = comps.reshape(self.distnum, self.magnum)
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
-            func = interp1d(maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1]))
+            func = interp1d(self.maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1]))
             roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
         fluxes = magAB2cgs(roots, self.wav_filt, self.filt_width)
         minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * fluxes)
-        self.minflux, self.minlum = np.average(fluxes), np.average(minlums)
+        self.minlumf = interp1d(self.distgrid, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
+        self.minlum = np.average(self.minlumf(self.dist))
         self.minlum_conv = self.minlum - 3.0*self.lum_err_func(self.minlum)
         comp_avg_dist = np.average(comps,axis=0)
-        self.comp1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
+        self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
         self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
+    def getminlum_z_func(self):
+        comps = self.interp_comp_simp.ev(self.distg, self.magg)
+        roots = np.zeros((self.size_lprime, self.distnum))
+        minlums = np.zeros((self.size_lprime, self.distnum))
+        for i in range(self.size_lprime):
+            if i%10==0: print(f"Gotten to outer loop number {i} in minlum 2d calculation")
+            for j in range(self.distnum):
+                comps_use = self.trans_vals[i] * comps[j]
+                if comps_use.max() > self.min_comp_frac:
+                    func = interp1d(self.maggrid, comps_use, bounds_error=False, fill_value=(comps_use[0], comps_use[-1]))
+                    roots[i,j] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
+            fluxes = magAB2cgs(roots[i], self.wav_filt, self.filt_width)
+            minlumsi = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * fluxes)
+            minlums[i] = np.clip(minlumsi, self.Lc, self.Lh)
+        self.minlum2df = RectBivariateSpline(self.zarr, self.distgrid, minlums)
+
+    def get1DComp(self):
+        ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''
+        print("Setting the computational arrays")
+        self.getCompInfo()
         ########### Things for new version of transmission convolution ###########
         cgs = lum2cgs(self.logL, self.DL)
         mags = cgs2magAB(cgs, self.wav_filt, self.filt_width)
         self.Omega_full = self.Omega_0_sr * np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
-        self.trans_mult = 10**(-self.logLfuncz(self.zarr)) * self.dVdzs
+        self.trans_vals = 10**(-self.logLfuncz(self.zarr)) / self.T_EL
+        self.trans_mult = self.trans_vals * self.dVdzs
         # self.ptransmult = self.Omega_0_sr * self.comps_full[:,None] * self.trans_mult
         # self.ptransmult = self.Omega_0_sr * self.comps_full * np.average(self.dVdzs)
 
@@ -520,6 +542,34 @@ class LumFuncMCMC:
                 # print("Time taken for one iteration:", time2-time1)
                 # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
         return als, lss, likes
+    
+    def calcVgalPhistar(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
+        fac_sr_to_arcmin = np.pi / 180. / 60.
+        integ_mult = 2 * np.pi * fac_sr_to_arcmin**2
+        self.getminlum_z_func()
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+        R = np.sqrt(self.Omega_0_sr/np.pi) # Angular radius of circular field in radians
+        rs = np.linspace(0, R, rnum) / fac_sr_to_arcmin # Get radial position in arcmin
+        vgal = np.zeros((alnum, lsnum))
+        for j in range(lsnum):
+            print(f"Got to j={j} in main al ls loop")
+            logLr = np.zeros((rnum, self.size_ln))
+            for kk in range(rnum):
+                ml = self.minlumf(rs[kk])
+                logLr[kk] = np.linspace(ml, max(ml, lss[j] + exceed), num=self.size_ln)
+            flux_cgs = 10**logLr/(4.0*np.pi*(3.086e24*self.DL)**2)
+            mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+            comps = self.interp_comp_simp.ev(rs[:,None], mags)
+            
+            for i in range(alnum):
+                # time1 = time()
+                tlf = TrueLumFuncNoPhi(logLr, als[i], lss[j])
+                integ = self.trans_vals[:,None,None] * comps[None] * rs[None,:,None] * tlf[None] * self.dVdzs[:,None,None]
+                vgal[i,j] = integ_mult * trapz(trapz(trapz(integ, logLr[None], axis=2), rs), self.zarr)
+                # time2 = time()
+                # print(f"Time to go through one vgal calculation: {time2-time1}")
+        return als, lss, vgal
 
     def setup_logging(self):
         '''Setup Logging for MCSED
@@ -837,8 +887,8 @@ class LumFuncMCMC:
         ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label='Measured LF', markersize=markersize)
         ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='', markersize=markersize)
         if self.corrf is not None:
-            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='rs', label='LF without Transmission Correction', markersize=markersize)
-            ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='rs',alpha=0.2, label='', markersize=markersize)
+            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='cs', label='LF without Transmission Correction', markersize=markersize)
+            ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='cs',alpha=0.2, label='', markersize=markersize)
             ax.legend(loc='best', frameon=False, fontsize='xx-small')
 
     def plotVeff(self, outname, imgtype='png', varying=False):

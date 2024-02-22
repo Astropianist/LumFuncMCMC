@@ -162,7 +162,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL']
 
     for arg_i in arg_inputs:
         try:
@@ -286,15 +286,23 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=args.flux_lim,
-                            logL_width=4.0)
+                            logL_width=4.0, T_EL=args.T_EL)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 
         if args.alls:
-            als, lss, likes = LFmod.calclikeLsal(alnum=101, lsnum=101)
-            alls_output = {}
-            alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
-            pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'wb'))
+            # als, lss, likes = LFmod.calclikeLsal(alnum=args.alnum, lsnum=args.lsnum)
+            # alls_output = {}
+            # alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
+            # pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'wb'))
+
+            alls_input = pickle.load(open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'rb'))
+
+            als, lss, vgal = LFmod.calcVgalPhistar(alnum=args.alnum, lsnum=args.lsnum)
+            assert np.all(als==alls_input['Alphas'])
+            assert np.all(lss==alls_input['Lstars'])
+            alls_input['Vgal'] = vgal
+            pickle.dump(alls_input, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_tel{args.T_EL}_vgal.pickle', 'wb'))
             return
 
         if args.veff_only:

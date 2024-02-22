@@ -28,6 +28,8 @@ del_red = 0.06
 field_name = 'COSMOS'
 maglow, maghigh = 30., 19.
 flux_lim = 15.0
+alnum, lsnum = 101, 101
+T_EL = 1.0
 trans_file = 'N501_with_atm.txt'
 corr_file = 'CorrFull.dat'
 # percentiles of each parameter to report in the output file
