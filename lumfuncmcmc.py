@@ -365,12 +365,13 @@ class LumFuncMCMC:
         self.setup_logging()
 
     def getalls(self):
-        alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}_better.pickle'
+        alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}_tel{self.T_EL}_vgal.pickle'
         try:
             with open(alls_file_name, 'rb') as f:
                 alls_output = pickle.load(f)
-            als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
+            als, lss, likes, vgal = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'], alls_output['Vgal']
             self.likeallsf = RectBivariateSpline(als, lss, likes)
+            self.vgalf = RectBivariateSpline(als, lss, vgal)
         except: pass
 
     def getCompInfo(self):
@@ -676,6 +677,13 @@ class LumFuncMCMC:
         # time5 = time()
         # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4, "Total:", time5-time1)
         return like_alls + like_phi
+    
+    def lnlike_trans_v2(self):
+        like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
+        vgals = self.vgalf.ev(self.sch_al, self.Lstar)
+        num = 10**self.phistar * vgals
+        like_phi = poisson_lnpmf(int(num), self.N)
+        return like_alls + like_phi
 
     def lnlike_norm(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
@@ -712,7 +720,7 @@ class LumFuncMCMC:
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
-            lnl = self.lnlike_trans_new()
+            lnl = self.lnlike_trans_v2()
             return lnl+lp
         else:
             return -np.inf
