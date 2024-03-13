@@ -270,7 +270,7 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_bin{i}.pickle'
+        alls_file_name = f'Likes_alls_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
