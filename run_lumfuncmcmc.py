@@ -135,7 +135,7 @@ def parse_args(argv=None):
     
     parser.add_argument("-e", "--environment",
                         help='''Whether or not to divide sample by environment''',
-                        action='count',default=0)
+                        type=int,default=0)
     
     parser.add_argument("-c", "--corr",
                         help='''Whether or not to correct result for the transmission effects''',
@@ -209,17 +209,20 @@ def read_input_file(args):
     interp_comp, interp_comp_simp = makeCompFunc()
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
+    pc = datfile['Protocluster']
     DL = V.cosmo.luminosity_distance(args.redshift).value
     if args.lum_lim<0.0: flux_lim = np.inf
     else: flux_lim = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
     print("Flux limit:", flux_lim)
-    if args.environment: numbins = args.num_env_bins
+    if args.environment==1: numbins = args.num_env_bins
+    elif args.environment==2: numbins=2
     else: numbins = 1
     pers = np.linspace(0., 100., numbins+1)
     dens_vals = np.percentile(dens, pers)
     dens_vals[-1] += 1.0e-6 # Need to include max value in one of the bins
     for i in range(numbins):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
+        if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
         cond_init = np.logical_and(flux>0.0,flux<flux_lim)
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
@@ -313,9 +316,10 @@ def main(argv=None):
             if args.environment: 
                 LFmod.VeffLF()
                 lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
-                labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
+                if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
+                else: labels_env.append(f'Protocluster: {i}')
                 continue
-            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.corr), imgtype = args.output_dict['image format'])
+            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
             if args.output_dict['VeffLF']:
                 T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                             names=['Luminosity', 'BinLF', 'BinLFErr'])
@@ -388,7 +392,8 @@ def main(argv=None):
         if args.environment:
             lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
             lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
-            labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
+            if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
+            else: labels_env.append(f'Protocluster: {i}')
 
         LFmod.table.add_row([args.line_name] + [0.]*(len(labels)-1))
         LFmod.add_fitinfo_to_table(percentiles)
@@ -408,7 +413,7 @@ def main(argv=None):
             print("Finished writing settings to file")
     
     if args.environment:
-        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
+        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
 
 if __name__ == '__main__':
     main()
