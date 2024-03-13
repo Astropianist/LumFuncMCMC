@@ -83,7 +83,8 @@ def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp'):
     ax.set_yscale('log')
     ax.set_xlabel(r'$\lambda$')
     ax.set_ylabel('Tranmission')
-    fig.savefig(op.join(image_dir,'TransCurve.png'), bbox_inches='tight', dpi=150)
+    pn = file_name.split('.')[0]
+    fig.savefig(op.join(image_dir,f'TransCurve_{pn}.png'), bbox_inches='tight', dpi=150)
 
 def get1DComp(interp_comp, maghigh=19., maglow=30., magnum=25, distnum=100):
     maggrid = np.linspace(maghigh, maglow, magnum)
@@ -270,7 +271,9 @@ def main():
     else: 
         print("Not one of the sanctioned alpha fixed values")
         return
-    # plotTransCurve()
+    # plotTransCurve('N501_Nicole.txt', image_dir='')
+    # plotTransCurve('N419_Nicole.txt', image_dir='')
+    # breakpoint()
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
     if args.corrf:

@@ -33,7 +33,7 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getRealLumRed(file_name='N501_with_atm.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
+def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     zs = (lam-wav_rest) / wav_rest
@@ -99,7 +99,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wa
 
     return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=0.0, bounds_error=False), logL_discrete, interp1d(del_logL_arr_orig, del_z_arr, kind=interp_type, fill_value=(del_z_arr[0],del_z_arr[-1]), bounds_error=False)
 
-def getBoundsTransPDF(logL_width=2.0, file_name='N501_with_atm.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
+def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, trans = trans_dat['lambda'], trans_dat['transmission']
     transf = interp1d(lam, trans, kind='cubic', bounds_error=False, fill_value=0.0)
@@ -224,21 +224,21 @@ def normalFunc(x,mu,sig):
     return 1.0/(np.sqrt(2.0*np.pi)*sig) * np.exp(-(x-mu)**2/(2.0*sig**2))
 
 class LumFuncMCMC:
-    def __init__(self,z,del_red=None,flux=None,flux_e=None,line_name="OIII",
-                 line_plot_name=r'[OIII] $\lambda 5007$',lum=None,
-                 lum_e=None,Omega_0=43200.,nbins=50,nboot=100,sch_al=-1.6,
-                 sch_al_lims=[-3.0,1.0],Lstar=42.5,Lstar_lims=[40.0,45.0],
-                 phistar=-3.0,phistar_lims=[-8.0,5.0],Lc=40.0,Lh=46.0,
-                 nwalkers=100,nsteps=1000,fix_sch_al=False,
-                 min_comp_frac=0.5,diff_rand=True,field_name='COSMOS',
-                 interp_comp=None,interp_comp_simp=None,dist_orig=None,dist=None,
-                 maglow=26.0,maghigh=19.0,magnum=25,distnum=100,comps=None,
-                 size_ln=1001,wav_filt=5015.0,filt_width=73.0,
-                 binned_stat_num=50,err_corr=False,wav_rest=1215.67,
-                 size_ln_conv=41,size_lprime=51,logL_width=2.0,
-                 trans_only=False,norm_only=False,trans_file='N501_with_atm.txt',
+    def __init__(self, z, del_red=None, flux=None, flux_e=None, line_name="OIII",
+                 line_plot_name=r'[OIII] $\lambda 5007$', lum=None,
+                 lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6,
+                 sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0],
+                 phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0,
+                 nwalkers=100, nsteps=1000, fix_sch_al=False,
+                 min_comp_frac=0.5, diff_rand=True, field_name='COSMOS',
+                 interp_comp=None, interp_comp_simp=None, dist_orig=None, dist=None,
+                 maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None,
+                 size_ln=1001, wav_filt=5015.0, filt_width=73.0,
+                 binned_stat_num=50, err_corr=False, wav_rest=1215.67,
+                 size_ln_conv=41, size_lprime=51, logL_width=2.0,
+                 trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
-                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0):
+                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -352,6 +352,7 @@ class LumFuncMCMC:
         else: self.interp_comp, self.interp_comp_simp = interp_comp, interp_comp_simp
         if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         print("Got completeness")
+        self.alls_file_name = alls_file_name
         self.getalls()
         
         if not self.transsim:
@@ -365,9 +366,9 @@ class LumFuncMCMC:
         self.setup_logging()
 
     def getalls(self):
-        alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}_tel{self.T_EL}_vgal.pickle'
+        # alls_file_name = f'Likes_alls_field{self.field_name}_z{self.z}_mcf{self.min_comp_frac}_fl{self.flux_lim}_tel{self.T_EL}_vgal.pickle'
         try:
-            with open(alls_file_name, 'rb') as f:
+            with open(self.alls_file_name, 'rb') as f:
                 alls_output = pickle.load(f)
             als, lss, likes, vgal = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'], alls_output['Vgal']
             self.likeallsf = RectBivariateSpline(als, lss, likes)

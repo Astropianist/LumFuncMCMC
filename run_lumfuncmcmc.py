@@ -93,8 +93,8 @@ def parse_args(argv=None):
                         help='''Minimum completeness fraction considered''',
                         type=float, default=None)  
     
-    parser.add_argument("-fl", "--flux_lim",
-                        help='''Max flux considered''',
+    parser.add_argument("-ll", "--lum_lim",
+                        help='''Max luminosity considered''',
                         type=float, default=None)
     
     parser.add_argument("-z", "--redshift",
@@ -153,16 +153,16 @@ def parse_args(argv=None):
                          help='''Name of line or band for LF measurement''',
                          type=str, default=None)
 
-    parser.add_argument("-tf", "--trans_file",
-                         help='''Name of transmission file''',
-                         type=str, default=None)    
+    parser.add_argument("-tf", "--filt_name",
+                         help='''Filter name''',
+                         type=str, default='N501')    
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'flux_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'lum_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL']
 
     for arg_i in arg_inputs:
         try:
@@ -208,9 +208,11 @@ def read_input_file(args):
     datfile = Table.read(args.filename,format='ascii')
     interp_comp, interp_comp_simp = makeCompFunc()
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
-    dens = datfile['Surface_density']
-    if args.flux_lim<0.0: flux_lim = np.inf
-    else: flux_lim = args.flux_lim
+    dens = datfile['Density']
+    DL = V.cosmo.luminosity_distance(args.redshift).value
+    if args.lum_lim<0.0: flux_lim = np.inf
+    else: flux_lim = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
+    print("Flux limit:", flux_lim)
     if args.environment: numbins = args.num_env_bins
     else: numbins = 1
     pers = np.linspace(0., 100., numbins+1)
@@ -224,7 +226,7 @@ def read_input_file(args):
         comps = interp_comp_simp.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
         fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(dens[cond_env][cond_init][cond])
-    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -241,12 +243,12 @@ def main(argv=None):
     elif args.norm_only: ecnum = 3
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
-    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_fl{int(args.flux_lim)}_ec{ecnum}'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -265,6 +267,8 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
+        alls_file_name = f'Likes_alls_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_bin{i}.pickle'
+        print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
         LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], 
@@ -285,25 +289,25 @@ def main(argv=None):
                             dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
-                            corrf=corrf, corref=corref, flux_lim=args.flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL)
+                            corrf=corrf, corref=corref, flux_lim=flux_lim,
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 
         if args.alls:
-            # als, lss, likes = LFmod.calclikeLsal(alnum=args.alnum, lsnum=args.lsnum)
-            # alls_output = {}
-            # alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
-            # pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'wb'))
+            als, lss, likes = LFmod.calclikeLsal(alnum=args.alnum, lsnum=args.lsnum)
+            alls_output = {}
+            alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
+            # pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_env{args.environment}_bin{i}.pickle', 'wb'))
 
-            alls_input = pickle.load(open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'rb'))
+            # alls_input = pickle.load(open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'rb'))
 
-            als, lss, vgal = LFmod.calcVgalPhistar(alnum=args.alnum, lsnum=args.lsnum)
-            assert np.all(als==alls_input['Alphas'])
-            assert np.all(lss==alls_input['Lstars'])
-            alls_input['Vgal'] = vgal
-            pickle.dump(alls_input, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_tel{args.T_EL}_vgal.pickle', 'wb'))
-            return
+            als2, lss2, vgal = LFmod.calcVgalPhistar(alnum=args.alnum, lsnum=args.lsnum)
+            assert np.all(als==als2)
+            assert np.all(lss==lss2)
+            alls_output['Vgal'] = vgal
+            pickle.dump(alls_output, open(alls_file_name, 'wb'))
+            continue
 
         if args.veff_only:
             if args.environment: 
