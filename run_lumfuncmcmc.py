@@ -278,7 +278,7 @@ def main(argv=None):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
         alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
@@ -320,7 +320,7 @@ def main(argv=None):
             # assert np.all(lss==lss2)
             alls_output = {}
             alls_output['Alphas'], alls_output['Lstars'], alls_output['Vgal'] = als2, lss2, vgal
-            pickle.dump(alls_output, open(alls_file_name, 'wb'))
+            pickle.dump(alls_output, open(vgal_file_name, 'wb'))
             continue
 
         if args.veff_only:
