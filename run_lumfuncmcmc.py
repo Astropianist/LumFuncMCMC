@@ -144,6 +144,10 @@ def parse_args(argv=None):
     parser.add_argument("-a", "--alls",
                         help='''Whether or not to create al ls file''',
                         action='count',default=0)
+    
+    parser.add_argument("-v", "--vgal",
+                        help='''Whether or not to create vgal file''',
+                        action='count',default=0)
 
     parser.add_argument("-neb", "--num_env_bins",
                         help='''Number of bins for environment designation''',
@@ -170,6 +174,8 @@ def parse_args(argv=None):
                 setattr(args, arg_i, getattr(configLF, arg_i))
         except AttributeError:
             setattr(args, arg_i, getattr(configLF, arg_i))
+
+    if args.environment == 2: args.num_env_bins = 2
 
     return args
 
@@ -214,12 +220,12 @@ def read_input_file(args):
     if args.lum_lim<0.0: flux_lim = np.inf
     else: flux_lim = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
     print("Flux limit:", flux_lim)
-    if args.environment==1: numbins = args.num_env_bins
-    elif args.environment==2: numbins=2
+    if args.environment: numbins = args.num_env_bins
     else: numbins = 1
     pers = np.linspace(0., 100., numbins+1)
     dens_vals = np.percentile(dens, pers)
     dens_vals[-1] += 1.0e-6 # Need to include max value in one of the bins
+    weights = np.ones(numbins)
     for i in range(numbins):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
@@ -229,6 +235,7 @@ def read_input_file(args):
         comps = interp_comp_simp.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
         fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(dens[cond_env][cond_init][cond])
+
     return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim
 
 def main(argv=None):
@@ -270,7 +277,8 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
@@ -293,7 +301,7 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name)
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 
@@ -304,11 +312,14 @@ def main(argv=None):
             # pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_env{args.environment}_bin{i}.pickle', 'wb'))
 
             # alls_input = pickle.load(open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'rb'))
-
+            pickle.dump(alls_output, open(alls_file_name, 'wb'))
+            continue
+        if args.vgal:
             als2, lss2, vgal = LFmod.calcVgalPhistar(alnum=args.alnum, lsnum=args.lsnum)
-            assert np.all(als==als2)
-            assert np.all(lss==lss2)
-            alls_output['Vgal'] = vgal
+            # assert np.all(als==als2)
+            # assert np.all(lss==lss2)
+            alls_output = {}
+            alls_output['Alphas'], alls_output['Lstars'], alls_output['Vgal'] = als2, lss2, vgal
             pickle.dump(alls_output, open(alls_file_name, 'wb'))
             continue
 

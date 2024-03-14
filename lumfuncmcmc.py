@@ -238,7 +238,7 @@ class LumFuncMCMC:
                  size_ln_conv=41, size_lprime=51, logL_width=2.0,
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
-                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None):
+                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -352,7 +352,7 @@ class LumFuncMCMC:
         else: self.interp_comp, self.interp_comp_simp = interp_comp, interp_comp_simp
         if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         print("Got completeness")
-        self.alls_file_name = alls_file_name
+        self.alls_file_name, self.vgal_file_name = alls_file_name, vgal_file_name
         self.getalls()
         
         if not self.transsim:
@@ -370,9 +370,13 @@ class LumFuncMCMC:
         try:
             with open(self.alls_file_name, 'rb') as f:
                 alls_output = pickle.load(f)
-            als, lss, likes, vgal = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'], alls_output['Vgal']
+            with open(self.vgal_file_name, 'rb') as f:
+                alls_output2 = pickle.load(f)
+            als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
+            vgal = alls_output2['Vgal']
             self.likeallsf = RectBivariateSpline(als, lss, likes)
             self.vgalf = RectBivariateSpline(als, lss, vgal)
+            del alls_output, alls_output2
         except: pass
 
     def getCompInfo(self):
