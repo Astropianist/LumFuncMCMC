@@ -356,7 +356,8 @@ def main(argv=None):
             if args.environment: 
                 lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
                 lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
-                labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
+                if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
+                else: labels_env.append(f'Protocluster: {i}')
             # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
             #             names=['Luminosity', 'BinLF', 'BinLFErr'])
             # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
