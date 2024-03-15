@@ -210,7 +210,7 @@ def read_input_file(args):
         Interpolation function for completeness
     """
     
-    fluxs, fluxes, dists, distos, compss, denss = [], [], [], [], [], []
+    fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
     interp_comp, interp_comp_simp = makeCompFunc()
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
@@ -234,9 +234,17 @@ def read_input_file(args):
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
         comps = interp_comp_simp.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
-        fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(dens[cond_env][cond_init][cond])
+        densi = dens[cond_env][cond_init][cond]
+        areai = 1/densi
+        vals = np.percentile(areai, [5,95])
+        conda = np.logical_and(areai>=vals[0],areai<=vals[-1])
 
-    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim
+        fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(densi); areas.append(areai[conda].sum())
+    areas = np.array(areas)
+    for i in range(numbins):
+        weights[i] = areas[i]/areas.sum()
+    print("Weights for different density regions:", weights)
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -258,7 +266,7 @@ def main(argv=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -301,7 +309,7 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name)
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i])
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 

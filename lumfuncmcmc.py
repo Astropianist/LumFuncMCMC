@@ -238,7 +238,8 @@ class LumFuncMCMC:
                  size_ln_conv=41, size_lprime=51, logL_width=2.0,
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
-                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None):
+                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
+                 weight=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -332,7 +333,7 @@ class LumFuncMCMC:
         self.flux_lim = flux_lim
         self.logLfuncz, self.delzfv2, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime)
         self.delz_use = self.delzf(self.logL_width)
-        self.T_EL = T_EL
+        self.T_EL, self.weight = T_EL, weight
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -398,7 +399,7 @@ class LumFuncMCMC:
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
-        self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
+        self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
@@ -686,7 +687,7 @@ class LumFuncMCMC:
     def lnlike_trans_v2(self):
         like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
         vgals = self.vgalf.ev(self.sch_al, self.Lstar)
-        num = 10**self.phistar * vgals
+        num = 10**self.phistar * vgals * self.weight
         like_phi = poisson_lnpmf(int(num), self.N)
         return like_alls + like_phi
 
