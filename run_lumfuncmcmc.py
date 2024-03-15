@@ -159,7 +159,7 @@ def parse_args(argv=None):
 
     parser.add_argument("-tf", "--filt_name",
                          help='''Filter name''',
-                         type=str, default='N501')    
+                         type=str, default=None)    
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
@@ -176,6 +176,7 @@ def parse_args(argv=None):
             setattr(args, arg_i, getattr(configLF, arg_i))
 
     if args.environment == 2: args.num_env_bins = 2
+    args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name}_grid_extrap.pickle'
 
     return args
 
@@ -212,7 +213,7 @@ def read_input_file(args):
     
     fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
-    interp_comp, interp_comp_simp = makeCompFunc()
+    interp_comp, interp_comp_simp = makeCompFunc(args.interp_name)
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
     pc = datfile['Protocluster']
