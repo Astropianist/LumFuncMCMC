@@ -831,10 +831,13 @@ class LumFuncMCMC:
         if self.corrf is not None:
             ucorr_orig = unumpy.uarray(self.corrf(self.Lavg), self.corref(self.Lavg))
             ulf = unumpy.uarray(self.lfbinorig, np.sqrt(self.var))
-            ulf_new = 10 ** (unumpy.log10(ulf) + ucorr_orig)
+            cond = self.lfbinorig>0
+            ulf_new = unumpy.uarray(np.zeros_like(self.lfbinorig), np.zeros_like(self.lfbinorig))
+            ulf_new[cond] = 10 ** (unumpy.log10(ulf[cond]) + ucorr_orig[cond])
             self.lfbinorig_orig, self.var_orig = self.lfbinorig*1.0, self.var*1.0 #Want to show original values
             self.lfbinorig = unumpy.nominal_values(ulf_new)
             self.var = unumpy.std_devs(ulf_new) ** 2
+            self.var[~cond] = self.var_orig[~cond] + self.corref(self.Lavg[~cond])**2
 
     def set_median_fit(self,rndsamples=200,lnprobcut=7.5):
         '''
