@@ -177,6 +177,9 @@ def parse_args(argv=None):
 
     if args.environment == 2: args.num_env_bins = 2
     args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name}_grid_extrap.pickle'
+    if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width = 3.124, 5014.0, 77.17
+    elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4093.0, 75.46
+    else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
 
     return args
 
