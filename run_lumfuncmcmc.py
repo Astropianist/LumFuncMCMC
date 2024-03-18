@@ -176,10 +176,11 @@ def parse_args(argv=None):
             setattr(args, arg_i, getattr(configLF, arg_i))
 
     if args.environment == 2: args.num_env_bins = 2
-    args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name}_grid_extrap.pickle'
+    args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
     if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width = 3.124, 5014.0, 77.17
-    elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4093.0, 75.46
+    elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
     else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
+    args.trans_file = f'{args.filt_name}_Nicole.txt'
 
     return args
 
@@ -356,7 +357,12 @@ def main(argv=None):
         if op.isfile(fn):
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
-            LFmod.set_median_fit()
+            if args.output_dict['triangle plot']:
+                LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
+                print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
+            else:
+                LFmod.set_median_fit()
+                print("Finished setting median fit and V_eff parameters")
             # LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
             if args.environment: 
                 lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)

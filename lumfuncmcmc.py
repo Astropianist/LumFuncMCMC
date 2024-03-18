@@ -36,6 +36,8 @@ def consecutive(data, stepsize=1):
 def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
+    cond = tra>0.0
+    lam, tra = lam[cond], tra[cond]
     zs = (lam-wav_rest) / wav_rest
     if 'perfect' in file_name.lower():
         zmin, zmax = zs.min(), zs.max()
@@ -102,6 +104,8 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wa
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, trans = trans_dat['lambda'], trans_dat['transmission']
+    cond = trans>0.0
+    lam, trans = lam[cond], trans[cond]
     transf = interp1d(lam, trans, kind='cubic', bounds_error=False, fill_value=0.0)
     lam_full = np.linspace(lam[0],lam[-1],fulllen)
     trans_max = trans.max()
