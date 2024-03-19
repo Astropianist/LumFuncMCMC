@@ -277,8 +277,9 @@ def main(argv=None):
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
         logL, corr, corre = corrfile['logL'], corrfile['Corr'], corrfile['CorrErr']
-        corrf = interp1d(logL, corr, kind='linear', bounds_error=False, fill_value=(corr[0], corr[-1]))
-        corref = interp1d(logL, corre, kind='linear', bounds_error=False, fill_value=(corre[0], corre[-1]))
+        cond = np.logical_and(np.isfinite(corr), np.isfinite(corre))
+        corrf = interp1d(logL[cond], corr[cond], kind='linear', bounds_error=False, fill_value=(corr[cond][0], corr[cond][-1]))
+        corref = interp1d(logL[cond], corre[cond], kind='linear', bounds_error=False, fill_value=(corre[cond][0], corre[cond][-1]))
     else:
         corrf, corref = None, None
     if not args.veff_only: lumlf, bestlf = [], []
