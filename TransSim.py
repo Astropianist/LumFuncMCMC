@@ -172,7 +172,7 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
     dists = R * np.sqrt(np.random.rand(numlum))
     zcent = (args.wav_filt - C.wav_rest) / C.wav_rest
     zmin, zmax = zcent - delz, zcent + delz
-    reds, lums, comps1df, dL = select_gal(args, al, ls, phis, zmin, zmax, interp_comp_simp, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow, corrf=corrf)
+    reds, lums, comps1df, dL = select_gal(args, al, ls, phis, zmin, zmax, interp_comp_simp, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow, corrf=corrf, zc=args.redshift)
     maxlum = lums.max()
     # dL_full = cosmo.luminosity_distance(reds).value
     # minlums_accept = calc_lum(maglow, dL_full)
@@ -251,11 +251,14 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
 
     return bcs, corrfull, correfull
 
-def showAllCorr():
-    image_dir = 'TransExp'
+def showAllCorr(filter='N501', ngal=2500000):
+    if filter=='N501': alpha, ml = -1.6, 40.48 
+    elif filter=='N419': alpha, ml = -2.0, 40.63
+    else: alpha, ml = -1.2, 40.34
+    image_dir = op.join('TransExp', str(ngal))
     Lcvals = [40.46, 41.0, 42.0, 42.5, 42.8, 43.1]
-    fn_base = 'N501Corr_ng2500000_bn20_al-1.6_delz0.2_ml40.46'
-    fn_base43 = 'N501Corr_ng2500000_bn8_al-1.6_delz0.2_ml40.46'
+    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha}_delz0.1_ml40.46'
+    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha}_delz0.1_ml40.46'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
         if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
