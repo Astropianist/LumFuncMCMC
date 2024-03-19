@@ -253,17 +253,17 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
 
 def showAllCorr(filter='N501', ngal=2500000):
     if filter=='N501': alpha, ml = -1.6, 40.48 
-    elif filter=='N419': alpha, ml = -2.0, 40.63
-    else: alpha, ml = -1.2, 40.34
+    elif filter=='N419': alpha, ml = -2.0, 40.37
+    else: alpha, ml = -1.2, 40.73
     image_dir = op.join('TransExp', str(ngal))
-    Lcvals = [40.46, 41.0, 42.0, 42.5, 42.8, 43.1]
-    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha}_delz0.1_ml40.46'
-    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha}_delz0.1_ml40.46'
+    Lcvals = [40.0, 41.0, 42.0, 42.5, 42.8, 43.1]
+    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz0.1_ml{ml:0.2f}'
+    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz0.1_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
-        if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
-        elif Lc>43: fn = op.join(image_dir, f'{fn_base43}_Lc{Lc}.dat')
-        else: fn = op.join(image_dir, f'{fn_base}_Lc{Lc}.dat')
+        # if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
+        if Lc>43: fn = op.join(image_dir, f'{fn_base43}_Lc{Lc:0.1f}_corr0.dat')
+        else: fn = op.join(image_dir, f'{fn_base}_Lc{Lc:0.1f}_corr0.dat')
         dat = Table.read(fn, format='ascii')
         bc, co, coe = dat['logL'], dat['Corr'], dat['CorrErr']
         bcall.append(bc); corrall.append(co); correall.append(coe)
@@ -272,8 +272,8 @@ def showAllCorr(filter='N501', ngal=2500000):
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, 'CorrFull.dat'), format='ascii')
-    plot_corr(bcall, corrall, plotname='MixCorrsOverall.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}.dat'), format='ascii')
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
@@ -316,5 +316,5 @@ def main():
     dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.dat'), format='ascii')
 
 if __name__ == '__main__':
-    main()
-    # showAllCorr()
+    # main()
+    showAllCorr('N673')

@@ -181,6 +181,7 @@ def parse_args(argv=None):
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
     else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
     args.trans_file = f'{args.filt_name}_Nicole.txt'
+    args.corr_file = f'CorrFull{args.filt_name}.dat'
 
     return args
 
