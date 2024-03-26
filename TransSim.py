@@ -282,18 +282,17 @@ def main():
     mkpath(image_dir)
     alpha_fixed, delz, varying, Lc, numgal, binnum = args.alpha_fixed, args.delz, args.varying, args.Lc, args.numgal, args.binnum
     if filter=='N501':
-        if alpha_fixed==-1.6: this_work = [alpha_fixed, 42.435, -2.701]
-        elif alpha_fixed==-1.8: this_work = [alpha_fixed, 42.513, -2.856]
+        if alpha_fixed==-1.6: this_work = [alpha_fixed, 42.47, -2.74]
         else: 
             print("Not one of the sanctioned alpha fixed values")
             return
     elif filter=='N419':
-        if alpha_fixed==-2.0: this_work = [alpha_fixed, 42.54, -3.13]
+        if alpha_fixed==-2.0: this_work = [alpha_fixed, 42.56, -3.19]
         else: 
             print("Not one of the sanctioned alpha fixed values")
             return
     else:
-        if alpha_fixed==-1.2: this_work = [alpha_fixed, 42.58, -2.79]
+        if alpha_fixed==-1.1: this_work = [alpha_fixed, 42.53, -2.71]
         else: 
             print("Not one of the sanctioned alpha fixed values")
             return
