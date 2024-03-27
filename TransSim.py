@@ -216,6 +216,8 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
 
 def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None):
     mkpath(image_dir)
+    bcmin = np.inf
+    bcmax = -np.inf
     fig, ax = plt.subplots()
     if corrfull is not None: 
         col = next(orig_palette)
@@ -224,10 +226,14 @@ def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs
     if type(bin_centers)==list:
         for bc, co, coe, lc in zip(bin_centers, corr, corre, lcs):
             ax.errorbar(bc, co, coe, color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
+            bcmin, bcmax = min(bcmin, bc.min()), max(bcmax, bc.max())
         ax.legend(loc='best', frameon=False)
-    else: ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
+    else: 
+        ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
+        bcmin, bcmax = bin_centers.min(), bin_centers.max()
     ax.set_xlabel('Log Luminosity (erg/s)')
     ax.set_ylabel('Log Correction (True/Obs)')
+    ax.set_xlim(bcmin, bcmax)
     fig.savefig(op.join(image_dir, plotname), bbox_inches='tight', dpi=300)
     plt.close('all')
 
@@ -254,7 +260,7 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
 def showAllCorr(filter='N501', ngal=2500000):
     if filter=='N501': alpha, ml = -1.6, 40.48 
     elif filter=='N419': alpha, ml = -2.0, 40.37
-    else: alpha, ml = -1.2, 40.73
+    else: alpha, ml = -1.1, 40.73
     image_dir = op.join('TransExp', str(ngal))
     Lcvals = [40.0, 41.0, 42.0, 42.5, 42.8, 43.1]
     fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz0.1_ml{ml:0.2f}'
@@ -272,7 +278,7 @@ def showAllCorr(filter='N501', ngal=2500000):
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, f'CorrFull{filter}.dat'), format='ascii')
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}.dat'), format='ascii', overwrite=True)
     plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
@@ -312,8 +318,8 @@ def main():
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.dat'), format='ascii')
+    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
     # main()
-    showAllCorr('N673')
+    showAllCorr('N501')
