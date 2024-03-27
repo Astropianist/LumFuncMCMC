@@ -96,6 +96,40 @@ def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
     ax.legend(loc='best', frameon=False)
     fig.savefig("CosmicEvolCOSMOS.png", bbox_inches='tight', dpi=300)
 
+def plotDensityEvol(fit_names, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2):
+    logL = np.linspace(Lmin, Lmax, Lnum)
+    fitpostall = []
+    ns = int(fit_names[0].split('/')[2])
+    cols = []
+    for i in range(len(reds)):
+        assert len(dens_vals[i]) == ns + 1
+        fiti = []
+        for j in range(ns):
+            if i==0: cols.append(next(orig_palette))
+            fitf = fit_names[i].replace('bin1', f'bin{j+1}')
+            dat = Table.read(fitf,format='ascii')
+            samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+            fiti.append(getnsamples(samples))
+            del dat
+        fitpostall.append(fiti)
+    fig, ax = plt.subplots(nrows=1, ncols=len(reds), sharex=True, sharey=True, figsize=(12, 4))
+    for i, z in enumerate(reds):
+        if i==0: no_ylabel=False
+        else: no_ylabel=True
+        add_LumFunc_plot(ax[i], no_ylabel=no_ylabel)
+        for j in range(ns):
+            lf, lfbest = getSamples(logL, fitpostall[i][j])
+            ax[i].plot(logL, lfbest, linestyle='-', color=cols[j], label=fr'{dens_vals[i][j]:0.2f} $\leq \sigma <$ {dens_vals[i][j+1]:0.2f}')
+            for lfi in lf:
+                ax[i].plot(logL, lfi, linestyle='-', color=cols[j], alpha=0.05, label='')
+        ax[i].text(0.5, 0.98, fr'$z={z}$', horizontalalignment='center', verticalalignment='top', transform=ax[i].transAxes)
+        ax[i].legend(loc='best', frameon=False, fontsize='small')
+    ax[0].set_xlim(Lmin, Lmax)
+    ax[0].set_ylim(ymin, ymax)
+    plt.tight_layout()
+    
+    fig.savefig("CosmicDensEvolCOSMOS.png", bbox_inches='tight', dpi=300)
+
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
 
@@ -211,12 +245,13 @@ def main(alpha_fixed=-1.6):
     plotStuff(logLVs, dat_veff['BinLF'], dat_veff['BinLFErr'], logL[inds], bf[inds], sobral1=sobral_sc4k, sobral2=sobral_ssc4k, this_work=None)
 
 def NewProc():
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', '2', 'N419_ll_431_pc_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env2_bin2.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', '2', 'N501_ll_431_pc_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env2_bin2.dat')
-    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', '2', 'N673_ll_431_pc_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env2_bin2.dat')
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', '4', 'N419_ll_431_e4_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env1_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', '4', 'N501_ll_431_e4_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env1_bin1.dat')
+    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', '4', 'N673_ll_431_e4_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env1_bin1.dat')
     reds = [2.4, 3.1, 4.5]
-    plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
+    # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
     # plotStuffNew([fits_z24, fits_z31, fits_z45], reds)
+    plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
 
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
