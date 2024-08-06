@@ -218,14 +218,16 @@ def read_input_file(args):
     
     fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
-    interp_comp, interp_comp_simp = makeCompFunc(args.interp_name)
+    interp_comp, interp_comp_simp, cgscontam = makeCompFunc(args.interp_name)
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
     pc = datfile['Protocluster']
     DL = V.cosmo.luminosity_distance(args.redshift).value
     if args.lum_lim<0.0: flux_lim = np.inf
     else: flux_lim = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
-    print("Flux limit:", flux_lim)
+    print("Original flux limit:", flux_lim)
+    flux_lim = min(flux_lim, cgscontam*1.0e17)
+    print("Final flux limit:", flux_lim)
     if args.environment: numbins = args.num_env_bins
     else: numbins = 1
     pers = np.linspace(0., 100., numbins+1)
@@ -250,7 +252,7 @@ def read_input_file(args):
     for i in range(numbins):
         weights[i] = areas[i]/areas.sum()
     print("Weights for different density regions:", weights)
-    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -272,7 +274,7 @@ def main(argv=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -316,7 +318,7 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin)
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 

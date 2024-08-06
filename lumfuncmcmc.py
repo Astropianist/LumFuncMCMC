@@ -327,7 +327,7 @@ class LumFuncMCMC:
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
                  corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
-                 weight=None, contam_lim=0.01, contambin=5):
+                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -427,18 +427,23 @@ class LumFuncMCMC:
         self.setDLdVdz()
         print("Finished DL, dVdz")
 
-        if interp_comp is None: self.interp_comp, self.interp_comp_simp, self.cgscontam = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim)
-        else: self.interp_comp, self.interp_comp_simp, self.cgscontam = interp_comp, interp_comp_simp, 1.0 #Giant max flux in case of not calculating value
+        if interp_comp is None: 
+            self.interp_comp, self.interp_comp_simp, self.cgscontam = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim)
+            self.lumcontam = cgs2lum(self.cgscontam, self.DL)
+            if flux is not None: condcontam = flux <= self.cgscontam
+            else: condcontam = lum <= self.lumcontam   
+        else: 
+            self.interp_comp, self.interp_comp_simp, self.cgscontam = interp_comp, interp_comp_simp, cgscontam #Giant max flux in case of not calculating value
+            # Have already taken care of the condition in this case
+            if flux is not None: condcontam = flux < np.inf
+            else: condcontam = lum < np.inf
         if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         print("Got completeness")
         if flux is not None: 
-            condcontam = flux <= self.cgscontam
             self.flux = 1.0e-17*flux[condcontam]
             if flux_e is not None:
                 self.flux_e = 1.0e-17*flux_e[condcontam]
         else:
-            self.lumcontam = cgs2lum(self.cgscontam, self.DL)
-            condcontam = lum <= self.lumcontam
             self.lum, self.lum_e = lum[condcontam], lum_e[condcontam]
             self.getFluxes()
         if lum is None: 
