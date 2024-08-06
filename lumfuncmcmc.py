@@ -212,17 +212,16 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     # plt.ylabel('Distance from center of field')
     cf, chf, clf, cgscontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim)
     interp_comp = RGINNExt((dist, mag), comp)
-    interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp)
+    interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
     distcontam = np.linspace(dist.min(), dist.max(), distnum)
     magcontam = np.linspace(mag.min(), mag.max(), magnum)
     dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
     cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
     contampart = 1.0/cf(cgs17)
-    bad = np.where(np.isinf(contampart))[0]
-    contampart[bad] = 1.0e8
+    contampart[np.isinf(contampart)] = 1.0e8
 
     vals = interp_comp_simp_orig.ev(dc, mc) * contampart
-    interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals)
+    interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals, kx=1, ky=1)
     # fig2 = plt.figure()
     # sc = plt.contourf(magcontam, distcontam, np.log10(vals), levels=10)
     # plt.colorbar(sc, label='Modified completeness')
@@ -230,7 +229,6 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     # plt.ylabel('Distance from center of field')
     # plt.show()
     # plt.close('all')
-    # breakpoint()
     return interp_comp, interp_comp_simp, cgscontam
 
 def cgs2magAB(cgs, wave, dwave):
