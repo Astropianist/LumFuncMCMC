@@ -166,7 +166,7 @@ def parse_args(argv=None):
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'lum_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'lum_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL', 'contam_lim', 'contambin']
 
     for arg_i in arg_inputs:
         try:
@@ -267,7 +267,7 @@ def main(argv=None):
     elif args.norm_only: ecnum = 3
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
-    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
     
@@ -292,8 +292,8 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
@@ -316,7 +316,7 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i])
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 

@@ -1,4 +1,5 @@
 import numpy as np 
+from scipy.integrate import quad
 from uncertainties import unumpy, ufloat
 import matplotlib.pyplot as plt 
 from astropy.table import Table 
@@ -20,7 +21,56 @@ colors_overall += ["cloudy blue", "browny orange", "dark sea green"]
 sns.set_palette(sns.xkcd_palette(colors_overall))
 orig_palette_arr = sns.color_palette()
 orig_palette = cycle(tuple(orig_palette_arr))
-markers = cycle(tuple(['o','^','*','s','+','v','<','>']))
+markers_overall = ['o','^','*','s','+','v','<','>', '1', '8', 'P']
+markers = cycle(tuple(markers_overall))
+
+Lsun = 3.8e33
+
+def plotLLComp(orig_file, ll_min=42.8, ll_max=44.0, num_files=13, sm=3, sM=30):
+    lls = np.linspace(ll_min, ll_max, num_files)
+    fig, ax = plt.subplots()
+    al, ls, phis = [], [], []
+    for ll in lls:
+        file_name = orig_file.replace('43.2', f'{ll:0.1f}')
+        dat = Table.read(file_name, format='ascii')
+        al.append(dat[r'$\alpha$_50'])
+        ls.append(dat[r'$\log L_*$_50'])
+        phis.append(dat[r'$\log \phi_*$_50'])
+        del dat
+    al, ls, phis = np.array(al), np.array(ls), np.array(phis)
+    sizes = (sM-sm)/(phis.max() - phis.min()) * (phis-phis.min()) + sm
+    sc = ax.scatter(al, ls, c=lls, s=sizes)
+    plt.colorbar(sc, label='Upper luminosity cutoff')
+    ax.set_xlabel(r'$\alpha$')
+    ax.set_ylabel(r'$\log L_*$')
+    fig.savefig('N673_LLComp.png', bbox_inches='tight', dpi=300)
+
+def getIntegs(al, ls, phis, llow=42.0, lhigh=46.0):
+    ans_num, _ = quad(lambda x: TrueLumFunc(x, al, ls, phis), llow, lhigh)
+    ans_lum, _ = quad(lambda x: 10**x * TrueLumFunc(x, al, ls, phis), llow, lhigh)
+    return ans_num, ans_lum
+
+def getIntegsv2(al, ls, phis, llow=42.0, lhigh=46.0):
+    ans_num, _ = quad(lambda x: schechter(x, al, 10**phis, 10**ls), 10**llow, 10**lhigh)
+    ans_lum, _ = quad(lambda x: x * schechter(x, al, 10**phis, 10**ls), 10**llow, 10**lhigh)
+    return ans_num, ans_lum
+
+def getIntegInfo(fitpost, rndsamples=100, llow=42.0, lhigh=46.0):
+    dat = Table.read(fitpost,format='ascii')
+    samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+    del dat
+    nsamples = getnsamples(samples)
+    ind = np.random.randint(0, nsamples.shape[0], rndsamples)
+    nums, lums = np.zeros(rndsamples), np.zeros(rndsamples)
+    for i, indi in enumerate(ind):
+        nums[i], lums[i] = getIntegsv2(nsamples[indi, 2], nsamples[indi, 0], nsamples[indi, 1], llow=llow, lhigh=lhigh)
+    lums /= Lsun
+    numvals = np.percentile(np.log10(nums), [16,50,84])
+    lumvals = np.percentile(np.log10(lums), [16,50,84])
+    print("[16th, 50th, 84th] percentile of log integral over number of galaxies: ", numvals)
+    print("[16th, 50th, 84th] percentile of log integral over luminosity of galaxies: ", lumvals)
+    print("Log Number: upper and lower errors:", numvals[2]-numvals[1], numvals[1]-numvals[0])
+    print("Log Luminosity: upper and lower errors:", lumvals[2]-lumvals[1], lumvals[1]-lumvals[0])
 
 def add_LumFunc_plot(ax1, no_ylabel=False):
     """ Set up the plot for the luminosity function """
@@ -137,12 +187,17 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
     logL = np.linspace(Lmin, Lmax, Lnum)
     sob = fits.getdata(sobfile, 1)
     sobs = sob['Sample']
-    logLsob, phisob = sob['log_Lum_bin'], 10**sob['Phi_final']
+    logLsob, logLsobe, phisob = sob['log_Lum_bin'], sob['delta_bin'], 10**sob['Phi_final']
     phiseu, phisel = calc_phi_err(phisob, sob['Phi_final_err_up']), calc_phi_err(phisob, sob['Phi_final_err_down'])
     sobo = fits.getdata(sobothers, 1)
     zavg = (sobo['z_min'] + sobo['z_max']) / 2
-    ref, logLso, phiso = sobo['Reference'], sobo['LogL'], 10**sobo['LogPhi']
+    ref, logLso, logLsoe, phiso = sobo['Reference'], sobo['LogL'], sobo['D_LogL'], 10**sobo['LogPhi']
     phisoeu, phisoel = calc_phi_err(phiso, sobo['D_LogPhi_up']), calc_phi_err(phiso, sobo['D_LogPhi_down'])
+    refuniq = np.unique(ref)
+    colref, markref = [], []
+    for refi in refuniq:
+        colref.append(next(orig_palette))
+        markref.append(next(markers))
     samples = []
     for fpf in fitpostfs:
         dat = Table.read(fpf,format='ascii')
@@ -160,15 +215,16 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
         for lfi in lf:
             ax[i].plot(logL, lfi, linestyle='-', color=coli, alpha=0.05, label='')
         condsob = sobs == sobkeys[i]
-        ax[i].errorbar(logLsob[condsob], phisob[condsob], yerr=np.row_stack((phisel[condsob], phiseu[condsob])), linestyle='none', marker=next(markers), color=next(orig_palette), label='Sobral+2018')
+        ax[i].errorbar(logLsob[condsob], phisob[condsob], yerr=np.row_stack((phisel[condsob], phiseu[condsob])), xerr=logLsobe[condsob]/2, linestyle='none', marker=markers_overall[0], color='k', label='Sobral+2018', capsize=2)
         condsobo = abs(zavg-z)<maxdiff
         refsj = np.unique(ref[condsobo])
         for rj in refsj:
             if rj=='Konno+2016': continue
             if rj=='Konno+2016_Sobral+2017': rjlab = r'Konno+2016$^{\rm CC}$'
             else: rjlab = rj
+            ind = np.where(refuniq==rj)[0][0]
             condsofull = np.logical_and(condsobo, ref==rj)
-            ax[i].errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), linestyle='none', marker=next(markers), color=next(orig_palette), label=rjlab)
+            ax[i].errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=colref[ind], label=rjlab, capsize=2)
         # ax[i].vlines(llims[i], ymin, ymax, colors='k', label='')
         condvi = logL>=llims[i]
         ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
@@ -222,6 +278,10 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     if type(alpha)==float: return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
     else: return unumpy.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*unumpy.exp(-10**(logL-logLstar))
 
+def schechter(L, al, phistar, Lstar):
+    """ Schechter function """
+    return phistar/Lstar * (L/Lstar)**al * np.exp(-L/Lstar)
+
 def main(alpha_fixed=-1.6):
     run_use = f'ODIN_fsa0_sa{alpha_fixed:0.2f}_mcf50_ll43.1_ec2'
     prefix = 'final_ll_431_all_'
@@ -245,13 +305,18 @@ def main(alpha_fixed=-1.6):
     plotStuff(logLVs, dat_veff['BinLF'], dat_veff['BinLFErr'], logL[inds], bf[inds], sobral1=sobral_sc4k, sobral2=sobral_ssc4k, this_work=None)
 
 def NewProc():
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', '4', 'N419_ll_431_e4_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env1_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', '4', 'N501_ll_431_e4_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env1_bin1.dat')
-    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', '4', 'N673_ll_431_e4_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env1_bin1.dat')
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', 'N419_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2', 'N501_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]
     # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
     # plotStuffNew([fits_z24, fits_z31, fits_z45], reds)
-    plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
+    # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
+    getIntegInfo(fits_z24, llow=42.0)
+    getIntegInfo(fits_z31, llow=42.0)
+    getIntegInfo(fits_z45, llow=42.0)
+    # plotLLComp(dat_z45)
 
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)

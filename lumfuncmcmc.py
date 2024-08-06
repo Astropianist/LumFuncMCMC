@@ -33,6 +33,66 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
+def getContamination(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+    file_name = file_name_orig.replace('N419', filter)
+    full_cat = full_cat_orig.replace('N419', filter)
+    # cat_noagn = cat_noagn_orig.replace('N419', filter)
+    full_catd = Table.read(full_cat, format='ascii')
+    # cat_noagnd = Table.read(cat_noagn, format='ascii')
+    galf = full_catd['Galaxy_name']# , cat_noagnd['Galaxy_name']
+    # ids_bad_old = np.setdiff1d(galf, galn)
+    dat = Table.read(file_name, format='csv')
+    ids_desi, flux, z, ps, cl = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class']
+    # breakpoint()
+    allnot = np.where(np.logical_or(dat['P/S'].mask==True, dat['P/S']=='p'))
+    # intersect, inds_not, cat_not = np.intersect1d(ids_desi[allnot], ids_bad_old, return_indices=True)
+    speclae = np.where(np.logical_and(ps=='s', cl=='LAE'))[0]
+    allspec = np.where(ps=='s')[0]
+    # allspec = np.concatenate((allspec, inds_not))
+    pois = Table.read(errtab, format='ascii')
+    num, lb, hb = pois['Num'], pois['LowBound'], pois['HighBound']
+    flux_lae = flux[speclae]
+    flux_all = flux[allspec]
+    # print("Total LAE sample size:", flux_lae.size)
+    # print("Total sample size:", flux_all.size)
+    pers = np.linspace(0, 100, binnum+1)
+    bin_edges = np.percentile(flux_all, pers)
+    # bin_edges = np.geomspace(flux_all.min(), flux_all.max(), binnum+1)
+    # bin_edges[0] = min(bin_edges[0], flux_all.min())
+    # bin_edges[-1] = max(bin_edges[-1], flux_all.max())
+    bin_edges[-1] += 1.0e-6 # Want to make sure the last flux is included
+    bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.0
+    contam, contaml, contamh = np.zeros(binnum), np.zeros(binnum), np.zeros(binnum)
+    for i in range(binnum):
+        cond = np.logical_and(flux_all>=bin_edges[i], flux_all<bin_edges[i+1])
+        cond_lae = np.logical_and(flux_lae>=bin_edges[i], flux_lae<bin_edges[i+1])
+        fls, fas = flux_lae[cond_lae].size, flux_all[cond].size
+        # print(f"For bin {i}: fls = {fls}")
+        # for j in range(fls):
+        #     idsi = ids_desi[speclae][cond_lae][j]
+        #     if idsi in ids_bad_old: 
+        #         print(f"Galaxy ID {idsi} in old bad list but not new DESI-based list")
+        #         fls -= 1
+        contam[i] = fls/fas
+        cond_pois = np.where(fls==num)[0][0]
+        contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
+        if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
+        if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
+    contamf = interp1d(bin_centers, contam, kind=interp_type, fill_value=(1.0, contam[-1]), bounds_error=False)
+    contamhf = interp1d(bin_centers, contamh, kind=interp_type, fill_value=(0.0, contamh[-1]), bounds_error=False)
+    contamlf = interp1d(bin_centers, contaml, kind=interp_type, fill_value=(0.0, contaml[-1]), bounds_error=False)
+
+    test_contam = np.linspace(bin_edges[0], bin_edges[-1], test_contam_num)
+    indcontam = np.argmin(np.abs(contamf(test_contam) - contam_lim))
+
+    # plt.figure()
+    # plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
+    # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
+    # plt.plot(bin_check, contamf(bin_check), 'r')
+    # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    # plt.show()
+    return contamf, contamhf, contamlf, test_contam[indcontam]*1.0e-17
+
 def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
@@ -141,13 +201,37 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle'):
+def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
+    # fig = plt.figure()
+    # sc = plt.contourf(mag, dist, np.log10(comp), levels=10)
+    # plt.colorbar(sc, label='Modified completeness')
+    # plt.xlabel('Magnitude')
+    # plt.ylabel('Distance from center of field')
+    cf, chf, clf, cgscontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim)
     interp_comp = RGINNExt((dist, mag), comp)
-    interp_comp_simp = RectBivariateSpline(dist, mag, comp)
-    return interp_comp, interp_comp_simp
+    interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp)
+    distcontam = np.linspace(dist.min(), dist.max(), distnum)
+    magcontam = np.linspace(mag.min(), mag.max(), magnum)
+    dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
+    cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
+    contampart = 1.0/cf(cgs17)
+    bad = np.where(np.isinf(contampart))[0]
+    contampart[bad] = 1.0e8
+
+    vals = interp_comp_simp_orig.ev(dc, mc) * contampart
+    interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals)
+    # fig2 = plt.figure()
+    # sc = plt.contourf(magcontam, distcontam, np.log10(vals), levels=10)
+    # plt.colorbar(sc, label='Modified completeness')
+    # plt.xlabel('Magnitude')
+    # plt.ylabel('Distance from center of field')
+    # plt.show()
+    # plt.close('all')
+    # breakpoint()
+    return interp_comp, interp_comp_simp, cgscontam
 
 def cgs2magAB(cgs, wave, dwave):
     Flam = cgs/dwave
@@ -243,7 +327,7 @@ class LumFuncMCMC:
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
                  corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
-                 weight=None):
+                 weight=None, contam_lim=0.01, contambin=5):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -336,27 +420,34 @@ class LumFuncMCMC:
         self.corrf, self.corref = corrf, corref
         self.flux_lim = flux_lim
         self.logLfuncz, self.delzfv2, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime)
+        self.filt_name = trans_file.split('_')[0]
         self.delz_use = self.delzf(self.logL_width)
         self.T_EL, self.weight = T_EL, weight
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
+
+        if interp_comp is None: self.interp_comp, self.interp_comp_simp, self.cgscontam = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim)
+        else: self.interp_comp, self.interp_comp_simp, self.cgscontam = interp_comp, interp_comp_simp, 1.0 #Giant max flux in case of not calculating value
+        if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
+        print("Got completeness")
         if flux is not None: 
-            self.flux = 1.0e-17*flux
+            condcontam = flux <= self.cgscontam
+            self.flux = 1.0e-17*flux[condcontam]
             if flux_e is not None:
-                self.flux_e = 1.0e-17*flux_e
+                self.flux_e = 1.0e-17*flux_e[condcontam]
         else:
-            self.lum, self.lum_e = lum, lum_e
+            self.lumcontam = cgs2lum(self.cgscontam, self.DL)
+            condcontam = lum <= self.lumcontam
+            self.lum, self.lum_e = lum[condcontam], lum_e[condcontam]
             self.getFluxes()
         if lum is None: 
             self.getLumin()
         self.N = self.lum.size
         print("Finished getting fluxes and luminosities")
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
-        if interp_comp is None: self.interp_comp, self.interp_comp_simp = makeCompFunc()
-        else: self.interp_comp, self.interp_comp_simp = interp_comp, interp_comp_simp
-        if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
-        print("Got completeness")
+        
+        # Modify fluxes based on contamination limit
         self.alls_file_name, self.vgal_file_name = alls_file_name, vgal_file_name
         self.getalls()
         
