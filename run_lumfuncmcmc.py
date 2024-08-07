@@ -269,7 +269,7 @@ def main(argv=None):
     elif args.norm_only: ecnum = 3
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
-    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
     
@@ -294,8 +294,8 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam_{args.contam_lim}.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class

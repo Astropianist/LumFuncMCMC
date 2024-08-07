@@ -141,6 +141,11 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wa
     # pdf_arr[0] = flat_frac/(1.0-flat_frac) * integ / (del_logL_arr[1]-del_logL_arr[0])
     pdf_arr[0] = flat_frac / (del_logL_arr[1]-del_logL_arr[0])
     pdf_arr /= trapz(pdf_arr, del_logL_arr) # Just normalize again since the trapezoid rule is not a perfect integrator by any means
+
+    # If in fact there is no flat top part, we will run into issues
+    if pdf_arr[0]<1.0e-10: 
+        pdf_arr = np.delete(pdf_arr, 0)
+        del_logL_arr = np.delete(del_logL_arr, 0)
     log_pdf = np.log10(pdf_arr)
     diff_log = np.hstack([abs(np.diff(log_pdf)),0.0])
     diff_cumsum = np.cumsum(diff_log)/diff_log.sum() #Normalized cumulative sum
@@ -159,7 +164,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wa
     # pdf_even_space = np.linspace(pdf_arr.min(), pdf_arr.max(), num_discrete)
     # logL_discrete = f_reverse(pdf_even_space)
 
-    return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=0.0, bounds_error=False), logL_discrete, interp1d(del_logL_arr_orig, del_z_arr, kind=interp_type, fill_value=(del_z_arr[0],del_z_arr[-1]), bounds_error=False)
+    return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=(pdf_arr[0], 0.0), bounds_error=False), logL_discrete, interp1d(del_logL_arr_orig, del_z_arr, kind=interp_type, fill_value=(del_z_arr[0],del_z_arr[-1]), bounds_error=False)
 
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
     trans_dat = Table.read(file_name, format='ascii')
@@ -218,7 +223,7 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
     cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
     contampart = 1.0/cf(cgs17)
-    contampart[np.isinf(contampart)] = 1.0e8
+    contampart[cgs17>(cgscontam*1.0e17)] = 1.0/contam_lim
 
     vals = interp_comp_simp_orig.ev(dc, mc) * contampart
     interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals, kx=1, ky=1)
@@ -476,6 +481,8 @@ class LumFuncMCMC:
             self.likeallsf = RectBivariateSpline(als, lss, likes)
             self.vgalf = RectBivariateSpline(als, lss, vgal)
             del alls_output, alls_output2
+            # self.plotLike(lss, als, likes, vgal)
+            # breakpoint()
         except: pass
 
     def getCompInfo(self):
@@ -631,7 +638,7 @@ class LumFuncMCMC:
         likes = np.zeros((alnum, lsnum))
         for i in range(alnum):
             print(f"Got to i={i} in main al ls loop")
-            for j in range(lsnum):
+            for j in range(lsnum-2,lsnum):
                 # time1 = time()
                 tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
                 # integ = tlf[None] * compG
@@ -646,6 +653,7 @@ class LumFuncMCMC:
                 # time2 = time()
                 # print("Time taken for one iteration:", time2-time1)
                 # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
+                breakpoint()
         return als, lss, likes
     
     def calcVgalPhistar(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
@@ -975,6 +983,20 @@ class LumFuncMCMC:
             lf.append(modlum)
         self.medianLF = np.median(np.array(lf), axis=0)
         self.VeffLF()
+
+    def plotLike(self, lss, als, likes, vgal):
+        fig1 = plt.figure()
+        sc = plt.contourf(lss, als, likes, levels=10)
+        plt.xlabel(r'$\mathcal{L}_*$')
+        plt.ylabel(r'$\alpha$')
+        plt.colorbar(sc, label='Log likelihood')
+        fig2 = plt.figure()
+        sc = plt.contourf(lss, als, np.log10(vgal), levels=10)
+        plt.xlabel(r'$\mathcal{L}_*$')
+        plt.ylabel(r'$\alpha$')
+        plt.colorbar(sc, label='Log # Obs Galaxies')
+        plt.show()
+        plt.close('all')
 
     def plotPracLumFunc(self, tlft, phiobs, al, ls):
         fig, ax = plt.subplots()
