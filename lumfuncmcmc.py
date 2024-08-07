@@ -653,7 +653,6 @@ class LumFuncMCMC:
                 # time2 = time()
                 # print("Time taken for one iteration:", time2-time1)
                 # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
-                breakpoint()
         return als, lss, likes
     
     def calcVgalPhistar(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
