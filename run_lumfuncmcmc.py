@@ -108,6 +108,10 @@ def parse_args(argv=None):
     parser.add_argument("-sa", "--sch_al",
                         help='''Schechter Alpha Param''',
                         type=float, default=None)
+    
+    parser.add_argument("-cl", "--contam_lim",
+                        help='''Contamination limit''',
+                        type=float, default=None)
 
     parser.add_argument("-fsa", "--fix_sch_al",
                         help='''Fix Schechter Alpha''',
