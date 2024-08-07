@@ -638,7 +638,7 @@ class LumFuncMCMC:
         likes = np.zeros((alnum, lsnum))
         for i in range(alnum):
             print(f"Got to i={i} in main al ls loop")
-            for j in range(lsnum-2,lsnum):
+            for j in range(lsnum):
                 # time1 = time()
                 tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
                 # integ = tlf[None] * compG
