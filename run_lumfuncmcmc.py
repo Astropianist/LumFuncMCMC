@@ -115,7 +115,7 @@ def parse_args(argv=None):
     
     parser.add_argument("-cb", "--contambin",
                         help='''Contamination binning''',
-                        type=float, default=None)
+                        type=int, default=None)
 
     parser.add_argument("-fsa", "--fix_sch_al",
                         help='''Fix Schechter Alpha''',
