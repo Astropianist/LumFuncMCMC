@@ -42,12 +42,18 @@ def getContamination(filter='N419', file_name_orig='COSMOS_N419_bright.csv', int
     galf = full_catd['Galaxy_name']# , cat_noagnd['Galaxy_name']
     # ids_bad_old = np.setdiff1d(galf, galn)
     dat = Table.read(file_name, format='csv')
-    ids_desi, flux, z, ps, cl = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class']
+    ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
+    desi = np.zeros(flux.size, dtype=int)
+    for i in range(len(desi)):
+        if 'ODIN-DESI' in comment[i]: desi[i] = 1
     # breakpoint()
     allnot = np.where(np.logical_or(dat['P/S'].mask==True, dat['P/S']=='p'))
     # intersect, inds_not, cat_not = np.intersect1d(ids_desi[allnot], ids_bad_old, return_indices=True)
-    speclae = np.where(np.logical_and(ps=='s', cl=='LAE'))[0]
-    allspec = np.where(ps=='s')[0]
+    condlae = np.logical_or(np.logical_and(ps=='s', cl=='LAE'), ps!='s')
+    # speclae = np.where(np.logical_and.reduce((ps=='s', cl=='LAE')))[0]
+    speclae = np.where(condlae)[0]
+    # allspec = np.where(np.logical_and(ps=='s', desi<=1))[0]
+    allspec = np.arange(len(flux))
     # allspec = np.concatenate((allspec, inds_not))
     pois = Table.read(errtab, format='ascii')
     num, lb, hb = pois['Num'], pois['LowBound'], pois['HighBound']
@@ -90,7 +96,10 @@ def getContamination(filter='N419', file_name_orig='COSMOS_N419_bright.csv', int
     # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
     # plt.plot(bin_check, contamf(bin_check), 'r')
     # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    # plt.xlabel(r'Flux (10$^{-17}$ cgs)')
+    # plt.ylabel('Fraction of true LAEs')
     # plt.show()
+    # breakpoint()
     return contamf, contamhf, contamlf, test_contam[indcontam]*1.0e-17
 
 def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
