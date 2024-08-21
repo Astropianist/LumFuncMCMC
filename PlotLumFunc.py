@@ -226,8 +226,9 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
             condsofull = np.logical_and(condsobo, ref==rj)
             ax[i].errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=colref[ind], label=rjlab, capsize=2)
         # ax[i].vlines(llims[i], ymin, ymax, colors='k', label='')
-        condvi = logL>=llims[i]
-        ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
+        # Now using contamination algorithm so don't need a 
+        # condvi = logL>=llims[i]
+        # ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
         ax[i].legend(loc='best', frameon=False, fontsize='x-small')
     ax[0].set_xlim(Lmin, Lmax)
     ax[0].set_ylim(ymin, ymax)
