@@ -89,18 +89,23 @@ def getContamination(filter='N419', file_name_orig='COSMOS_N419_bright.csv', int
     contamlf = interp1d(bin_centers, contaml, kind=interp_type, fill_value=(0.0, contaml[-1]), bounds_error=False)
 
     test_contam = np.linspace(bin_edges[0], bin_edges[-1], test_contam_num)
-    indcontam = np.argmin(np.abs(contamf(test_contam) - contam_lim))
+    ctc = contamf(test_contam)
+    if ctc.min() > contam_lim: 
+        cgscontam = 1.0 # A large value of flux in cgs units
+    else:
+        indcontam = np.argmin(np.abs(ctc - contam_lim))
+        cgscontam = test_contam[indcontam]*1.0e-17
 
-    # plt.figure()
-    # plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
-    # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
-    # plt.plot(bin_check, contamf(bin_check), 'r')
-    # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
-    # plt.xlabel(r'Flux (10$^{-17}$ cgs)')
-    # plt.ylabel('Fraction of true LAEs')
-    # plt.show()
-    # breakpoint()
-    return contamf, contamhf, contamlf, test_contam[indcontam]*1.0e-17
+    plt.figure()
+    plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
+    bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
+    plt.plot(bin_check, contamf(bin_check), 'r')
+    plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    plt.xlabel(r'Flux (10$^{-17}$ cgs)')
+    plt.ylabel('Fraction of true LAEs')
+    plt.show()
+    breakpoint()
+    return contamf, contamhf, contamlf, cgscontam
 
 def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
     trans_dat = Table.read(file_name, format='ascii')
