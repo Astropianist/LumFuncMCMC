@@ -68,22 +68,22 @@ def getContamination(filter='N419', file_name_orig='COSMOS_N419_bright.csv', int
     # bin_edges[-1] = max(bin_edges[-1], flux_all.max())
     bin_edges[-1] += 1.0e-6 # Want to make sure the last flux is included
     bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.0
-    contam, contaml, contamh = np.zeros(binnum), np.zeros(binnum), np.zeros(binnum)
-    for i in range(binnum):
-        cond = np.logical_and(flux_all>=bin_edges[i], flux_all<bin_edges[i+1])
-        cond_lae = np.logical_and(flux_lae>=bin_edges[i], flux_lae<bin_edges[i+1])
-        fls, fas = flux_lae[cond_lae].size, flux_all[cond].size
-        # print(f"For bin {i}: fls = {fls}")
-        # for j in range(fls):
-        #     idsi = ids_desi[speclae][cond_lae][j]
-        #     if idsi in ids_bad_old: 
-        #         print(f"Galaxy ID {idsi} in old bad list but not new DESI-based list")
-        #         fls -= 1
-        contam[i] = fls/fas
-        cond_pois = np.where(fls==num)[0][0]
-        contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
-        if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
-        if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
+    contam, contaml, contamh = np.ones(binnum), np.zeros(binnum), np.zeros(binnum)
+    # for i in range(binnum):
+    #     cond = np.logical_and(flux_all>=bin_edges[i], flux_all<bin_edges[i+1])
+    #     cond_lae = np.logical_and(flux_lae>=bin_edges[i], flux_lae<bin_edges[i+1])
+    #     fls, fas = flux_lae[cond_lae].size, flux_all[cond].size
+    #     # print(f"For bin {i}: fls = {fls}")
+    #     # for j in range(fls):
+    #     #     idsi = ids_desi[speclae][cond_lae][j]
+    #     #     if idsi in ids_bad_old: 
+    #     #         print(f"Galaxy ID {idsi} in old bad list but not new DESI-based list")
+    #     #         fls -= 1
+    #     contam[i] = fls/fas
+    #     cond_pois = np.where(fls==num)[0][0]
+    #     contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
+    #     if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
+    #     if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
     contamf = interp1d(bin_centers, contam, kind=interp_type, fill_value=(1.0, contam[-1]), bounds_error=False)
     contamhf = interp1d(bin_centers, contamh, kind=interp_type, fill_value=(0.0, contamh[-1]), bounds_error=False)
     contamlf = interp1d(bin_centers, contaml, kind=interp_type, fill_value=(0.0, contaml[-1]), bounds_error=False)
@@ -248,7 +248,8 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     # plt.ylabel('Distance from center of field')
     # plt.show()
     # plt.close('all')
-    return interp_comp, interp_comp_simp, cgscontam
+    # breakpoint()
+    return interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
     Flam = cgs/dwave
@@ -336,7 +337,7 @@ class LumFuncMCMC:
                  phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0,
                  nwalkers=100, nsteps=1000, fix_sch_al=False,
                  min_comp_frac=0.5, diff_rand=True, field_name='COSMOS',
-                 interp_comp=None, interp_comp_simp=None, dist_orig=None, dist=None,
+                 interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None,
                  maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None,
                  size_ln=1001, wav_filt=5015.0, filt_width=73.0,
                  binned_stat_num=50, err_corr=False, wav_rest=1215.67,
@@ -344,7 +345,7 @@ class LumFuncMCMC:
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
                  corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
-                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0):
+                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -445,12 +446,12 @@ class LumFuncMCMC:
         print("Finished DL, dVdz")
 
         if interp_comp is None: 
-            self.interp_comp, self.interp_comp_simp, self.cgscontam = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim)
+            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.cgscontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim)
             self.lumcontam = cgs2lum(self.cgscontam, self.DL)
             if flux is not None: condcontam = flux <= self.cgscontam
             else: condcontam = lum <= self.lumcontam   
         else: 
-            self.interp_comp, self.interp_comp_simp, self.cgscontam = interp_comp, interp_comp_simp, cgscontam #Giant max flux in case of not calculating value
+            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.cgscontam, self.cf = interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf #Giant max flux in case of not calculating value
             # Have already taken care of the condition in this case
             if flux is not None: condcontam = flux < np.inf
             else: condcontam = lum < np.inf
@@ -521,6 +522,19 @@ class LumFuncMCMC:
         self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
+
+    def plotFluxDists(self, bins=40):
+        hist, bin_edges = np.histogram(self.flux*1.0e17, bins=bins)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:])/2
+        contam = self.cf(bin_centers)
+        fig, ax = plt.subplots()
+        ax.stairs(hist, bin_edges, fill=True, color='b', alpha=0.5, label='Original')
+        ax.stairs(hist*contam, bin_edges, fill=True, color='r', alpha=0.5, label='De-contaminated')
+        ax.set_xlabel(r'Flux ($10^{-17}$ cgs)')
+        ax.set_ylabel('Number of sources')
+        ax.set_yscale('log')
+        ax.legend(loc='best', frameon=False)
+        fig.savefig(f'FluxDistsContam_{self.filt_name}.png', bbox_inches='tight', dpi=300)
 
     def getminlum_z_func(self):
         comps = self.interp_comp_simp.ev(self.distg, self.magg)

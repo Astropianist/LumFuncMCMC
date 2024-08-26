@@ -36,6 +36,7 @@ trans_file = f'{filt_name}_Nicole.txt'
 corr_file = 'CorrFull.dat'
 # percentiles of each parameter to report in the output file
 param_percentiles = [5, 16, 50, 84, 95]
+extra_text = ''
 
 output_dict = {'parameters'    : True,
                'settings'      : True, 

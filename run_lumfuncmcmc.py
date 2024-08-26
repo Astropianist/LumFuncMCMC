@@ -164,6 +164,10 @@ def parse_args(argv=None):
     parser.add_argument("-ln", "--line_name",
                          help='''Name of line or band for LF measurement''',
                          type=str, default=None)
+    
+    parser.add_argument("-et", "--extra_text",
+                         help='''Extra text for alls and vgal name''',
+                         type=str, default=None)
 
     parser.add_argument("-tf", "--filt_name",
                          help='''Filter name''',
@@ -226,7 +230,7 @@ def read_input_file(args):
     
     fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
-    interp_comp, interp_comp_simp, cgscontam = makeCompFunc(args.interp_name)
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf = makeCompFunc(args.interp_name)
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
     pc = datfile['Protocluster']
@@ -249,6 +253,7 @@ def read_input_file(args):
         cond_init = np.logical_and(flux>0.0,flux<flux_lim)
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
         comps = interp_comp_simp.ev(dist[cond_init], mag)
+        # compsorig = interp_comp_simp_orig.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
         densi = dens[cond_env][cond_init][cond]
         areai = 1/densi
@@ -260,7 +265,7 @@ def read_input_file(args):
     for i in range(numbins):
         weights[i] = areas[i]/areas.sum()
     print("Weights for different density regions:", weights)
-    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -282,7 +287,7 @@ def main(argv=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -302,8 +307,8 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam_{args.contam_lim}.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}{args.extra_text}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam_{args.contam_lim}{args.extra_text}.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
@@ -326,7 +331,7 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam)
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam, interp_comp_simp_orig=interp_comp_simp_orig, cf=cf)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 
