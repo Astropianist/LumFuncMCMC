@@ -31,6 +31,7 @@ lum_lim = 45.0
 contam_lim = 0.01
 contambin = 5
 alnum, lsnum = 101, 101
+contam_type = 'L_LCA'
 T_EL = 1.0
 trans_file = f'{filt_name}_Nicole.txt'
 corr_file = 'CorrFull.dat'

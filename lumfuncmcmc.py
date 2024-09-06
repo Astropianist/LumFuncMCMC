@@ -15,6 +15,7 @@ import corner
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
 from multiprocessing import Pool
+import os.path as op
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -33,7 +34,84 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getContamination(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_9_4_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA'): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+    file_name = file_name_orig.replace('N419', filter)
+    dat = Table.read(file_name, format='csv')
+    nb_mag, cl = dat['NARROWBAND_MAGNITUDE'], dat['CLASSIFICATION']
+    # ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
+    # condlae = np.logical_or(np.logical_and(ps=='s', cl=='LAE'), ps!='s')
+    if contam_type == 'LU_LCAU':
+        speclae = np.where(np.logical_or(cl=='LAE', cl=='UNDET'))[0]
+        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN', cl=='UNDET')))[0]
+    elif contam_type == 'L_LCA':
+        speclae = np.where(cl=='LAE')[0]
+        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
+    elif contam_type == 'L_LC':
+        speclae = np.where(cl=='LAE')[0]
+        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM')))[0]
+    elif contam_type == 'LA_LCA':
+        speclae = np.where(np.logical_or(cl=='LAE', cl=='AGN'))[0]
+        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
+    elif contam_type == 'LU_LCU':
+        speclae = np.where(np.logical_or(cl=='LAE', cl=='UNDET'))[0]
+        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='UNDET')))[0]
+    elif contam_type == 'LAU_LCAU':
+        speclae = np.where(np.logical_or.reduce((cl=='LAE', cl=='AGN', cl=='UNDET')))[0]
+        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN', cl=='UNDET')))[0]
+    else:
+        print("Not one of the possible options")
+        return None, None, None, None
+
+    pois = Table.read(errtab, format='ascii')
+    num, lb, hb = pois['Num'], pois['LowBound'], pois['HighBound']
+    nb_lae = nb_mag[speclae]
+    nb_all = nb_mag[allspec]
+    # print(f"nb_lae min {nb_lae.max():0.2f}, max {nb_lae.min():0.2f}")
+    # print(f"nb_all min {nb_all.max():0.2f}, max {nb_all.min():0.2f}")
+    # print("Total LAE sample size:", flux_lae.size)
+    # print("Total sample size:", flux_all.size)
+    # pers = np.linspace(0, 100, binnum+1)
+    # bin_edges = np.percentile(nb_all, pers)
+    bin_edges = np.linspace(nb_all.min(), nb_all.max()+1.0e-6, binnum+1)
+    # bin_edges[-1] += 1.0e-6 # Want to make sure the last flux is included
+    bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.0
+    contam, contaml, contamh = np.ones(binnum), np.zeros(binnum), np.zeros(binnum)
+    for i in range(binnum):
+        cond = np.logical_and(nb_all>=bin_edges[i], nb_all<bin_edges[i+1])
+        cond_lae = np.logical_and(nb_lae>=bin_edges[i], nb_lae<bin_edges[i+1])
+        fls, fas = nb_lae[cond_lae].size, nb_all[cond].size
+        contam[i] = fls/fas
+        if fls>num.max(): contaml[i], contamh[i] = np.sqrt(fls)/fas, np.sqrt(fls)/fas
+        else:
+            cond_pois = np.where(fls==num)[0][0]
+            contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
+        if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
+        if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
+    contamf = interp1d(bin_centers, contam, kind=interp_type, fill_value=(contam[0], 1.0), bounds_error=False)
+    contamhf = interp1d(bin_centers, contamh, kind=interp_type, fill_value=(contamh[0], 0.0), bounds_error=False)
+    contamlf = interp1d(bin_centers, contaml, kind=interp_type, fill_value=(contaml[0], 0.0), bounds_error=False)
+
+    test_contam = np.linspace(bin_edges[0], bin_edges[-1], test_contam_num)
+    ctc = contamf(test_contam)
+    if ctc.min() > contam_lim: 
+        nbcontam = -99 #Super bright magnitude in case we never hit contam lim (which we won't)
+    else:
+        indcontam = np.argmin(np.abs(ctc - contam_lim))
+        nbcontam = test_contam[indcontam]
+
+    # print(f"nbcontam: {nbcontam:0.2f}")
+
+    # plt.figure()
+    # plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
+    # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
+    # plt.plot(bin_check, contamf(bin_check), 'r')
+    # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    # plt.xlabel('NB Magnitude (AB)')
+    # plt.ylabel('Fraction of true LAEs')
+    # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}.png'), bbox_inches='tight', dpi=300)
+    return contamf, contamhf, contamlf, nbcontam
+
+def getContaminationOld(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
     file_name = file_name_orig.replace('N419', filter)
     full_cat = full_cat_orig.replace('N419', filter)
     # cat_noagn = cat_noagn_orig.replace('N419', filter)
@@ -220,7 +298,7 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01):
+def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA'):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
@@ -229,15 +307,15 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     # plt.colorbar(sc, label='Modified completeness')
     # plt.xlabel('Magnitude')
     # plt.ylabel('Distance from center of field')
-    cf, chf, clf, cgscontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim)
+    cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type)
     interp_comp = RGINNExt((dist, mag), comp)
     interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
     distcontam = np.linspace(dist.min(), dist.max(), distnum)
     magcontam = np.linspace(mag.min(), mag.max(), magnum)
     dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
-    cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
-    contampart = 1.0/cf(cgs17)
-    contampart[cgs17>(cgscontam*1.0e17)] = 1.0/contam_lim
+    # cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
+    contampart = 1.0/cf(mag)
+    contampart[mc<nbcontam] = 1.0/contam_lim
 
     vals = interp_comp_simp_orig.ev(dc, mc) * contampart
     interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals, kx=1, ky=1)
@@ -249,7 +327,7 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     # plt.show()
     # plt.close('all')
     # breakpoint()
-    return interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf
+    return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
     Flam = cgs/dwave
@@ -345,7 +423,7 @@ class LumFuncMCMC:
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
                  corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
-                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None):
+                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA'):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -446,12 +524,13 @@ class LumFuncMCMC:
         print("Finished DL, dVdz")
 
         if interp_comp is None: 
-            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.cgscontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim)
-            self.lumcontam = cgs2lum(self.cgscontam, self.DL)
-            if flux is not None: condcontam = flux <= self.cgscontam
-            else: condcontam = lum <= self.lumcontam   
+            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim, contam_type=contam_type)
+            cgscontam = magAB2cgs(self.nbcontam, self.wav_filt, self.filt_width)
+            lumcontam = cgs2lum(cgscontam, self.DL)
+            if flux is not None: condcontam = flux <= cgscontam
+            else: condcontam = lum <= lumcontam   
         else: 
-            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.cgscontam, self.cf = interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf #Giant max flux in case of not calculating value
+            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf #Giant max flux in case of not calculating value
             # Have already taken care of the condition in this case
             if flux is not None: condcontam = flux < np.inf
             else: condcontam = lum < np.inf

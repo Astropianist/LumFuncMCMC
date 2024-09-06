@@ -123,7 +123,7 @@ def plotProtoEvol(fitpostprot, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOS_PC_contam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOS_PC_nocontam.png", bbox_inches='tight', dpi=300)
 
 def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
     logL = np.linspace(Lmin, Lmax, Lnum)
@@ -144,7 +144,7 @@ def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOS_contam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOS_nocontam.png", bbox_inches='tight', dpi=300)
 
 def plotDensityEvol(fit_names, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2):
     logL = np.linspace(Lmin, Lmax, Lnum)
@@ -178,7 +178,7 @@ def plotDensityEvol(fit_names, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001,
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("CosmicDensEvolCOSMOS_contam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicDensEvolCOSMOS_nocontam.png", bbox_inches='tight', dpi=300)
 
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
@@ -234,7 +234,7 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("FullLitComp_contam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("FullLitComp_nocontam.png", bbox_inches='tight', dpi=300)
 
 def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral2=None):
     fig, ax = plt.subplots()
@@ -306,8 +306,8 @@ def main(alpha_fixed=-1.6):
     plotStuff(logLVs, dat_veff['BinLF'], dat_veff['BinLFErr'], logL[inds], bf[inds], sobral1=sobral_sc4k, sobral2=sobral_ssc4k, this_work=None)
 
 def NewProc():
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01', 'N419_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01', 'N501_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01', 'N419_ll_431_ncn_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01', 'N501_ll_431_ncn_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     # dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]

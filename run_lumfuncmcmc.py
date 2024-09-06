@@ -6,7 +6,7 @@ import logging
 from astropy.table import Table
 from scipy.interpolate import interp1d
 from scipy.stats import ks_2samp
-from lumfuncmcmc import LumFuncMCMC, makeCompFunc, cgs2magAB
+from lumfuncmcmc import LumFuncMCMC, makeCompFunc, cgs2magAB, magAB2cgs
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
 import configLF
@@ -171,14 +171,18 @@ def parse_args(argv=None):
 
     parser.add_argument("-tf", "--filt_name",
                          help='''Filter name''',
-                         type=str, default=None)    
+                         type=str, default=None)
+    
+    parser.add_argument("-ct", "--contam_type",
+                         help='''How to calculate contamination''',
+                         type=str, default=None)  
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
     args.log = setup_logging()
 
     # Use config values if none are set in the input
-    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'lum_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL', 'contam_lim', 'contambin']
+    arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'lum_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL', 'contam_lim', 'contambin', 'contam_type']
 
     for arg_i in arg_inputs:
         try:
@@ -230,7 +234,7 @@ def read_input_file(args):
     
     fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
-    interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf = makeCompFunc(args.interp_name)
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = makeCompFunc(binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name)
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
     pc = datfile['Protocluster']
@@ -238,6 +242,7 @@ def read_input_file(args):
     if args.lum_lim<0.0: flux_lim = np.inf
     else: flux_lim = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
     print("Original flux limit:", flux_lim)
+    cgscontam = magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
     flux_lim = min(flux_lim, cgscontam*1.0e17)
     print("Final flux limit:", flux_lim)
     if args.environment: numbins = args.num_env_bins
