@@ -314,7 +314,7 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     magcontam = np.linspace(mag.min(), mag.max(), magnum)
     dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
     # cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
-    contampart = 1.0/cf(mag)
+    contampart = 1.0/cf(mc)
     contampart[mc<nbcontam] = 1.0/contam_lim
 
     vals = interp_comp_simp_orig.ev(dc, mc) * contampart
@@ -527,8 +527,8 @@ class LumFuncMCMC:
             self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim, contam_type=contam_type)
             cgscontam = magAB2cgs(self.nbcontam, self.wav_filt, self.filt_width)
             lumcontam = cgs2lum(cgscontam, self.DL)
-            if flux is not None: condcontam = flux <= cgscontam
-            else: condcontam = lum <= lumcontam   
+            if flux is not None: condcontam = flux <= cgscontam*1.0e17
+            else: condcontam = lum <= np.log10(lumcontam)
         else: 
             self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = interp_comp, interp_comp_simp_orig, interp_comp_simp, cgscontam, cf #Giant max flux in case of not calculating value
             # Have already taken care of the condition in this case
