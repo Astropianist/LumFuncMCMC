@@ -55,15 +55,17 @@ def getIntegsv2(al, ls, phis, llow=42.0, lhigh=46.0):
     ans_lum, _ = quad(lambda x: x * schechter(x, al, 10**phis, 10**ls), 10**llow, 10**lhigh)
     return ans_num, ans_lum
 
-def getIntegInfo(fitpost, rndsamples=100, llow=42.0, lhigh=46.0):
+def getIntegInfo(fitpost, rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
     dat = Table.read(fitpost,format='ascii')
     samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
     del dat
     nsamples = getnsamples(samples)
     ind = np.random.randint(0, nsamples.shape[0], rndsamples)
     nums, lums = np.zeros(rndsamples), np.zeros(rndsamples)
+    if nsamples.shape[1]==4: alpha = nsamples[:,2]
+    else: alpha = np.repeat(sa, nsamples.shape[0])
     for i, indi in enumerate(ind):
-        nums[i], lums[i] = getIntegsv2(nsamples[indi, 2], nsamples[indi, 0], nsamples[indi, 1], llow=llow, lhigh=lhigh)
+        nums[i], lums[i] = getIntegsv2(alpha[indi], nsamples[indi, 0], nsamples[indi, 1], llow=llow, lhigh=lhigh)
     lums /= Lsun
     numvals = np.percentile(np.log10(nums), [16,50,84])
     lumvals = np.percentile(np.log10(lums), [16,50,84])
@@ -79,11 +81,13 @@ def add_LumFunc_plot(ax1, no_ylabel=False):
     if not no_ylabel: ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
     ax1.minorticks_on()
 
-def getSamples(logL, nsamples, rndsamples=200):
+def getSamples(logL, nsamples, rndsamples=200, sa=-1.6):
     lf = []
+    if nsamples.shape[1]==4: alpha = nsamples[:,2]
+    else: alpha = np.repeat(sa, nsamples.shape[0])
     for i in np.arange(rndsamples):
         ind = np.random.randint(0, nsamples.shape[0])
-        modlum = TrueLumFunc(logL, nsamples[ind, 2], nsamples[ind, 0], nsamples[ind, 1])
+        modlum = TrueLumFunc(logL, alpha[ind], nsamples[ind, 0], nsamples[ind, 1])
         lf.append(modlum)
     medianLF = np.median(np.array(lf), axis=0)
     return lf, medianLF
@@ -97,8 +101,10 @@ def getnsamples(samples, lnprobcut=7.5):
         lnprobcut *= 2.0
     return nsamples
 
-def plotProtoEvol(fitpostprot, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
-    fitpostnotprot = [fp.replace('bin2', 'bin1') for fp in fitpostprot]
+def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
+    fppo = [fpp.split('/') for fpp in fitpostprotorig]
+    fitpostprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
+    fitpostnotprot = [fp.replace('bin1', 'bin2') for fp in fitpostprot]
     logL = np.linspace(Lmin, Lmax, Lnum)
     samples_prot, samples_notprot = [], []
     for fpf, fpnf in zip(fitpostprot, fitpostnotprot):
@@ -113,8 +119,8 @@ def plotProtoEvol(fitpostprot, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
         coli = next(orig_palette)
         nsamples_prot = getnsamples(samples_prot[i])
         nsamples_notprot = getnsamples(samples_notprot[i])
-        lfp, lfpbest = getSamples(logL, nsamples_prot)
-        lfnp, lfnpbest = getSamples(logL, nsamples_notprot)
+        lfp, lfpbest = getSamples(logL, nsamples_prot, sa=sa)
+        lfnp, lfnpbest = getSamples(logL, nsamples_notprot, sa=sa)
         ax.plot(logL, lfpbest, linestyle='-', color=coli, label=rf'$z={z}$ PC')
         ax.plot(logL, lfnpbest, linestyle=':', color=coli, label=rf'$z={z}$ Not PC')
         for lfpi, lfnpi in zip(lfp, lfnp):
@@ -123,9 +129,9 @@ def plotProtoEvol(fitpostprot, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOS_PC_nocontam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOS_PCv2.png", bbox_inches='tight', dpi=300)
 
-def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
+def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     logL = np.linspace(Lmin, Lmax, Lnum)
     samples = []
     for fpf in fitpostfs:
@@ -137,19 +143,22 @@ def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001):
     for i, z in enumerate(reds):
         coli = next(orig_palette)
         nsamples = getnsamples(samples[i])
-        lf, lfbest = getSamples(logL, nsamples)
+        lf, lfbest = getSamples(logL, nsamples, sa=sa)
         ax.plot(logL, lfbest, linestyle='-', color=coli, label=rf'$z={z}$')
         for lfi in lf:
             ax.plot(logL, lfi, linestyle='-', color=coli, alpha=0.05, label='')
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOS_nocontam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOSnocontam.png", bbox_inches='tight', dpi=300)
 
-def plotDensityEvol(fit_names, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2):
+def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2, sa=-1.6):
+    ns = len(dens_vals[0])-1
+    fno = [fn.split('/') for fn in fit_names_orig]
+    fit_names = [op.join(fn[0], fn[1], str(ns), fn[2].replace('env0', 'env1').replace('_all_', f'_e{ns}_')) for fn in fno]
     logL = np.linspace(Lmin, Lmax, Lnum)
     fitpostall = []
-    ns = int(fit_names[0].split('/')[2])
+    # ns = int(fit_names[0].split('/')[2])
     cols = []
     for i in range(len(reds)):
         assert len(dens_vals[i]) == ns + 1
@@ -168,7 +177,7 @@ def plotDensityEvol(fit_names, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001,
         else: no_ylabel=True
         add_LumFunc_plot(ax[i], no_ylabel=no_ylabel)
         for j in range(ns):
-            lf, lfbest = getSamples(logL, fitpostall[i][j])
+            lf, lfbest = getSamples(logL, fitpostall[i][j], sa=sa)
             ax[i].plot(logL, lfbest, linestyle='-', color=cols[j], label=fr'{dens_vals[i][j]:0.2f} $\leq \sigma <$ {dens_vals[i][j+1]:0.2f}')
             for lfi in lf:
                 ax[i].plot(logL, lfi, linestyle='-', color=cols[j], alpha=0.05, label='')
@@ -178,12 +187,12 @@ def plotDensityEvol(fit_names, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001,
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("CosmicDensEvolCOSMOS_nocontam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicDensEvolCOSMOSv2.png", bbox_inches='tight', dpi=300)
 
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
 
-def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.5, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=1.0e-6, ymax=3.0e-2):
+def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.5, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=1.0e-6, ymax=3.0e-2, sa=-1.6):
     logL = np.linspace(Lmin, Lmax, Lnum)
     sob = fits.getdata(sobfile, 1)
     sobs = sob['Sample']
@@ -210,7 +219,7 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
         add_LumFunc_plot(ax[i], no_ylabel=no_ylabel)
         coli = next(orig_palette)
         nsamples = getnsamples(samples[i])
-        lf, lfbest = getSamples(logL, nsamples)
+        lf, lfbest = getSamples(logL, nsamples, sa=sa)
         ax[i].plot(logL, lfbest, linestyle='-', color=coli, label=rf'Nagaraj+24 $z={z}$')
         for lfi in lf:
             ax[i].plot(logL, lfi, linestyle='-', color=coli, alpha=0.05, label='')
@@ -227,14 +236,14 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
             ax[i].errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=colref[ind], label=rjlab, capsize=2)
         # ax[i].vlines(llims[i], ymin, ymax, colors='k', label='')
         # Now using contamination algorithm so don't need a 
-        # condvi = logL>=llims[i]
-        # ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
+        condvi = logL>=llims[i]
+        if i==2: ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
         ax[i].legend(loc='best', frameon=False, fontsize='x-small')
     ax[0].set_xlim(Lmin, Lmax)
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("FullLitComp_nocontam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("FullLitCompv2.png", bbox_inches='tight', dpi=300)
 
 def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral2=None):
     fig, ax = plt.subplots()
@@ -306,17 +315,17 @@ def main(alpha_fixed=-1.6):
     plotStuff(logLVs, dat_veff['BinLF'], dat_veff['BinLFErr'], logL[inds], bf[inds], sobral1=sobral_sc4k, sobral2=sobral_ssc4k, this_work=None)
 
 def NewProc():
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01', 'N419_ll_431_ncn_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01', 'N501_ll_431_ncn_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.1_ec2_contam_0.01_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam', 'N419_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam', 'N501_ll_431_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     # dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]
     plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
     plotStuffNew([fits_z24, fits_z31, fits_z45], reds)
     plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
-    getIntegInfo(fits_z24, llow=42.0)
+    # getIntegInfo(fits_z24, llow=42.0)
     getIntegInfo(fits_z31, llow=42.0)
-    getIntegInfo(fits_z45, llow=42.0)
+    # getIntegInfo(fits_z45, llow=42.0)
     # plotLLComp(dat_z45)
 
 if __name__ == '__main__':
