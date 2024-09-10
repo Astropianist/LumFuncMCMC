@@ -36,6 +36,14 @@ def consecutive(data, stepsize=1):
 
 def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_9_4_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA'): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
     file_name = file_name_orig.replace('N419', filter)
+    if not op.exists(file_name):
+        x = np.linspace(0, 100, 1001)
+        y = np.ones_like(x)
+        z = np.zeros_like(x)
+        contamf = interp1d(x, y, kind=interp_type, fill_value=1.0, bounds_error=False)
+        contamhf = interp1d(x, z, kind=interp_type, fill_value=0.0, bounds_error=False)
+        contamlf = interp1d(x, z, kind=interp_type, fill_value=0.0, bounds_error=False)
+        return contamf, contamhf, contamlf, -99.0
     dat = Table.read(file_name, format='csv')
     nb_mag, cl = dat['NARROWBAND_MAGNITUDE'], dat['CLASSIFICATION']
     # ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
@@ -94,7 +102,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     test_contam = np.linspace(bin_edges[0], bin_edges[-1], test_contam_num)
     ctc = contamf(test_contam)
     if ctc.min() > contam_lim: 
-        nbcontam = -99 #Super bright magnitude in case we never hit contam lim (which we won't)
+        nbcontam = -99.0 #Super bright magnitude in case we never hit contam lim (which we won't)
     else:
         indcontam = np.argmin(np.abs(ctc - contam_lim))
         nbcontam = test_contam[indcontam]

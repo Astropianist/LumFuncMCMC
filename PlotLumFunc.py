@@ -150,7 +150,7 @@ def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOSnocontam.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOS_newcontam.png", bbox_inches='tight', dpi=300)
 
 def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2, sa=-1.6):
     ns = len(dens_vals[0])-1
@@ -187,7 +187,7 @@ def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("CosmicDensEvolCOSMOSv2.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicDensEvolCOSMOS_newcontam_3bins.png", bbox_inches='tight', dpi=300)
 
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
@@ -316,15 +316,17 @@ def main(alpha_fixed=-1.6):
 
 def NewProc():
     fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam', 'N419_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam', 'N501_ll_431_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam', 'N501_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.01_cb10newcontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     # dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]
-    plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    plotStuffNew([fits_z24, fits_z31, fits_z45], reds)
-    plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
+    plotEvolution([fits_z24, fits_z31, fits_z45], reds)
+    # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
+    # plotStuffNew([fits_z24, fits_z31, fits_z45], reds)
+    # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
+    # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
     # getIntegInfo(fits_z24, llow=42.0)
-    getIntegInfo(fits_z31, llow=42.0)
+    # getIntegInfo(fits_z31, llow=42.0)
     # getIntegInfo(fits_z45, llow=42.0)
     # plotLLComp(dat_z45)
 

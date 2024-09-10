@@ -13,6 +13,16 @@ import configLF
 from distutils.dir_util import mkpath
 import pickle
 
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
+sns.set_style("ticks")
+sns.set_style({"xtick.direction": "in","ytick.direction": "in",
+               "xtick.top":True, "ytick.right":True,
+               "xtick.major.size":12, "xtick.minor.size":4,
+               "ytick.major.size":12, "ytick.minor.size":4,
+               })
+
 def setup_logging():
     '''Setup Logging for LumFuncMCMC, which allows us to track status of calls and
     when errors/warnings occur.
@@ -201,6 +211,15 @@ def parse_args(argv=None):
 
     return args
 
+def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419'):
+    if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
+    else: labb = 'Contamination over 99% (removed)'
+    plt.hist([lum_comp, lum_incomp, lum_bright], histtype='barstacked', bins=bins, color=['blue', 'lightgrey', 'mistyrose'], label=['Above 50% completeness (kept)', 'Below 50% completeness (removed)', labb])
+    plt.xlabel(r'Log luminosity (erg s$^{-1}$)')
+    plt.ylabel(f'Number of sources for {filt_name}')
+    plt.legend(loc='best', frameon=False)
+    plt.savefig(f'LumDistRaw{filt_name}.png', bbox_inches='tight', dpi=300)
+
 def read_input_file(args):
     """ Function to read in input ascii file with properly named columns.
     Columns should include a (linear) flux (header 'LineorBandName_flux') 
@@ -255,11 +274,14 @@ def read_input_file(args):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
-        cond_init = np.logical_and(flux>0.0,flux<flux_lim)
+        cond_init = np.logical_and(flux>0.0, flux<flux_lim)
+        lum = np.log10(1.0e-17*flux[cond_init] * 4.0*np.pi*(3.086e24*DL)**2)
+        lumb = np.log10(1.0e-17*flux[flux>=flux_lim] * 4.0*np.pi*(3.086e24*DL)**2)
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
         comps = interp_comp_simp.ev(dist[cond_init], mag)
         # compsorig = interp_comp_simp_orig.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
+        # plotLumDistribRaw(lum[cond], lum[~cond], lumb, filt_name=args.filt_name)
         densi = dens[cond_env][cond_init][cond]
         areai = 1/densi
         vals = np.percentile(areai, [5,95])
@@ -312,8 +334,8 @@ def main(argv=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}{args.extra_text}.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam_{args.contam_lim}{args.extra_text}.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         print("Alls file name:", alls_file_name)
 
         # Initialize LumFuncMCMC class
