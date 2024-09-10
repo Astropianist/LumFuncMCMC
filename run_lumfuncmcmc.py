@@ -253,7 +253,7 @@ def read_input_file(args):
     
     fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
-    interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = makeCompFunc(binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name)
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = makeCompFunc(binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim)
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
     pc = datfile['Protocluster']
