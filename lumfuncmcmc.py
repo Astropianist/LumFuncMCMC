@@ -84,17 +84,20 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # bin_edges[-1] += 1.0e-6 # Want to make sure the last flux is included
     bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.0
     contam, contaml, contamh = np.ones(binnum), np.zeros(binnum), np.zeros(binnum)
+    flss, fass = np.ones(binnum, dtype=int), np.ones(binnum, dtype=int)
     for i in range(binnum):
         cond = np.logical_and(nb_all>=bin_edges[i], nb_all<bin_edges[i+1])
         cond_lae = np.logical_and(nb_lae>=bin_edges[i], nb_lae<bin_edges[i+1])
         fls, fas = nb_lae[cond_lae].size, nb_all[cond].size
         contam[i] = fls/fas
+        flss[i], fass[i] = fls, fas
         if fls>num.max(): contaml[i], contamh[i] = np.sqrt(fls)/fas, np.sqrt(fls)/fas
         else:
             cond_pois = np.where(fls==num)[0][0]
             contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
         if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
         if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
+        if fls==0: contamh[i], contaml[i] = 0.0, 0.0
     contamf = interp1d(bin_centers, contam, kind=interp_type, fill_value=(contam[0], 1.0), bounds_error=False)
     contamhf = interp1d(bin_centers, contamh, kind=interp_type, fill_value=(contamh[0], 0.0), bounds_error=False)
     contamlf = interp1d(bin_centers, contaml, kind=interp_type, fill_value=(contaml[0], 0.0), bounds_error=False)
@@ -111,12 +114,18 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
 
     # plt.figure()
     # plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
+    # for i, bc in enumerate(bin_centers):
+    #     if contam[i] > 0.5: locy = contam[i] - contaml[i]-0.05
+    #     else: locy = contam[i] + contamh[i] + 0.05
+    #     plt.text(bc, locy, fr'$\frac{{{flss[i]}}}{{{fass[i]}}}$', color='k', horizontalalignment='center')
     # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
     # plt.plot(bin_check, contamf(bin_check), 'r')
     # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    # plt.xlim(bin_check.min(), bin_check.max())
     # plt.xlabel('NB Magnitude (AB)')
     # plt.ylabel('Fraction of true LAEs')
-    # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}.png'), bbox_inches='tight', dpi=300)
+    # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_v2.png'), bbox_inches='tight', dpi=300)
+    # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
 
 def getContaminationOld(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
@@ -306,7 +315,7 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA'):
+def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21.):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
@@ -335,6 +344,7 @@ def makeCompFunc(file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, f
     # plt.show()
     # plt.close('all')
     # breakpoint()
+    # plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
@@ -414,6 +424,27 @@ def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
 
 def normalFunc(x,mu,sig):
     return 1.0/(np.sqrt(2.0*np.pi)*sig) * np.exp(-(x-mu)**2/(2.0*sig**2))
+
+def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=1215.67, dwave=73.0):
+    magarr = np.linspace(mag_min, mag_max, 31)
+    cgs = magAB2cgs(magarr, wave=wave, dwave=dwave)
+    lumarr = cgs2lum(cgs, DL)
+    lumvals = cgs2lum(magAB2cgs(mag, wave=wave, dwave=dwave), DL)
+    cmap = plt.cm.jet
+    norm = plt.Normalize(vmin=dist.min(), vmax=dist.max())
+    colors = cmap(norm(dist))
+    fig, ax = plt.subplots()
+    for i, d in enumerate(dist):
+        # ax.scatter(lumvals, comp[i], c=colors[i], s=10)
+        ax.plot(lumarr, compf.ev(d, magarr), color=colors[i])
+    ax.set_yscale('log')
+    ax.set_xlim(lumarr.min(), lumarr.max())
+    # ax.legend(loc='best',fontsize='x-small')
+    cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
+    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax, label='Distance from center (arcmin)')
+    ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)')
+    ax.set_ylabel('Effective Completeness')
+    fig.savefig(f'{fn}_Dist.png',bbox_inches='tight',dpi=300)
 
 class LumFuncMCMC:
     def __init__(self, z, del_red=None, flux=None, flux_e=None, line_name="OIII",

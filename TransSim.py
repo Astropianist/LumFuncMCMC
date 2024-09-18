@@ -82,14 +82,15 @@ def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_
     fig.savefig(op.join(image_dir, f'VeffComp_ng{ngal}_bn{bn}_al{alpha}_delz{delz}_ml{minlum_use:0.2f}_Lc{lc}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
-def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp'):
+def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp', lam_min=4400., lam_max=5500.):
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     fig, ax = plt.subplots()
     ax.plot(lam, tra, 'b-')
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     ax.set_xlabel(r'$\lambda$')
     ax.set_ylabel('Tranmission')
+    ax.set_xlim(lam_min, lam_max)
     pn = file_name.split('.')[0]
     fig.savefig(op.join(image_dir,f'TransCurve_{pn}.png'), bbox_inches='tight', dpi=150)
 
@@ -302,8 +303,10 @@ def main():
         else: 
             print("Not one of the sanctioned alpha fixed values")
             return
-    # plotTransCurve('N673_Nicole.txt', image_dir='')
-    # plotTransCurve('N419_Nicole.txt', image_dir='')
+    plotTransCurve('N501_Nicole.txt', image_dir='', lam_min=4900., lam_max=5125.)
+    plotTransCurve('N673_Nicole.txt', image_dir='', lam_min=6600., lam_max=6900.)
+    plotTransCurve('N419_Nicole.txt', image_dir='', lam_min=4100., lam_max=4300.)
+    return
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
     if args.corrf:
@@ -321,5 +324,5 @@ def main():
     dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    # main()
-    showAllCorr('N501')
+    main()
+    # showAllCorr('N501')
