@@ -6,7 +6,7 @@ import logging
 from astropy.table import Table
 from scipy.interpolate import interp1d
 from scipy.stats import ks_2samp
-from lumfuncmcmc import LumFuncMCMC, makeCompFunc, cgs2magAB, magAB2cgs
+from lumfuncmcmc import LumFuncMCMC, makeCompFunc, cgs2magAB, magAB2cgs, cgs2lum
 import VmaxLumFunc as V
 from scipy.optimize import fsolve
 import configLF
@@ -206,6 +206,7 @@ def parse_args(argv=None):
     if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width = 3.124, 5014.0, 77.17
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
     else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
+    args.del_red = args.filt_width / args.wav_rest
     args.trans_file = f'{args.filt_name}_Nicole.txt'
     args.corr_file = f'CorrFull{args.filt_name}.dat'
 
@@ -265,6 +266,8 @@ def read_input_file(args):
     cgscontam = magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
     flux_lim = min(flux_lim, cgscontam*1.0e17)
     print("Final flux limit:", flux_lim)
+    lum_lim = cgs2lum(flux_lim*1.0e-17, DL)
+    print("Final luminosity limit:", lum_lim)
     if args.environment: numbins = args.num_env_bins
     else: numbins = 1
     pers = np.linspace(0., 100., numbins+1)
@@ -311,6 +314,7 @@ def main(argv=None):
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
     output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    # if args.filt_name=='N673': output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
     
