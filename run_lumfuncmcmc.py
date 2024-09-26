@@ -166,6 +166,10 @@ def parse_args(argv=None):
     parser.add_argument("-v", "--vgal",
                         help='''Whether or not to create vgal file''',
                         action='count',default=0)
+    
+    parser.add_argument("-va", "--varying",
+                        help='''Whether or not to vary volume for veff''',
+                        action='count',default=0)
 
     parser.add_argument("-neb", "--num_env_bins",
                         help='''Number of bins for environment designation''',
@@ -213,8 +217,8 @@ def parse_args(argv=None):
     return args
 
 def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419'):
-    if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
-    else: labb = 'Contamination over 99% (removed)'
+    # if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
+    labb = 'Contamination over 99% (removed)'
     plt.hist([lum_comp, lum_incomp, lum_bright], histtype='barstacked', bins=bins, color=['blue', 'lightgrey', 'mistyrose'], label=['Above 50% completeness (kept)', 'Below 50% completeness (removed)', labb])
     plt.xlabel(r'Log luminosity (erg s$^{-1}$)')
     plt.ylabel(f'Number of sources for {filt_name}')
@@ -363,7 +367,7 @@ def main(argv=None):
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
                             corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam, interp_comp_simp_orig=interp_comp_simp_orig, cf=cf)
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam, interp_comp_simp_orig=interp_comp_simp_orig, cf=cf, varying=args.varying)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 
@@ -387,12 +391,12 @@ def main(argv=None):
 
         if args.veff_only:
             if args.environment: 
-                LFmod.VeffLF()
+                LFmod.VeffLF(varying=args.varying)
                 lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
                 if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
                 else: labels_env.append(f'Protocluster: {i}')
                 continue
-            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
+            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'], varying=args.varying)
             if args.output_dict['VeffLF']:
                 T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                             names=['Luminosity', 'BinLF', 'BinLFErr'])

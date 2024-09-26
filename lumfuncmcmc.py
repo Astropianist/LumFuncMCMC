@@ -105,7 +105,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     test_contam = np.linspace(bin_edges[0], bin_edges[-1], test_contam_num)
     ctc = contamf(test_contam)
     if ctc.min() > contam_lim: 
-        nbcontam = -99.0 #Super bright magnitude in case we never hit contam lim (which we won't)
+        nbcontam = -99.0 #Super bright magnitude in case we never hit contam lim
     else:
         indcontam = np.argmin(np.abs(ctc - contam_lim))
         nbcontam = test_contam[indcontam]
@@ -298,7 +298,7 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000
     #     delz[i] = (lam[right_indi]-lam[left_indi])/wav_rest
     interp_type = 'linear'
     transpdf, logL_discrete, delzf = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete, interp_type=interp_type, wav_rest=wav_rest)
-    
+
     return transpdf, logL_discrete, delzf # (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
@@ -462,7 +462,8 @@ class LumFuncMCMC:
                  trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
                  maxlum=None, minlum=None, transsim=False,
                  corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
-                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA'):
+                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA',
+                 varying=False):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -558,6 +559,7 @@ class LumFuncMCMC:
         self.filt_name = trans_file.split('_')[0]
         self.delz_use = self.delzf(self.logL_width)
         self.T_EL, self.weight = T_EL, weight
+        self.varying = varying
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -1127,7 +1129,7 @@ class LumFuncMCMC:
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
         self.medianLF = np.median(np.array(lf), axis=0)
-        self.VeffLF()
+        self.VeffLF(varying=self.varying)
 
     def plotLike(self, lss, als, likes, vgal):
         fig1 = plt.figure()
@@ -1210,7 +1212,7 @@ class LumFuncMCMC:
             lf.append(modlum)
             ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1, label='')
         self.medianLF = np.median(np.array(lf), axis=0)
-        self.VeffLF()
+        self.VeffLF(varying=self.varying)
         if self.corrf is not None: label = 'Best-fit'
         else: label = ''
         ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid',label=label)
