@@ -6,7 +6,7 @@ import argparse as ap
 # from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
 import lumfuncmcmc as L
-from VmaxLumFunc import cosmo
+import VmaxLumFunc as V
 import configLF as C
 import os.path as op
 from distutils.dir_util import mkpath
@@ -56,6 +56,8 @@ def parse_args():
     # parser.add_argument("-nl", "--numlum", help='''Number of luminosities used for array for initial luminosity selection''', type=int, default=100000)
     parser.add_argument("-ng", "--numgal", help='''Number of galaxies selected for experiment''', type=int, default=100000)
     parser.add_argument("-bn", "--binnum", help='''Number of bins for Veff and correction''', type=int, default=20)
+    parser.add_argument("-cl", "--contam_lim", help='''Contamination limit''', type=float, default=0.01)
+    parser.add_argument("-cb", "--contambin", help='''Contamination binning''', type=int, default=10)
     args = parser.parse_args()
     args.field_name = 'COSMOS'
     args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
@@ -123,7 +125,7 @@ def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numl
     logL = np.random.uniform(Lc, Lh, numlum)
     tlf = L.TrueLumFunc(logL, al, ls, phis)
     comps1df = get1DComp(interp_comp, maglow=maglow)
-    dL = cosmo.luminosity_distance(zc).value
+    dL = V.cosmo.luminosity_distance(zc).value
     mags = calc_mags(logL, dL, args.wav_filt, args.filt_width)
     tlf *= comps1df(mags)
     if corrf is not None: 
@@ -168,7 +170,9 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp'):
 def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varying=0, image_dir='TransExp', maglow=30.0, corrf=None):
     delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type
     minlum = max(Lc, minlumorig)
-    interp_comp, interp_comp_simp = L.makeCompFunc(file_name=args.interp_name)
+    DL = V.cosmo.luminosity_distance(args.redshift).value
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = L.makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim)
+    cgscontam = L.magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(numlum))
     zcent = (args.wav_filt - C.wav_rest) / C.wav_rest
@@ -195,7 +199,9 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
     lumlist = [lums, lums_mod]
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
-        lumobj = L.LumFuncMCMC(args.redshift, del_red=delz_eff[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=dists, dist=dists, logL_width=logLs.max(), transsim=True, minlum=minlum, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp)
+        lumobj = L.LumFuncMCMC(args.redshift, del_red=delz_eff[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=dists, dist=dists, logL_width=logLs.max(), transsim=True, minlum=minlum, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam, trans_file=args.trans_file)
+
+        lumobj = L.LumFuncMCMC(args.redshift, del_red=delz_eff[i], lum=lumi, Omega_0=args.Omega_0, sch_al=al, Lstar=ls, phistar=phis, Lc=Lc, Lh=Lh, fix_sch_al=True, min_comp_frac=min_comp_frac, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim, logL_width=4.0, weight=1.0, contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam, interp_comp_simp_orig=interp_comp_simp_orig, cf=cf, varying=args.varying)
         lumobj.VeffLF(varying=varying)
         lf.append(lumobj.lfbinorig)
         vars.append(lumobj.var)
@@ -258,14 +264,14 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
 
     return bcs, corrfull, correfull
 
-def showAllCorr(filter='N501', ngal=2500000):
+def showAllCorr(filter='N501', ngal=2500000, delz=0.1):
     if filter=='N501': alpha, ml = -1.6, 40.48 
     elif filter=='N419': alpha, ml = -2.0, 40.37
     else: alpha, ml = -1.1, 40.73
     image_dir = op.join('TransExp', str(ngal))
     Lcvals = [40.0, 41.0, 42.0, 42.5, 42.8, 43.1]
-    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz0.1_ml{ml:0.2f}'
-    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz0.1_ml{ml:0.2f}'
+    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.1f}_ml{ml:0.2f}'
+    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.1f}_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
         # if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
@@ -279,8 +285,8 @@ def showAllCorr(filter='N501', ngal=2500000):
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, f'CorrFull{filter}.dat'), format='ascii', overwrite=True)
-    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.1f}_ngal{ngal}.dat'), format='ascii', overwrite=True)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.1f}_ngal{ngal}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
@@ -303,10 +309,9 @@ def main():
         else: 
             print("Not one of the sanctioned alpha fixed values")
             return
-    plotTransCurve('N501_Nicole.txt', image_dir='', lam_min=4900., lam_max=5125.)
-    plotTransCurve('N673_Nicole.txt', image_dir='', lam_min=6600., lam_max=6900.)
-    plotTransCurve('N419_Nicole.txt', image_dir='', lam_min=4100., lam_max=4300.)
-    return
+    # plotTransCurve('N501_Nicole.txt', image_dir='', lam_min=4900., lam_max=5125.)
+    # plotTransCurve('N673_Nicole.txt', image_dir='', lam_min=6600., lam_max=6900.)
+    # plotTransCurve('N419_Nicole.txt', image_dir='', lam_min=4100., lam_max=4300.)
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
     if args.corrf:

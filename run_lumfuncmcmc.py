@@ -225,6 +225,23 @@ def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419
     plt.legend(loc='best', frameon=False)
     plt.savefig(f'LumDistRaw{filt_name}.png', bbox_inches='tight', dpi=300)
 
+def getDensityFrac(args, datfile):
+    dens = datfile['Density']
+    pc = datfile['Protocluster']
+    if args.environment: numbins = args.num_env_bins
+    else: numbins = 1
+    pers = np.linspace(0., 100., numbins+1)
+    dens_vals = np.percentile(dens, pers)
+    dens_vals[-1] += 1.0e-6 # Need to include max value in one of the bins
+    densavg = np.median(dens)
+    density_frac = np.ones(numbins)
+    for i in range(numbins):
+        cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
+        if args.environment==2: cond_env = abs(pc-i)<1.0e-6
+        densiavg = np.median(dens[cond_env])
+        density_frac[i] = densavg / densiavg
+    return density_frac
+
 def read_input_file(args):
     """ Function to read in input ascii file with properly named columns.
     Columns should include a (linear) flux (header 'LineorBandName_flux') 
@@ -259,38 +276,53 @@ def read_input_file(args):
     fluxs, fluxes, dists, distos, compss, denss, areas = [], [], [], [], [], [], []
     datfile = Table.read(args.filename,format='ascii')
     DL = V.cosmo.luminosity_distance(args.redshift).value
-    interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5)
+    if args.environment: numbins = args.num_env_bins
+    else: numbins = 1
+    density_frac = getDensityFrac(args, datfile)
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = [], [], [], [], []
+    flux_lim, cgscontam = [], []
+    for i in range(numbins):
+        interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, density_frac=density_frac[i])
+        interp_comp.append(interp_compi); interp_comp_simp.append(interp_comp_simpi); interp_comp_simp_orig.append(interp_comp_simp_origi); nbcontam.append(nbcontami); cf.append(cfi)
+        if args.lum_lim<0.0: flux_limi = np.inf
+        else: flux_limi = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
+        print("Original flux limit:", flux_limi)
+        cgscontami = magAB2cgs(nbcontam[i], args.wav_filt, args.filt_width)
+        flux_limi = min(flux_limi, cgscontami*1.0e17)
+        print("Final flux limit:", flux_limi)
+        lum_limi = cgs2lum(flux_limi*1.0e-17, DL)
+        print("Final luminosity limit:", lum_limi)
+        flux_lim.append(flux_limi); cgscontam.append(cgscontami)
     fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
     dens = datfile['Density']
     pc = datfile['Protocluster']
     
-    if args.lum_lim<0.0: flux_lim = np.inf
-    else: flux_lim = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
-    print("Original flux limit:", flux_lim)
-    cgscontam = magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
-    flux_lim = min(flux_lim, cgscontam*1.0e17)
-    print("Final flux limit:", flux_lim)
-    lum_lim = cgs2lum(flux_lim*1.0e-17, DL)
-    print("Final luminosity limit:", lum_lim)
-    if args.environment: numbins = args.num_env_bins
-    else: numbins = 1
     pers = np.linspace(0., 100., numbins+1)
     dens_vals = np.percentile(dens, pers)
     dens_vals[-1] += 1.0e-6 # Need to include max value in one of the bins
     weights = np.ones(numbins)
+    # cond_init = np.logical_and(fluxfull>0.0, fluxfull<flux_lim)
+    # mag = cgs2magAB(1.0e-17*fluxfull[cond_init], args.wav_filt, args.filt_width)
+    # comps = interp_comp_simp.ev(distfull[cond_init], mag)
+    # cond = comps>=args.min_comp_frac
+    # densfull = dens[cond_init][cond]
+    # densfullavg = np.median(densfull)
+    # density_frac = np.ones(numbins)
     for i in range(numbins):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
-        cond_init = np.logical_and(flux>0.0, flux<flux_lim)
+        cond_init = np.logical_and(flux>0.0, flux<flux_lim[i])
         lum = np.log10(1.0e-17*flux[cond_init] * 4.0*np.pi*(3.086e24*DL)**2)
-        lumb = np.log10(1.0e-17*flux[flux>=flux_lim] * 4.0*np.pi*(3.086e24*DL)**2)
+        lumb = np.log10(1.0e-17*flux[flux>=flux_lim[i]] * 4.0*np.pi*(3.086e24*DL)**2)
         mag = cgs2magAB(1.0e-17*flux[cond_init], args.wav_filt, args.filt_width)
-        comps = interp_comp_simp.ev(dist[cond_init], mag)
+        comps = interp_comp_simp[i].ev(dist[cond_init], mag)
         # compsorig = interp_comp_simp_orig.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
         # plotLumDistribRaw(lum[cond], lum[~cond], lumb, filt_name=args.filt_name)
         densi = dens[cond_env][cond_init][cond]
+        # densiavg = np.median(densi)
+        # density_frac[i] = densfullavg / densiavg
         areai = 1/densi
         vals = np.percentile(areai, [5,95])
         conda = np.logical_and(areai>=vals[0],areai<=vals[-1])
@@ -300,7 +332,7 @@ def read_input_file(args):
     for i in range(numbins):
         weights[i] = areas[i]/areas.sum()
     print("Weights for different density regions:", weights)
-    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf, density_frac
 
 def main(argv=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
@@ -323,7 +355,7 @@ def main(argv=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -362,12 +394,12 @@ def main(argv=None):
                             min_comp_frac=args.min_comp_frac, 
                             field_name=args.field_name, 
                             diff_rand=not args.same_rand, 
-                            interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, dist_orig=dist_orig[i], 
+                            interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], 
                             dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest,
                             err_corr=args.err_corr, trans_only=args.trans_only,
                             norm_only=args.norm_only, trans_file=args.trans_file,
-                            corrf=corrf, corref=corref, flux_lim=flux_lim,
-                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam, interp_comp_simp_orig=interp_comp_simp_orig, cf=cf, varying=args.varying)
+                            corrf=corrf, corref=corref, flux_lim=flux_lim[i],
+                            logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i])
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 

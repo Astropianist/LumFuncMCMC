@@ -34,7 +34,7 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_9_4_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA'): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_9_4_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
     file_name = file_name_orig.replace('N419', filter)
     if not op.exists(file_name):
         x = np.linspace(0, 100, 1001)
@@ -48,32 +48,38 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     nb_mag, cl = dat['NARROWBAND_MAGNITUDE'], dat['CLASSIFICATION']
     # ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
     # condlae = np.logical_or(np.logical_and(ps=='s', cl=='LAE'), ps!='s')
-    if contam_type == 'LU_LCAU':
-        speclae = np.where(np.logical_or(cl=='LAE', cl=='UNDET'))[0]
-        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN', cl=='UNDET')))[0]
-    elif contam_type == 'L_LCA':
-        speclae = np.where(cl=='LAE')[0]
-        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
-    elif contam_type == 'L_LC':
-        speclae = np.where(cl=='LAE')[0]
-        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM')))[0]
-    elif contam_type == 'LA_LCA':
-        speclae = np.where(np.logical_or(cl=='LAE', cl=='AGN'))[0]
-        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
-    elif contam_type == 'LU_LCU':
-        speclae = np.where(np.logical_or(cl=='LAE', cl=='UNDET'))[0]
-        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='UNDET')))[0]
-    elif contam_type == 'LAU_LCAU':
-        speclae = np.where(np.logical_or.reduce((cl=='LAE', cl=='AGN', cl=='UNDET')))[0]
-        allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN', cl=='UNDET')))[0]
-    else:
-        print("Not one of the possible options")
-        return None, None, None, None
+    assert contam_type == 'L_LCA'
+    speclae = np.where(cl=='LAE')[0]
+    specagn = np.where(cl=='AGN')[0]
+    specctm = np.where(cl=='CONTAM')[0]
+    allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
+    # if contam_type == 'LU_LCAU':
+    #     speclae = np.where(np.logical_or(cl=='LAE', cl=='UNDET'))[0]
+    #     allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN', cl=='UNDET')))[0]
+    # elif contam_type == 'L_LCA':
+    #     speclae = np.where(cl=='LAE')[0]
+    #     allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
+    # elif contam_type == 'L_LC':
+    #     speclae = np.where(cl=='LAE')[0]
+    #     allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM')))[0]
+    # elif contam_type == 'LA_LCA':
+    #     speclae = np.where(np.logical_or(cl=='LAE', cl=='AGN'))[0]
+    #     allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN')))[0]
+    # elif contam_type == 'LU_LCU':
+    #     speclae = np.where(np.logical_or(cl=='LAE', cl=='UNDET'))[0]
+    #     allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='UNDET')))[0]
+    # elif contam_type == 'LAU_LCAU':
+    #     speclae = np.where(np.logical_or.reduce((cl=='LAE', cl=='AGN', cl=='UNDET')))[0]
+    #     allspec = np.where(np.logical_or.reduce((cl=='LAE', cl=='CONTAM', cl=='AGN', cl=='UNDET')))[0]
+    # else:
+    #     print("Not one of the possible options")
+    #     return None, None, None, None
 
     pois = Table.read(errtab, format='ascii')
     num, lb, hb = pois['Num'], pois['LowBound'], pois['HighBound']
     nb_lae = nb_mag[speclae]
     nb_all = nb_mag[allspec]
+    nb_agn, nb_ctm = nb_mag[specagn], nb_mag[specctm]
     # print(f"nb_lae min {nb_lae.max():0.2f}, max {nb_lae.min():0.2f}")
     # print(f"nb_all min {nb_all.max():0.2f}, max {nb_all.min():0.2f}")
     # print("Total LAE sample size:", flux_lae.size)
@@ -88,10 +94,14 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     for i in range(binnum):
         cond = np.logical_and(nb_all>=bin_edges[i], nb_all<bin_edges[i+1])
         cond_lae = np.logical_and(nb_lae>=bin_edges[i], nb_lae<bin_edges[i+1])
+        cond_agn = np.logical_and(nb_agn>=bin_edges[i], nb_agn<bin_edges[i+1])
+        cond_ctm = np.logical_and(nb_ctm>=bin_edges[i], nb_ctm<bin_edges[i+1])
         fls, fas = nb_lae[cond_lae].size, nb_all[cond].size
-        contam[i] = fls/fas
+        fagns, fctms = nb_agn[cond_agn].size, nb_ctm[cond_ctm].size
+        fas_new = fls + fagns + fctms*density_frac
+        contam[i] = fls/fas_new
         flss[i], fass[i] = fls, fas
-        if fls>num.max(): contaml[i], contamh[i] = np.sqrt(fls)/fas, np.sqrt(fls)/fas
+        if fls>num.max(): contaml[i], contamh[i] = np.sqrt(fls)/fas_new, np.sqrt(fls)/fas_new
         else:
             cond_pois = np.where(fls==num)[0][0]
             contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
@@ -315,7 +325,7 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21.):
+def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
@@ -324,7 +334,7 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.colorbar(sc, label='Modified completeness')
     # plt.xlabel('Magnitude')
     # plt.ylabel('Distance from center of field')
-    cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type)
+    cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac)
     interp_comp = RGINNExt((dist, mag), comp)
     interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
     distcontam = np.linspace(dist.min(), dist.max(), distnum)
@@ -463,7 +473,7 @@ class LumFuncMCMC:
                  maxlum=None, minlum=None, transsim=False,
                  corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
                  weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA',
-                 varying=False):
+                 varying=False, density_frac=1.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -554,7 +564,7 @@ class LumFuncMCMC:
         # self.filt_width_eff = self.del_red_eff * self.wav_rest
         self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
         self.corrf, self.corref = corrf, corref
-        self.flux_lim = flux_lim
+        self.flux_lim = flux_lim*1.0e-17 #In cgs
         self.logLfuncz, self.delzfv2, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime)
         self.filt_name = trans_file.split('_')[0]
         self.delz_use = self.delzf(self.logL_width)
@@ -565,7 +575,7 @@ class LumFuncMCMC:
         print("Finished DL, dVdz")
 
         if interp_comp is None: 
-            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim, contam_type=contam_type)
+            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac)
             cgscontam = magAB2cgs(self.nbcontam, self.wav_filt, self.filt_width)
             lumcontam = cgs2lum(cgscontam, self.DL)
             if flux is not None: condcontam = flux <= cgscontam*1.0e17
@@ -668,9 +678,13 @@ class LumFuncMCMC:
                     func = interp1d(self.maggrid, comps_use, bounds_error=False, fill_value=(comps_use[0], comps_use[-1]))
                     roots[i,j] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
             fluxes = magAB2cgs(roots[i], self.wav_filt, self.filt_width)
-            minlumsi = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * fluxes)
+            minlumsi = np.log10(4.0*np.pi*(self.DLs[i]*3.086e24)**2 * fluxes)
             minlums[i] = np.clip(minlumsi, self.Lc, self.Lh)
         self.minlum2df = RectBivariateSpline(self.zarr, self.distgrid, minlums)
+
+    def getmaxlum_z_func(self):
+        lums = cgs2lum(self.flux_lim, self.DLs)
+        self.maxlumf = interp1d(self.zarr, lums, kind='linear', bounds_error=False, fill_value=(lums[0], lums[-1]))
 
     def get1DComp(self):
         ''' Get LAE-point-averaged estimates of the 1-D completeness function (of magnitude) '''
@@ -739,6 +753,8 @@ class LumFuncMCMC:
         self.dVdz = V.cosmo.differential_comoving_volume(self.z).value
         # if self.err_corr or self.trans_only: self.volume = self.dVdz * self.del_red_eff
         self.zarr = np.linspace(self.ztmax-0.55*self.delz_use, self.ztmax+0.55*self.delz_use, self.size_lprime)
+        self.DLs = V.cosmo.luminosity_distance(self.zarr).value
+        self.lum_lim = cgs2lum(self.flux_lim, self.DL)
         self.dVdzs = V.cosmo.differential_comoving_volume(self.zarr).value
         self.volume = self.dVdz * self.del_red # Actual total volume per steradian of the survey (redshift integral separate from luminosity function integral)
 
@@ -806,18 +822,26 @@ class LumFuncMCMC:
     def calcVgalPhistar(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
         fac_sr_to_arcmin = np.pi / 180. / 60.
         integ_mult = 2 * np.pi * fac_sr_to_arcmin**2
-        self.getminlum_z_func()
+        # self.getminlum_z_func()
+        # self.getmaxlum_z_func()
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         R = np.sqrt(self.Omega_0_sr/np.pi) # Angular radius of circular field in radians
         rs = np.linspace(0, R, rnum) / fac_sr_to_arcmin # Get radial position in arcmin
         vgal = np.zeros((alnum, lsnum))
+        # logLr = np.zeros((rnum, self.size_ln))
+        mlh = cgs2lum(self.flux_lim, self.DL)
+        # ml = self.minlum2df.ev(self.z, rs)
+        ml = self.minlumf(rs)
+        
         for j in range(lsnum):
             print(f"Got to j={j} in main al ls loop")
             logLr = np.zeros((rnum, self.size_ln))
             for kk in range(rnum):
-                ml = self.minlumf(rs[kk])
-                logLr[kk] = np.linspace(ml, max(ml, lss[j] + exceed), num=self.size_ln)
+            #     ml = self.minlumf(rs[kk])
+            #     ml = self.minlum2df.ev(self.zarr, rs[kk])
+                
+                logLr[kk] = np.linspace(ml[kk], max(ml[kk], min(mlh, lss[j] + exceed)), num=self.size_ln)
             flux_cgs = 10**logLr/(4.0*np.pi*(3.086e24*self.DL)**2)
             mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
             comps = self.interp_comp_simp.ev(rs[:,None], mags)
