@@ -325,7 +325,7 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0):
+def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0, use_contam=True):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
@@ -334,18 +334,21 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.colorbar(sc, label='Modified completeness')
     # plt.xlabel('Magnitude')
     # plt.ylabel('Distance from center of field')
-    cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac)
+    if use_contam: cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac)
+    else: nbcontam, cf = None, None
     interp_comp = RGINNExt((dist, mag), comp)
     interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
     distcontam = np.linspace(dist.min(), dist.max(), distnum)
     magcontam = np.linspace(mag.min(), mag.max(), magnum)
-    dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
-    # cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
-    contampart = 1.0/cf(mc)
-    contampart[mc<nbcontam] = 1.0/contam_lim
+    if use_contam:
+        dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
+        # cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
+        contampart = 1.0/cf(mc)
+        contampart[mc<nbcontam] = 1.0/contam_lim
 
-    vals = interp_comp_simp_orig.ev(dc, mc) * contampart
-    interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals, kx=1, ky=1)
+        vals = interp_comp_simp_orig.ev(dc, mc) * contampart
+        interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals, kx=1, ky=1)
+    else: interp_comp_simp = interp_comp_simp_orig
     # fig2 = plt.figure()
     # sc = plt.contourf(magcontam, distcontam, np.log10(vals), levels=10)
     # plt.colorbar(sc, label='Modified completeness')
@@ -585,20 +588,22 @@ class LumFuncMCMC:
             # Have already taken care of the condition in this case
             if flux is not None: condcontam = flux < np.inf
             else: condcontam = lum < np.inf
-        if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         print("Got completeness")
         if flux is not None: 
             self.flux = 1.0e-17*flux[condcontam]
             if flux_e is not None:
                 self.flux_e = 1.0e-17*flux_e[condcontam]
         else:
-            self.lum, self.lum_e = lum[condcontam], lum_e[condcontam]
+            self.lum = lum[condcontam]
+            if lum_e is not None: self.lum_e = lum_e[condcontam]
+            else: self.lum_e = None
             self.getFluxes()
         if lum is None: 
             self.getLumin()
         self.N = self.lum.size
         print("Finished getting fluxes and luminosities")
         self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
+        if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         
         # Modify fluxes based on contamination limit
         self.alls_file_name, self.vgal_file_name = alls_file_name, vgal_file_name
