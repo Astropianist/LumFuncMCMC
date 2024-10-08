@@ -5,6 +5,7 @@ from astropy.table import Table
 import argparse as ap
 # from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
+from scipy.signal import savgol_filter
 import lumfuncmcmc as L
 import VmaxLumFunc as V
 import configLF as C
@@ -64,6 +65,7 @@ def parse_args():
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
     else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
     args.trans_file = f'{args.filt_name}_Nicole.txt'
+    args.delz = args.filt_width / C.wav_rest
     return args
 
 def add_LumFunc_plot(ax1):
@@ -80,7 +82,7 @@ def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_
     ax.errorbar(logLs, lfs[0], yerr=np.sqrt(vars[0]), fmt='bs', linestyle='none', label='Original')
     ax.errorbar(logLs, lfs[1], yerr=np.sqrt(vars[1]), fmt='r^', linestyle='none', label='Convolved')
     ax.legend(loc='best', frameon=False)
-    fig.savefig(op.join(image_dir, f'VeffComp{filter}_ng{ngal}_bn{bn}_al{alpha}_delz{delz}_ml{minlum_use:0.2f}_Lc{lc}_var{varying}.png'), bbox_inches='tight', dpi=200)
+    fig.savefig(op.join(image_dir, f'VeffComp{filter}_ng{ngal}_bn{bn}_al{alpha}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{lc}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
 def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp', lam_min=4400., lam_max=5500.):
@@ -163,7 +165,7 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp', va
     # ax[1].set_ylabel('PDF')
     ax[0].legend(loc='best', frameon=False)
     plt.tight_layout()
-    fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz}_al{al}_var{varying}.png'), bbox_inches='tight', dpi=200)
+    fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz:0.2f}_al{al}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
 def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varying=0, image_dir='TransExp', corrf=None):
@@ -184,9 +186,9 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
     # bin_centers_orig, hist_orig = bin_lums(lums)
     lums_mod, logLs, delzf, delzfv2 = calc_new_lums(lums, reds, file_name=file_name, interp_type=interp_type)
     # bin_centers, hist = bin_lums(lums_mod)
-    plot_hists(lums, lums_mod, delz, al, logLs)
+    plot_hists(lums, lums_mod, delz, al, logLs, varying=varying)
     mkpath(image_dir)
-    # outname_list = [f'Veff_al{al}_delz{delz}_vary{varying}', f'VeffTrans_al{al}_delz{delz}_vary{varying}']
+    # outname_list = [f'Veff_al{al}_delz{delz:0.2f}_vary{varying}', f'VeffTrans_al{al}_delz{delz:0.2f}_vary{varying}']
     # minlum_use = max(Lc, minlum_onered)
     minlum_use = minlum_onered
     print("minlum_use:", minlum_use)
@@ -252,24 +254,29 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
         bcmax = max(bcmax, bcall[i][cond].max())
     bcs = np.linspace(bcmin, bcmax, num)
     for i in range(len(bcall)):
-        corrfs.append(interp1d(bcall[i], corrall[i], kind='cubic', bounds_error=False, fill_value=np.nan))
-        correfs.append(interp1d(bcall[i], correall[i], kind='cubic', bounds_error=False, fill_value=np.nan))
+        if len(bcall[i]) < 4: interp_type = 'linear'
+        else: interp_type = 'cubic'
+        corrfs.append(interp1d(bcall[i], corrall[i], kind=interp_type, bounds_error=False, fill_value=np.nan))
+        correfs.append(interp1d(bcall[i], correall[i], kind=interp_type, bounds_error=False, fill_value=np.nan))
         corrs[i] = corrfs[i](bcs)
         corres[i] = correfs[i](bcs)
     ws = 1/corres
     corrfull = np.nansum(corrs*ws, axis=0) / np.nansum(ws, axis=0)
     correfull = np.sqrt(len(bcall)) / np.nansum(ws, axis=0)
-
+    # wl = int(len(corrfull_orig)*0.8)
+    # wl = len(corrfull_orig)
+    # corrfull = savgol_filter(corrfull_orig, wl, 5)
+    # correfull = savgol_filter(correfull_orig, wl, 5)
     return bcs, corrfull, correfull
 
 def showAllCorr(filter='N501', ngal=2500000, delz=0.1, varying=0):
-    if filter=='N501': alpha, ml = -1.6, 40.48 
-    elif filter=='N419': alpha, ml = -2.0, 40.37
-    else: alpha, ml = -1.1, 40.73
-    image_dir = op.join('TransExp', str(ngal))
-    Lcvals = [40.0, 41.0, 42.0, 42.5, 42.8, 43.1]
-    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.1f}_ml{ml:0.2f}'
-    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.1f}_ml{ml:0.2f}'
+    if filter=='N501': alpha, ml = -1.6, 41.58
+    elif filter=='N419': alpha, ml = -2.0, 41.47
+    else: alpha, ml = -1.1, 41.83
+    image_dir = op.join('TransExp', 'NewVers')
+    Lcvals = [41.0, 42.0, 42.5, 42.8]
+    fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
+    fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
         # if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
@@ -277,14 +284,18 @@ def showAllCorr(filter='N501', ngal=2500000, delz=0.1, varying=0):
         else: fn = op.join(image_dir, f'{fn_base}_Lc{Lc:0.1f}_corr0_var{varying}.dat')
         dat = Table.read(fn, format='ascii')
         bc, co, coe = dat['logL'], dat['Corr'], dat['CorrErr']
+        cond = ~np.isnan(co)
+        if Lc > ml: bc, co, coe = bc[cond][1:], co[cond][1:], coe[cond][1:]
+        if filter=='N419': 
+            if Lc==42.8: bc, co, coe = bc[:-1], co[:-1], coe[:-1]
         bcall.append(bc); corrall.append(co); correall.append(coe)
     bcs, corrfull, correfull = getOverallCorr(bcall, corrall, correall)
     corrdat = Table()
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.1f}_ngal{ngal}.dat'), format='ascii', overwrite=True)
-    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.1f}_ngal{ngal}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{ngal}.dat'), format='ascii', overwrite=True)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{ngal}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
@@ -313,19 +324,19 @@ def main():
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
     if args.corrf:
-        corrfile = Table.read(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.1f}_ngal{numgal}.dat'), format='ascii')
+        corrfile = Table.read(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{numgal}.dat'), format='ascii')
         logL, corr = corrfile['logL'], corrfile['Corr']
         corrf = interp1d(logL, corr, kind='linear', bounds_error=False, fill_value=(corr[0], corr[-1]))
     else: 
         corrf = None
     bin_centers, corr_n501, minlum_use = get_corrections(args, *this_work, varying=varying, Lc=Lc, corrf=corrf)
-    plot_corr(bin_centers, corr_n501, f'{filter}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.png', image_dir=image_dir)
+    plot_corr(bin_centers, corr_n501, f'{filter}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.png', image_dir=image_dir)
 
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.dat'), format='ascii', overwrite=True)
+    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
     main()
-    # showAllCorr('N501', varying=1)
+    # showAllCorr('N419', varying=1)
