@@ -269,11 +269,13 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
     # correfull = savgol_filter(correfull_orig, wl, 5)
     return bcs, corrfull, correfull
 
-def showAllCorr(filter='N501', ngal=2500000, delz=0.1, varying=0):
+def showAllCorr():
+    args = parse_args()
+    filter, ngal, delz, varying = args.filt_name, args.numgal, args.delz, args.varying
     if filter=='N501': alpha, ml = -1.6, 41.58
     elif filter=='N419': alpha, ml = -2.0, 41.47
     else: alpha, ml = -1.1, 41.83
-    image_dir = op.join('TransExp', 'NewVers')
+    image_dir = op.join('TransExp', 'FinalDelz')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
     fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
     fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
@@ -338,5 +340,5 @@ def main():
     dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main()
-    # showAllCorr('N419', varying=1)
+    # main()
+    showAllCorr()

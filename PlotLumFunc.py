@@ -73,6 +73,24 @@ def getIntegInfo(fitpost, rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
     print("[16th, 50th, 84th] percentile of log integral over luminosity of galaxies: ", lumvals)
     print("Log Number: upper and lower errors:", numvals[2]-numvals[1], numvals[1]-numvals[0])
     print("Log Luminosity: upper and lower errors:", lumvals[2]-lumvals[1], lumvals[1]-lumvals[0])
+    return numvals, lumvals
+
+def getIntegInfoProto(fitpostprotorig, zs=[2.4, 3.1, 4.5], rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
+    fppo = [fpp.split('/') for fpp in fitpostprotorig]
+    fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
+    fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
+    protint, proteu, protel, npint, npeu, npel = np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs))
+    protlint, protleu, protlel, nplint, npleu, nplel = np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs))
+    for i, fpp, fpnp, z in zip(np.arange(len(zs)), fitpostprot, fitpostnotprot, zs):
+        print(f"Protoclusters at z={z}: ")
+        nvi, lvi = getIntegInfo(fpp, rndsamples=rndsamples, llow=llow, lhigh=lhigh, sa=sa)
+        protint[i], proteu[i], protel[i] = nvi[1], nvi[2]-nvi[1], nvi[1]-nvi[0]
+        protlint[i], protleu[i], protlel[i] = lvi[1], lvi[2]-lvi[1], lvi[1]-lvi[0]
+        print(f"Not protoclusters at z={z}: ")
+        nvi, lvi = getIntegInfo(fpnp, rndsamples=rndsamples, llow=llow, lhigh=lhigh, sa=sa)
+        npint[i], npeu[i], npel[i] = nvi[1], nvi[2]-nvi[1], nvi[1]-nvi[0]
+        nplint[i], npleu[i], nplel[i] = lvi[1], lvi[2]-lvi[1], lvi[1]-lvi[0]
+    return protint, proteu, protel, npint, npeu, npel, protlint, protleu, protlel, nplint, npleu, nplel
 
 def add_LumFunc_plot(ax1, no_ylabel=False):
     """ Set up the plot for the luminosity function """
@@ -165,7 +183,8 @@ def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.
     plt.tight_layout()
     fig.savefig("CosmicEvolCOSMOS_PCcorrs.png", bbox_inches='tight', dpi=300)
 
-def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6):
+def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5):
+    protint, proteu, protel, npint, npeu, npel, protlint, protleu, protlel, nplint, npleu, nplel = getIntegInfoProto(fitpostprotorig, zs=reds, llow=llow, sa=sa)
     fppo = [fpp.split('/') for fpp in fitpostprotorig]
     fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
     fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
@@ -176,7 +195,7 @@ def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6):
         samples_prot.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
         samples_notprot.append(np.lib.recfunctions.structured_to_unstructured(dat2.as_array()))
         del dat, dat2
-    fig, ax = plt.subplots(nrows=1, ncols=3, sharex=True, figsize=(12, 5))
+    fig, ax = plt.subplots(nrows=1, ncols=4, sharex=True, figsize=(13, 4))
     paramspa, paramsnpa = [], []
     for i, z in enumerate(reds):
         nsamples_prot = getnsamples(samples_prot[i])
@@ -199,12 +218,18 @@ def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6):
         ax[i].errorbar(reds, pspi, yerr=np.row_stack((pspile, pspiue)), xerr=dzs, color=col1, linestyle='none', markersize=10, capsize=2, label=labelp, marker='s')
         ax[i].errorbar(reds, psnpi, yerr=np.row_stack((psnpile, psnpiue)), xerr=dzs, color=col2, linestyle='none', markersize=10, capsize=2, label=labelnp, marker='^')
         ax[i].set_ylabel(plotlab[i])
-    ax[0].legend(loc='best', frameon=False)
+    ax[3].errorbar(reds, protint, yerr=np.row_stack((protel, proteu)), xerr=dzs, color=col1, linestyle='none', markersize=10, capsize=2, label='', marker='s')
+    # ax[4].errorbar(reds, protlint, yerr=np.row_stack((protlel, protleu)), xerr=dzs, color=col1, linestyle='none', markersize=10, capsize=2, label='', marker='s')
+    ax[3].errorbar(reds, npint, yerr=np.row_stack((npel, npeu)), xerr=dzs, color=col2, linestyle='none', markersize=10, capsize=2, label='', marker='^')
+    # ax[4].errorbar(reds, nplint, yerr=np.row_stack((nplel, npleu)), xerr=dzs, color=col2, linestyle='none', markersize=10, capsize=2, label='', marker='^')
+    ax[3].set_ylabel(rf'$\int_{{{llow:0.1f}}}^{{\infty}}\phi(\mathcal{{L}})d\mathcal{{L}}$ (Mpc$^{{-3}}$)')
+    # ax[4].set_ylabel(rf'$\int_{{{llow:0.1f}}}^{{\infty}}10^{{\mathcal{{L}}}}\phi(\mathcal{{L}})d\mathcal{{L}}$ ($L_{{\odot}}$ Mpc$^{{-3}}$)')
+    ax[0].legend(loc='best', frameon=True, fontsize='small')
     ax2 = fig.add_subplot(111, frameon=False)
     ax2.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
     ax2.set_xlabel('Redshift')
     plt.tight_layout()
-    fig.savefig("CosmicEvolCOSMOSPropcorrs.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOSPropcorrs4col.png", bbox_inches='tight', dpi=300)
 
 def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     logL = np.linspace(Lmin, Lmax, Lnum)
@@ -267,7 +292,8 @@ def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
 
-def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=44.25, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=5.0e-7, ymax=3.0e-2, sa=-1.6):
+def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.8, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=5.0e-7, ymax=3.0e-2, sa=-1.6):
+    herenz = {'lum':np.array([42.3, 42.5, 42.7, 42.9, 43.1, 43.3]), 'phi':np.array([5.9e-3, 3.1e-3, 1.4e-3, 4.8e-4, 1.5e-4, 2.3e-5]), 'phierr':np.array([8.6e-4, 4.1e-4, 2.3e-4, 1.2e-4, 5.9e-5, 2.3e-5])}
     logL = np.linspace(Lmin, Lmax, Lnum)
     sob = fits.getdata(sobfile, 1)
     sobs = sob['Sample']
@@ -309,6 +335,7 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
             ind = np.where(refuniq==rj)[0][0]
             condsofull = np.logical_and(condsobo, ref==rj)
             ax[i].errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=colref[ind], label=rjlab, capsize=2)
+        if i==2: ax[i].errorbar(herenz['lum'], herenz['phi'], yerr=herenz['phierr'], color=next(orig_palette), marker=next(markers), label=r'Herenz+19 $3<z<6.7$', capsize=2, linestyle='none')
         # ax[i].vlines(llims[i], ymin, ymax, colors='k', label='')
         # Now using contamination algorithm so don't need a 
         condvi = logL>=llims[i]
@@ -396,15 +423,15 @@ def NewProc():
     fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     # dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]
-    plotEvolution([fits_z24, fits_z31, fits_z45], reds)
-    plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083])
-    plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.48, 43.94, 44.19])
+    # plotEvolution([fits_z24, fits_z31, fits_z45], reds)
+    # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
+    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5)
+    plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.29, 43.37, 43.62])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
-    plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
-    getIntegInfo(fits_z24, llow=42.0)
-    getIntegInfo(fits_z31, llow=42.0)
-    getIntegInfo(fits_z45, llow=42.0)
+    # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
+    # getIntegInfo(fits_z24, llow=42.5)
+    # getIntegInfo(fits_z31, llow=42.5)
+    # getIntegInfo(fits_z45, llow=42.5)
     # plotLLComp(dat_z45)
 
 if __name__ == '__main__':
