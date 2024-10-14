@@ -227,6 +227,15 @@ def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419
     plt.legend(loc='best', frameon=False)
     plt.savefig(f'LumDistRaw{filt_name}.png', bbox_inches='tight', dpi=300)
 
+def plotFluxDistribRaw(flux_comp, flux_incomp, flux_bright, bins=40, filt_name='N419'):
+    # if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
+    labb = 'Contamination over 99% (removed)'
+    plt.hist([np.log10(flux_comp), np.log10(flux_incomp), np.log10(flux_bright)], histtype='barstacked', bins=bins, color=['blue', 'lightgrey', 'mistyrose'], label=['Above 50% completeness (kept)', 'Below 50% completeness (removed)', labb])
+    plt.xlabel(r'Log flux ($10^{-17}$ erg cm$^{-2}$ s$^{-1}$)')
+    plt.ylabel(f'Number of sources for {filt_name}')
+    plt.legend(loc='best', frameon=False)
+    plt.savefig(f'FluxDistRaw{filt_name}.png', bbox_inches='tight', dpi=300)
+
 def getDensityFrac(args, datfile):
     dens = datfile['Density']
     pc = datfile['Protocluster']
@@ -321,6 +330,7 @@ def read_input_file(args):
         comps = interp_comp_simp[i].ev(dist[cond_init], mag)
         # compsorig = interp_comp_simp_orig.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
+        # plotFluxDistribRaw(flux[cond_init][cond], flux[cond_init][~cond], flux[flux>=flux_lim[i]], filt_name=args.filt_name)
         # plotLumDistribRaw(lum[cond], lum[~cond], lumb, filt_name=args.filt_name)
         densi = dens[cond_env][cond_init][cond]
         # densiavg = np.median(densi)
