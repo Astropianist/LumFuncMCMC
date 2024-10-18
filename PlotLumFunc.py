@@ -1,7 +1,9 @@
 import numpy as np 
 from scipy.integrate import quad
+from scipy.ndimage import gaussian_filter1d
 from uncertainties import unumpy, ufloat
 import matplotlib.pyplot as plt 
+from matplotlib.colors import ListedColormap
 from astropy.table import Table 
 from astropy.io import fits
 import os.path as op
@@ -120,11 +122,10 @@ def getnsamples(samples, lnprobcut=7.5):
         lnprobcut *= 2.0
     return nsamples
 
-def plotProtoEvolOrig(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
+def getProtoFiles(fitpostprotorig):
     fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fitpostprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
-    fitpostnotprot = [fp.replace('bin1', 'bin2') for fp in fitpostprot]
-    logL = np.linspace(Lmin, Lmax, Lnum)
+    fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
+    fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
     samples_prot, samples_notprot = [], []
     for fpf, fpnf in zip(fitpostprot, fitpostnotprot):
         dat = Table.read(fpf, format='ascii')
@@ -132,6 +133,50 @@ def plotProtoEvolOrig(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa
         samples_prot.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
         samples_notprot.append(np.lib.recfunctions.structured_to_unstructured(dat2.as_array()))
         del dat, dat2
+    return samples_prot, samples_notprot
+
+def plotLsalProt(fitpostprotorig, reds, cmap_len=256, sigma=1.0):
+    probs = np.array([0.997, 0.954, 0.683])
+    samples_prot, samples_notprot = getProtoFiles(fitpostprotorig)
+    fig, ax = plt.subplots(1, len(reds), sharex=True, sharey=True, figsize=(4*len(reds), 4))
+    cmps, pclab = [], []
+    for j in range(2):
+        col = orig_palette_arr[j]
+        alpha = np.linspace(0.2, 1, cmap_len)
+        cols = np.repeat(np.asarray(col)[None], cmap_len, axis=0)
+        cmps.append(ListedColormap(np.column_stack((cols, alpha))))
+        if j==0: pcl = 'PC'
+        else: pcl = 'Not PC'
+        pclab.append(pcl)
+    for i, z in enumerate(reds):
+        nsamples_prot = getnsamples(samples_prot[i])
+        nsamples_notprot = getnsamples(samples_notprot[i])
+        all_samples = [nsamples_prot, nsamples_notprot]
+        for j in range(2):
+            ls, al, lik = all_samples[j][:,0], all_samples[j][:,2], all_samples[j][:,3]
+            # lik = gaussian_filter1d(likorig, sigma=sigma)
+            liks = np.sort(lik)[::-1]
+            linliks = np.exp(liks/liks.max())
+            linliks /= linliks.sum()
+            linlikscs = np.cumsum(linliks)
+            levels = np.zeros_like(probs)
+            for k, pr in enumerate(probs):
+                levels[k] = liks[np.argmin(abs(linlikscs-pr))]
+            # levels = np.percentile(lik, [0.27, 4.55, 31.73])
+            # ax[i].tricontour(ls, al, lik, levels=10, linewidths=0.5, colors='k')
+            ax[i].tricontour(ls, al, lik, levels, cmap=cmps[j])
+        # ax[i].legend(loc='best') label=rf'$z={z}$ {pclab[j]}'
+        ax[i].set_title(rf'$z={z}$')
+    ax[0].set_ylabel(r'$\alpha$')
+    ax2 = fig.add_subplot(111, frameon=False)
+    ax2.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
+    ax2.set_xlabel(r'log L$_*$')
+    plt.tight_layout()
+    fig.savefig('COSMOS_Proto_Lsal_comp.png', bbox_inches='tight', dpi=300)
+
+def plotProtoEvolOrig(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
+    samples_prot, samples_notprot = getProtoFiles(fitpostprotorig)
+    logL = np.linspace(Lmin, Lmax, Lnum)
     fig, ax = plt.subplots()
     add_LumFunc_plot(ax)
     for i, z in enumerate(reds):
@@ -151,17 +196,8 @@ def plotProtoEvolOrig(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa
     fig.savefig("CosmicEvolCOSMOS_PCv2.png", bbox_inches='tight', dpi=300)
 
 def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
-    fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
-    fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
+    samples_prot, samples_notprot = getProtoFiles(fitpostprotorig)
     logL = np.linspace(Lmin, Lmax, Lnum)
-    samples_prot, samples_notprot = [], []
-    for fpf, fpnf in zip(fitpostprot, fitpostnotprot):
-        dat = Table.read(fpf, format='ascii')
-        dat2 = Table.read(fpnf, format='ascii')
-        samples_prot.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
-        samples_notprot.append(np.lib.recfunctions.structured_to_unstructured(dat2.as_array()))
-        del dat, dat2
     fig, ax = plt.subplots(nrows=1, ncols=len(reds), sharex=True, sharey=True, figsize=(12, 5))
     col1, col2 = orig_palette_arr[:2]
     for i, z in enumerate(reds):
@@ -183,18 +219,10 @@ def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.
     plt.tight_layout()
     fig.savefig("CosmicEvolCOSMOS_PCcorrs.png", bbox_inches='tight', dpi=300)
 
-def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5):
+def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5, only_integ=False):
     protint, proteu, protel, npint, npeu, npel, protlint, protleu, protlel, nplint, npleu, nplel = getIntegInfoProto(fitpostprotorig, zs=reds, llow=llow, sa=sa)
-    fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
-    fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
-    samples_prot, samples_notprot = [], []
-    for fpf, fpnf in zip(fitpostprot, fitpostnotprot):
-        dat = Table.read(fpf, format='ascii')
-        dat2 = Table.read(fpnf, format='ascii')
-        samples_prot.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
-        samples_notprot.append(np.lib.recfunctions.structured_to_unstructured(dat2.as_array()))
-        del dat, dat2
+    if only_integ: return
+    samples_prot, samples_notprot = getProtoFiles(fitpostprotorig)
     fig, ax = plt.subplots(nrows=1, ncols=4, sharex=True, figsize=(13, 4))
     paramspa, paramsnpa = [], []
     for i, z in enumerate(reds):
@@ -425,14 +453,16 @@ def NewProc():
     reds = [2.4, 3.1, 4.5]
     # plotEvolution([fits_z24, fits_z31, fits_z45], reds)
     # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5)
-    plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.29, 43.37, 43.62])
+    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5, only_integ=True)
+    # plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.29, 43.37, 43.62])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
     # getIntegInfo(fits_z24, llow=42.5)
     # getIntegInfo(fits_z31, llow=42.5)
     # getIntegInfo(fits_z45, llow=42.5)
     # plotLLComp(dat_z45)
+
+    plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
 
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
