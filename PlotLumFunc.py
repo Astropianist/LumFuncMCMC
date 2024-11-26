@@ -172,7 +172,7 @@ def plotLsalProt(fitpostprotorig, reds, cmap_len=256, sigma=1.0):
     ax2.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
     ax2.set_xlabel(r'log L$_*$')
     plt.tight_layout()
-    fig.savefig('COSMOS_Proto_Lsal_comp.png', bbox_inches='tight', dpi=300)
+    fig.savefig('COSMOS_Proto_Lsal_comp_corrn.png', bbox_inches='tight', dpi=300)
 
 def plotProtoEvolOrig(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     samples_prot, samples_notprot = getProtoFiles(fitpostprotorig)
@@ -217,7 +217,7 @@ def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.
         ax[i].set_ylim(1.0e-6, 3.0e-2)
         ax[i].legend(loc='best', frameon=False)
     plt.tight_layout()
-    fig.savefig("CosmicEvolCOSMOS_PCcorrs.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOS_PCcorrsn.png", bbox_inches='tight', dpi=300)
 
 def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5, only_integ=False):
     protint, proteu, protel, npint, npeu, npel, protlint, protleu, protlel, nplint, npleu, nplel = getIntegInfoProto(fitpostprotorig, zs=reds, llow=llow, sa=sa)
@@ -257,7 +257,7 @@ def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5, only_integ
     ax2.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
     ax2.set_xlabel('Redshift')
     plt.tight_layout()
-    fig.savefig("CosmicEvolCOSMOSPropcorrs4col.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOSPropcorrsn4col.png", bbox_inches='tight', dpi=300)
 
 def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     logL = np.linspace(Lmin, Lmax, Lnum)
@@ -278,7 +278,7 @@ def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOS_corrs.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolCOSMOS_corrsn.png", bbox_inches='tight', dpi=300)
 
 def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2, sa=-1.6):
     ns = len(dens_vals[0])-1
@@ -320,7 +320,7 @@ def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
 
-def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.8, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=5.0e-7, ymax=3.0e-2, sa=-1.6):
+def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.8, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=5.0e-7, ymax=3.0e-2, sa=-1.6, llims_low=[42.0, 42.1, 42.2]):
     herenz = {'lum':np.array([42.3, 42.5, 42.7, 42.9, 43.1, 43.3]), 'phi':np.array([5.9e-3, 3.1e-3, 1.4e-3, 4.8e-4, 1.5e-4, 2.3e-5]), 'phierr':np.array([8.6e-4, 4.1e-4, 2.3e-4, 1.2e-4, 5.9e-5, 2.3e-5])}
     logL = np.linspace(Lmin, Lmax, Lnum)
     sob = fits.getdata(sobfile, 1)
@@ -368,12 +368,14 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
         # Now using contamination algorithm so don't need a 
         condvi = logL>=llims[i]
         ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
+        condvi = logL<=llims_low[i]
+        ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
         ax[i].legend(loc='best', frameon=False, fontsize='x-small')
     ax[0].set_xlim(Lmin, Lmax)
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("FullLitCompcorrs.png", bbox_inches='tight', dpi=300)
+    fig.savefig("FullLitCompcorrsn.png", bbox_inches='tight', dpi=300)
 
 def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral2=None):
     fig, ax = plt.subplots()
@@ -445,21 +447,21 @@ def main(alpha_fixed=-1.6):
     plotStuff(logLVs, dat_veff['BinLF'], dat_veff['BinLFErr'], logL[inds], bf[inds], sobral1=sobral_sc4k, sobral2=sobral_ssc4k, this_work=None)
 
 def NewProc():
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs', 'N419_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs', 'N501_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N419_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N501_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     # fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrs_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     # dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]
-    # plotEvolution([fits_z24, fits_z31, fits_z45], reds)
-    # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5, only_integ=True)
-    # plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.29, 43.37, 43.62])
+    plotEvolution([fits_z24, fits_z31, fits_z45], reds)
+    plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
+    plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5, only_integ=True)
+    plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.29, 43.37, 43.62], llims_low=[42.19, 42.29, 42.44])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
-    # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
-    # getIntegInfo(fits_z24, llow=42.5)
-    # getIntegInfo(fits_z31, llow=42.5)
-    # getIntegInfo(fits_z45, llow=42.5)
+    plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
+    getIntegInfo(fits_z24, llow=42.5)
+    getIntegInfo(fits_z31, llow=42.5)
+    getIntegInfo(fits_z45, llow=42.5)
     # plotLLComp(dat_z45)
 
     plotLsalProt([fits_z24, fits_z31, fits_z45], reds)

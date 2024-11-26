@@ -857,7 +857,7 @@ class LumFuncMCMC:
             for i in range(alnum):
                 # time1 = time()
                 tlf = TrueLumFuncNoPhi(logLr, als[i], lss[j])
-                integ = self.trans_mult[:,None,None] * comps * rs[None,:,None] * tlf[None]
+                integ = self.dVdzs[:,None,None] * comps * rs[None,:,None] * tlf[None]
                 vgal[i,j] = integ_mult * trapezoid(trapezoid(trapezoid(integ, logLr[None], axis=2), rs), self.zarr)
                 # time2 = time()
                 # print(f"Time to go through one vgal calculation: {time2-time1}")
