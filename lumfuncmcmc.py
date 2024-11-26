@@ -4,7 +4,7 @@ import emcee
 import pickle
 from uncertainties import unumpy, ufloat
 from scipy.interpolate import interp1d, RectBivariateSpline
-from scipy.integrate import trapz
+from scipy.integrate import trapezoid
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
 from scipy.stats import binned_statistic
 from math import lgamma
@@ -131,9 +131,9 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
     # plt.plot(bin_check, contamf(bin_check), 'r')
     # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
-    # plt.xlim(bin_check.min(), bin_check.max())
+    # plt.xlim(bin_check.max(), bin_check.min())
     # plt.xlabel('NB Magnitude (AB)')
-    # plt.ylabel('Fraction of true LAEs')
+    # plt.ylabel(f'Fraction of true LAEs in {filter}')
     # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_v2.png'), bbox_inches='tight', dpi=300)
     # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
@@ -255,11 +255,11 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wa
     if del_logL_arr[0]-del_logL.min()>1.0e-12:
         del_logL_arr = np.insert(del_logL_arr, 0, del_logL.min())
         pdf_arr = np.insert(pdf_arr, 0, pdf_arr[0])
-    integ = trapz(pdf_arr[1:], del_logL_arr[1:])
+    integ = trapezoid(pdf_arr[1:], del_logL_arr[1:])
     pdf_arr[1:] *= (1.0-flat_frac) / integ # Normalize
     # pdf_arr[0] = flat_frac/(1.0-flat_frac) * integ / (del_logL_arr[1]-del_logL_arr[0])
     pdf_arr[0] = flat_frac / (del_logL_arr[1]-del_logL_arr[0])
-    pdf_arr /= trapz(pdf_arr, del_logL_arr) # Just normalize again since the trapezoid rule is not a perfect integrator by any means
+    pdf_arr /= trapezoid(pdf_arr, del_logL_arr) # Just normalize again since the trapezoid rule is not a perfect integrator by any means
 
     # If in fact there is no flat top part, we will run into issues
     if pdf_arr[0]<1.0e-10: 
@@ -443,7 +443,7 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     cgs = magAB2cgs(magarr, wave=wave, dwave=dwave)
     lumarr = cgs2lum(cgs, DL)
     lumvals = cgs2lum(magAB2cgs(mag, wave=wave, dwave=dwave), DL)
-    cmap = plt.cm.jet
+    cmap = plt.cm.plasma
     norm = plt.Normalize(vmin=dist.min(), vmax=dist.max())
     colors = cmap(norm(dist))
     fig, ax = plt.subplots()
@@ -456,8 +456,10 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax, label='Distance from center (arcmin)')
     ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)')
-    ax.set_ylabel('Effective Completeness')
-    fig.savefig(f'{fn}_Dist.png',bbox_inches='tight',dpi=300)
+    ax.set_ylabel(f'{fn} Effective Completeness')
+    fig.savefig(f'{fn}_Dist_new.png',bbox_inches='tight',dpi=300)
+    plt.close(fig)
+    # breakpoint()
 
 class LumFuncMCMC:
     def __init__(self, z, del_red=None, flux=None, flux_e=None, line_name="OIII",
@@ -811,10 +813,10 @@ class LumFuncMCMC:
                 # time1 = time()
                 tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
                 # integ = tlf[None] * compG
-                # phiobs = trapz(integ, self.logL_trans_integ[None], axis=2)
-                phimed = trapz(tlf*self.trans_conv[None], self.logL_trans_integ, axis=1)
+                # phiobs = trapezoid(integ, self.logL_trans_integ[None], axis=2)
+                phimed = trapezoid(tlf*self.trans_conv[None], self.logL_trans_integ, axis=1)
                 phiobs = compgrid * phimed
-                phiobsnorm = phiobs / trapz(phiobs, self.logL, axis=1)[:,None]
+                phiobsnorm = phiobs / trapezoid(phiobs, self.logL, axis=1)[:,None]
                 likeij = np.zeros(ldo)
                 for k in range(ldo):
                     likeij[k] = np.interp(self.lum[k], self.logL, phiobsnorm[k])
@@ -848,16 +850,18 @@ class LumFuncMCMC:
                 
                 logLr[kk] = np.linspace(ml[kk], max(ml[kk], min(mlh, lss[j] + exceed)), num=self.size_ln)
             flux_cgs = 10**logLr/(4.0*np.pi*(3.086e24*self.DL)**2)
-            mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
-            comps = self.interp_comp_simp.ev(rs[:,None], mags)
+            fcn = self.trans_vals[:,None,None] * flux_cgs[None]
+            mags = cgs2magAB(fcn, self.wav_filt, self.filt_width)
+            comps = self.interp_comp_simp.ev(rs[None,:,None], mags)
             
             for i in range(alnum):
                 # time1 = time()
                 tlf = TrueLumFuncNoPhi(logLr, als[i], lss[j])
-                integ = self.trans_vals[:,None,None] * comps[None] * rs[None,:,None] * tlf[None] * self.dVdzs[:,None,None]
-                vgal[i,j] = integ_mult * trapz(trapz(trapz(integ, logLr[None], axis=2), rs), self.zarr)
+                integ = self.trans_mult[:,None,None] * comps * rs[None,:,None] * tlf[None]
+                vgal[i,j] = integ_mult * trapezoid(trapezoid(trapezoid(integ, logLr[None], axis=2), rs), self.zarr)
                 # time2 = time()
                 # print(f"Time to go through one vgal calculation: {time2-time1}")
+                # breakpoint()
         return als, lss, vgal
 
     def setup_logging(self):
@@ -923,26 +927,26 @@ class LumFuncMCMC:
             The log likelihood includes a ln term and an integral term (based on Poisson statistics). '''
         lnpart = np.log(TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)*self.comps).sum()
         integ = TrueLumFunc(self.logL,self.sch_al,self.Lstar,self.phistar) * self.Omega_gen
-        fullint = self.volume * trapz(integ,self.logL)
+        fullint = self.volume * trapezoid(integ,self.logL)
         return lnpart - fullint
     
     def lnlike_conv(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_conv,self.sch_al,self.Lstar)
         not_norm = tlf*self.comps_conv*self.trans_conv
-        trapz_inner = trapz(not_norm,self.logL_conv)
-        numer = trapz(trapz_inner*self.norm_vals_norm, self.logL_norm)
-        # denom = trapz(trapz_inner, self.logL_conv)
+        trapezoid_inner = trapezoid(not_norm,self.logL_conv)
+        numer = trapezoid(trapezoid_inner*self.norm_vals_norm, self.logL_norm)
+        # denom = trapezoid(trapezoid_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
         # fullint = self.Omega_0_sr * self.volume * denom
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
-        fullint = self.Omega_0_sr * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        fullint = self.Omega_0_sr * self.dVdz * trapezoid(trapezoid(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
-        lnpart = np.log(trapz(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
+        lnpart = np.log(trapezoid(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
-        fullint = self.Omega_0_sr * self.dVdz * trapz(trapz(integ,self.logL_trans_integ),self.logL)
+        fullint = self.Omega_0_sr * self.dVdz * trapezoid(trapezoid(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans_new(self):
@@ -951,14 +955,14 @@ class LumFuncMCMC:
         # time2 = time()
         tlf = TrueLumFunc(self.logL, self.sch_al, self.Lstar, self.phistar)
         integ = tlf[:,None] * self.trans_mult
-        zinteg = trapz(integ, self.zarr)
+        zinteg = trapezoid(integ, self.zarr)
         # time3 = time()
-        num = trapz(zinteg * self.Omega_full, self.logL)
+        num = trapezoid(zinteg * self.Omega_full, self.logL)
         # integ = tlf[:,None] * self.ptransmult
         # integ = tlf * self.ptransmult
         
-        # num = trapz(trapz(integ, self.zarr), self.logL)
-        # num = self.del_red * trapz(integ, self.logL)
+        # num = trapezoid(trapezoid(integ, self.zarr), self.logL)
+        # num = self.del_red * trapezoid(integ, self.logL)
         # time4 = time()
         # like_phi = np.log(self.rv.pmf(np.average(nums).astype(int)))
         like_phi = poisson_lnpmf(int(num), self.N)
@@ -975,9 +979,9 @@ class LumFuncMCMC:
 
     def lnlike_norm(self):
         tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
-        lnpart = np.log(trapz(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
+        lnpart = np.log(trapezoid(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
         integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL,self.sch_al,self.Lstar) * self.Omega_gen
-        fullint = self.volume * trapz(integ,self.logL)
+        fullint = self.volume * trapezoid(integ,self.logL)
         return lnpart - fullint
 
     def lnprob(self, theta):
