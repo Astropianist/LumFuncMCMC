@@ -275,7 +275,7 @@ def showAllCorr():
     if filter=='N501': alpha, ml = -1.6, 41.58
     elif filter=='N419': alpha, ml = -2.0, 41.47
     else: alpha, ml = -1.1, 41.83
-    image_dir = op.join('TransExp', 'FinalDelz')
+    image_dir = op.join('TransExp', 'NewDelz')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
     fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
     fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
@@ -296,8 +296,8 @@ def showAllCorr():
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{ngal}.dat'), format='ascii', overwrite=True)
-    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{ngal}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{ngal}_var{varying}.dat'), format='ascii', overwrite=True)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{ngal}_var{varying}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
