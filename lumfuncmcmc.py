@@ -1004,6 +1004,13 @@ class LumFuncMCMC:
         num = 10**self.phistar * vgals * self.weight
         like_phi = poisson_lnpmf(int(num), self.N)
         return like_alls + like_phi
+    
+    def lnlike_trans_v3(self):
+        like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
+        vgals = self.vgalf.ev(self.sch_al, self.Lstar)
+        num = 10**self.phistar * vgals * self.weight
+        like_tot = like_alls + self.N * self.phistar * np.log(10) - 10**self.phistar * num
+        return like_tot
 
     def lnlike_norm(self):
         tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
@@ -1040,7 +1047,7 @@ class LumFuncMCMC:
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
-            lnl = self.lnlike_trans_v2()
+            lnl = self.lnlike_trans_v3()
             return lnl+lp
         else:
             return -np.inf
