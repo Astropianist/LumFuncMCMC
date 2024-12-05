@@ -881,6 +881,7 @@ class LumFuncMCMC:
             fcn = self.trans_vals[:,None,None] * flux_cgs[None]
             mags = cgs2magAB(fcn, self.wav_filt, self.filt_width)
             comps = self.interp_comp_simp.ev(rs[None,:,None], mags)
+            comps[comps<self.min_comp_frac] = 0.0
             
             for i in range(alnum):
                 # time1 = time()
@@ -975,7 +976,8 @@ class LumFuncMCMC:
         lnpart = np.log(trapezoid(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
         integ = 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
         fullint = self.Omega_0_sr * self.dVdz * trapezoid(trapezoid(integ,self.logL_trans_integ),self.logL)
-        return lnpart - fullint
+        lnold = lnpart - fullint
+        return lnold
 
     def lnlike_trans_new(self):
         # time1 = time()
@@ -1047,7 +1049,7 @@ class LumFuncMCMC:
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
-            lnl = self.lnlike_trans_v3()
+            lnl = self.lnlike_trans_v2()
             return lnl+lp
         else:
             return -np.inf
