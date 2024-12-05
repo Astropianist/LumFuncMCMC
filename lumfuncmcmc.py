@@ -791,7 +791,7 @@ class LumFuncMCMC:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
 
-    def calclikeLsalold(self, alnum=50, lsnum=50):
+    def calclikeLsal(self, alnum=50, lsnum=50):
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
@@ -826,7 +826,7 @@ class LumFuncMCMC:
                 # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
         return als, lss, likes
 
-    def calclikeLsal(self, alnum=50, lsnum=50):
+    def calclikeLsalnotused(self, alnum=50, lsnum=50):
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         compgrid = np.zeros((self.dist.size, self.logL.size))
