@@ -238,7 +238,7 @@ def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs
     else: 
         ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
         bcmin, bcmax = bin_centers.min(), bin_centers.max()
-    ax.set_xlabel('Log Luminosity (erg/s)')
+    ax.set_xlabel('Observed Log Luminosity (erg/s)')
     ax.set_ylabel('Log Correction (True/Obs)')
     ax.set_xlim(bcmin, bcmax)
     fig.savefig(op.join(image_dir, plotname), bbox_inches='tight', dpi=300)
@@ -275,7 +275,7 @@ def showAllCorr():
     if filter=='N501': alpha, ml = -1.6, 41.58
     elif filter=='N419': alpha, ml = -2.0, 41.47
     else: alpha, ml = -1.1, 41.83
-    image_dir = op.join('TransExp', 'NewDelz')
+    image_dir = op.join('TransExp', 'FinalDelz')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
     fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
     fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'

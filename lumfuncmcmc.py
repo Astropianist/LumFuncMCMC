@@ -398,7 +398,7 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 def TrueLumFuncNoPhi(logL,alpha,logLstar):
-    return 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
+    return np.log(10.0) * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 def MakeTLFInterp(logL_range, alpha_range, logLstar_range, num_dim=201):
     logL = np.linspace(logL_range[0],logL_range[1],num_dim)
@@ -791,7 +791,7 @@ class LumFuncMCMC:
             self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
             self.flux_e = None
 
-    def calclikeLsal(self, alnum=50, lsnum=50):
+    def calclikeLsalold(self, alnum=50, lsnum=50):
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
@@ -820,6 +820,34 @@ class LumFuncMCMC:
                 likeij = np.zeros(ldo)
                 for k in range(ldo):
                     likeij[k] = np.interp(self.lum[k], self.logL, phiobsnorm[k])
+                likes[i,j] = np.log(likeij).sum()
+                # time2 = time()
+                # print("Time taken for one iteration:", time2-time1)
+                # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
+        return als, lss, likes
+
+    def calclikeLsal(self, alnum=50, lsnum=50):
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+        compgrid = np.zeros((self.dist.size, self.logL.size))
+        flux_cgs = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        for i, dist in enumerate(self.dist):
+            if i%400==0: print(f"Got to i={i} for calculating comps grid")
+            compgrid[i] = self.interp_comp_simp.ev(dist, mags)
+
+        ldo = len(self.dist)
+        likes = np.zeros((alnum, lsnum))
+        for i in range(alnum):
+            print(f"Got to i={i} in main al ls loop")
+            for j in range(lsnum):
+                # time1 = time()
+                tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
+                phimed = trapezoid(tlf*self.trans_conv[None], self.logL_trans_integ, axis=1)
+                phiobs = compgrid * phimed
+                likeij = np.zeros(ldo)
+                for k in range(ldo):
+                    likeij[k] = np.interp(self.lum[k], self.logL, phiobs[k])
                 likes[i,j] = np.log(likeij).sum()
                 # time2 = time()
                 # print("Time taken for one iteration:", time2-time1)
@@ -931,21 +959,21 @@ class LumFuncMCMC:
         return lnpart - fullint
     
     def lnlike_conv(self):
-        tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_conv,self.sch_al,self.Lstar)
+        tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_conv,self.sch_al,self.Lstar)
         not_norm = tlf*self.comps_conv*self.trans_conv
         trapezoid_inner = trapezoid(not_norm,self.logL_conv)
         numer = trapezoid(trapezoid_inner*self.norm_vals_norm, self.logL_norm)
         # denom = trapezoid(trapezoid_inner, self.logL_conv)
         lnpart = np.log(numer).sum()
         # fullint = self.Omega_0_sr * self.volume * denom
-        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
+        integ = 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
         fullint = self.Omega_0_sr * self.dVdz * trapezoid(trapezoid(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
     def lnlike_trans(self):
-        tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
+        tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
         lnpart = np.log(trapezoid(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
-        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
+        integ = 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
         fullint = self.Omega_0_sr * self.dVdz * trapezoid(trapezoid(integ,self.logL_trans_integ),self.logL)
         return lnpart - fullint
 
@@ -978,9 +1006,9 @@ class LumFuncMCMC:
         return like_alls + like_phi
 
     def lnlike_norm(self):
-        tlf = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
+        tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
         lnpart = np.log(trapezoid(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
-        integ = np.log(10.0) * 10**self.phistar * TrueLumFuncNoPhi(self.logL,self.sch_al,self.Lstar) * self.Omega_gen
+        integ = 10**self.phistar * TrueLumFuncNoPhi(self.logL,self.sch_al,self.Lstar) * self.Omega_gen
         fullint = self.volume * trapezoid(integ,self.logL)
         return lnpart - fullint
 

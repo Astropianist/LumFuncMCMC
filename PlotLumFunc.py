@@ -375,7 +375,7 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("FullLitCompcorrsn.png", bbox_inches='tight', dpi=300)
+    fig.savefig("FullLitCompcorrsnfsa16.png", bbox_inches='tight', dpi=300)
 
 def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral2=None):
     fig, ax = plt.subplots()
@@ -447,24 +447,27 @@ def main(alpha_fixed=-1.6):
     plotStuff(logLVs, dat_veff['BinLF'], dat_veff['BinLFErr'], logL[inds], bf[inds], sobral1=sobral_sc4k, sobral2=sobral_ssc4k, this_work=None)
 
 def NewProc():
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N419_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N501_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    # fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    # fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N419_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    # fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N501_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    # fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N419_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw120_ns2000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N501_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw120_ns2000_mcf50_ec_2_env0_bin1.dat')
+    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N673_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw120_ns2000_mcf50_ec_2_env0_bin1.dat')
     # dat_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2', 'N673_ll_431_all_ODIN_fsa0_sa-1.49_mcf50_ll43.2_ec2_env0_bin1.dat')
     reds = [2.4, 3.1, 4.5]
-    plotEvolution([fits_z24, fits_z31, fits_z45], reds)
-    plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5, only_integ=True)
+    # plotEvolution([fits_z24, fits_z31, fits_z45], reds)
+    # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
+    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5, only_integ=True)
     plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.29, 43.37, 43.62], llims_low=[42.19, 42.29, 42.44])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
-    plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
-    getIntegInfo(fits_z24, llow=42.5)
-    getIntegInfo(fits_z31, llow=42.5)
-    getIntegInfo(fits_z45, llow=42.5)
+    # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
+    # getIntegInfo(fits_z24, llow=42.5)
+    # getIntegInfo(fits_z31, llow=42.5)
+    # getIntegInfo(fits_z45, llow=42.5)
     # plotLLComp(dat_z45)
 
-    plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
+    # plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
 
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
