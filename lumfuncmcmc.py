@@ -28,13 +28,16 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
 c = 3.0e18 # Speed of light in Angstroms/s
 num_cores = 20 #In Joel's thingy
 
+def flin(B, x):
+    return B[0]*x + B[1]
+
 def poisson_lnpmf(k, mu):
     return k*np.log(mu) - lgamma(k+1) - mu
 
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_9_4_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_12_26_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0, mag_corr=0.0): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
     file_name = file_name_orig.replace('N419', filter)
     if not op.exists(file_name):
         x = np.linspace(0, 100, 1001)
@@ -45,7 +48,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
         contamlf = interp1d(x, z, kind=interp_type, fill_value=0.0, bounds_error=False)
         return contamf, contamhf, contamlf, -99.0
     dat = Table.read(file_name, format='csv')
-    nb_mag, cl = dat['NARROWBAND_MAGNITUDE'], dat['CLASSIFICATION']
+    nb_mag, cl = dat['NARROWBAND_MAGNITUDE']+mag_corr, dat['CLASSIFICATION']
     # ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
     # condlae = np.logical_or(np.logical_and(ps=='s', cl=='LAE'), ps!='s')
     assert contam_type == 'L_LCA'
@@ -134,7 +137,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # plt.xlim(bin_check.max(), bin_check.min())
     # plt.xlabel('NB Magnitude (AB)')
     # plt.ylabel(f'Fraction of true LAEs in {filter}')
-    # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_v2.png'), bbox_inches='tight', dpi=300)
+    # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_final_v2.png'), bbox_inches='tight', dpi=300)
     # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
 
@@ -325,16 +328,16 @@ class RGINNExt:
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
 
-def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0, use_contam=True):
+def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0, use_contam=True, aper_corr=0.0):
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
-    mag, dist, comp = dat['Mags'], dat['Dist'], dat['Comp']
+    mag, dist, comp = dat['Mags']+aper_corr, dat['Dist'], dat['Comp']
     # fig = plt.figure()
     # sc = plt.contourf(mag, dist, np.log10(comp), levels=10)
     # plt.colorbar(sc, label='Modified completeness')
     # plt.xlabel('Magnitude')
     # plt.ylabel('Distance from center of field')
-    if use_contam: cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac)
+    if use_contam: cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac, mag_corr=aper_corr)
     else: nbcontam, cf = None, None
     interp_comp = RGINNExt((dist, mag), comp)
     interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
@@ -356,8 +359,8 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.ylabel('Distance from center of field')
     # plt.show()
     # plt.close('all')
+    plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
     # breakpoint()
-    # plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
@@ -457,28 +460,12 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax, label='Distance from center (arcmin)')
     ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)')
     ax.set_ylabel(f'{fn} Effective Completeness')
-    fig.savefig(f'{fn}_Dist_new.png',bbox_inches='tight',dpi=300)
+    fig.savefig(f'{fn}_EffComp.png',bbox_inches='tight',dpi=300)
     plt.close(fig)
     # breakpoint()
 
 class LumFuncMCMC:
-    def __init__(self, z, del_red=None, flux=None, flux_e=None, line_name="OIII",
-                 line_plot_name=r'[OIII] $\lambda 5007$', lum=None,
-                 lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6,
-                 sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0],
-                 phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0,
-                 nwalkers=100, nsteps=1000, fix_sch_al=False,
-                 min_comp_frac=0.5, diff_rand=True, field_name='COSMOS',
-                 interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None,
-                 maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None,
-                 size_ln=1001, wav_filt=5015.0, filt_width=73.0,
-                 binned_stat_num=50, err_corr=False, wav_rest=1215.67,
-                 size_ln_conv=41, size_lprime=51, logL_width=2.0,
-                 trans_only=False, norm_only=False, trans_file='N501_Nicole.txt',
-                 maxlum=None, minlum=None, transsim=False,
-                 corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None,
-                 weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA',
-                 varying=False, density_frac=1.0):
+    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0]):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -575,12 +562,13 @@ class LumFuncMCMC:
         self.delz_use = self.delzf(self.logL_width)
         self.T_EL, self.weight = T_EL, weight
         self.varying = varying
+        self.aper_corr, self.beta = aper_corr, beta
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
 
         if interp_comp is None: 
-            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac)
+            self.interp_comp, self.interp_comp_simp_orig, self.interp_comp_simp, self.nbcontam, self.cf = makeCompFunc(binnum=contambin, filter=self.filt_name, wave=wav_rest, dwave=filt_width, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac, aper_corr=self.aper_corr)
             cgscontam = magAB2cgs(self.nbcontam, self.wav_filt, self.filt_width)
             lumcontam = cgs2lum(cgscontam, self.DL)
             if flux is not None: condcontam = flux <= cgscontam*1.0e17
@@ -592,19 +580,21 @@ class LumFuncMCMC:
             else: condcontam = lum < np.inf
         print("Got completeness")
         if flux is not None: 
-            self.flux = 1.0e-17*flux[condcontam]
+            self.flux, self.nb = 1.0e-17*flux[condcontam], 1.0e-17*nb[condcontam]
             if flux_e is not None:
-                self.flux_e = 1.0e-17*flux_e[condcontam]
+                self.flux_e, self.nb_e = 1.0e-17*flux_e[condcontam], 1.0e-17*nb_e[condcontam]
         else:
             self.lum = lum[condcontam]
             if lum_e is not None: self.lum_e = lum_e[condcontam]
             else: self.lum_e = None
             self.getFluxes()
+            self.nb, self.nb_e = None, None
         if lum is None: 
             self.getLumin()
         self.N = self.lum.size
         print("Finished getting fluxes and luminosities")
-        self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
+        if self.nb is None: self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
+        else: self.mags = cgs2magAB(self.nb, self.wav_filt, self.filt_width)
         if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         
         # Modify fluxes based on contamination limit
@@ -771,14 +761,17 @@ class LumFuncMCMC:
         '''
         if self.flux_e is not None: 
             ulum = unumpy.log10(4.0*np.pi*(self.DL*3.086e24)**2 * unumpy.uarray(self.flux,self.flux_e))
+            ulumnb = unumpy.log10(4.0*np.pi*(self.DL*3.086e24)**2 * unumpy.uarray(self.nb,self.nb_e))
             self.lum, self.lum_e = unumpy.nominal_values(ulum), unumpy.std_devs(ulum)
+            self.lumnb, self.lumnb_e = unumpy.nominal_values(ulumnb), unumpy.std_devs(ulumnb)
             self.lum_bin_edges = np.percentile(self.lum,np.linspace(0.,100.,self.binned_stat_num+1))
             self.lum_err_bins, _, _ = binned_statistic(self.lum, self.lum_e, statistic='median',bins=self.lum_bin_edges)
             self.lum_bin_mid = np.array([(self.lum_bin_edges[i]+self.lum_bin_edges[i+1])/2.0 for i in range(self.binned_stat_num)])
             self.lum_err_func = interp1d(self.lum_bin_mid, self.lum_err_bins, bounds_error=False, fill_value=(self.lum_err_bins[0],self.lum_err_bins[-1]))
         else:
             self.lum = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * self.flux)
-            self.lum_e = None
+            self.lumnb = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * self.nb)
+            self.lum_e, self.lumnb_e = None, None
             self.lum_bin_edges, self.lum_err_bins, self.lum_bin_mid, self.lum_err_func = None, None, None, None
 
     def getFluxes(self):
@@ -797,7 +790,10 @@ class LumFuncMCMC:
         # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
         compgrid = np.zeros((self.dist.size, self.logL.size))
         # L_all = 10**self.logL_trans_integ.ravel()
-        flux_cgs = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs_orig = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs = flin(self.beta, flux_cgs_orig)
+        cond_bad = flux_cgs < flux_cgs_orig
+        flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         for i, dist in enumerate(self.dist):
             if i%400==0: print(f"Got to i={i} for calculating comps grid")
@@ -830,7 +826,10 @@ class LumFuncMCMC:
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         compgrid = np.zeros((self.dist.size, self.logL.size))
-        flux_cgs = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs_orig = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs = flin(self.beta, flux_cgs_orig)
+        cond_bad = flux_cgs < flux_cgs_orig
+        flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         for i, dist in enumerate(self.dist):
             if i%400==0: print(f"Got to i={i} for calculating comps grid")
@@ -877,7 +876,10 @@ class LumFuncMCMC:
             #     ml = self.minlum2df.ev(self.zarr, rs[kk])
                 
                 logLr[kk] = np.linspace(ml[kk], max(ml[kk], min(mlh, lss[j] + exceed)), num=self.size_ln)
-            flux_cgs = 10**logLr/(4.0*np.pi*(3.086e24*self.DL)**2)
+            flux_cgs_orig = 10**logLr/(4.0*np.pi*(3.086e24*self.DL)**2)
+            flux_cgs = flin(self.beta, flux_cgs_orig)
+            cond_bad = flux_cgs < flux_cgs_orig
+            flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
             fcn = self.trans_vals[:,None,None] * flux_cgs[None]
             mags = cgs2magAB(fcn, self.wav_filt, self.filt_width)
             comps = self.interp_comp_simp.ev(rs[None,:,None], mags)
@@ -1238,12 +1240,16 @@ class LumFuncMCMC:
     def VeffPlotCommands(self, ax):
         markersize = self.nfreeparams * 1
         cond_veff = self.Lavg >= self.minlum
-        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label='Measured LF', markersize=markersize)
+        if self.corrf is not None: label=r'$V_{\rm eff}$ + Filter'
+        else: label=r'$V_{\rm eff}$'
+        ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label=label, markersize=markersize)
         ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='', markersize=markersize)
         if self.corrf is not None:
-            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='cs', label='LF without Transmission Correction', markersize=markersize)
+            ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='cs', label=r'$V_{\rm eff}$', markersize=markersize)
             ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='cs',alpha=0.2, label='', markersize=markersize)
-            ax.legend(loc='best', frameon=False, fontsize='xx-small')
+        leg = ax.legend(loc='best', frameon=False, fontsize='x-small')
+        for lh in leg.legend_handles:
+            lh.set_alpha(1)
 
     def plotVeff(self, outname, imgtype='png', varying=False):
         self.VeffLF(varying=varying)
@@ -1275,17 +1281,18 @@ class LumFuncMCMC:
         indsort = np.argsort(self.lum)
         lstars = np.zeros(rndsamples)
         for i in np.arange(rndsamples):
+            if i==0: labeli = 'MCMC solutions'
+            else: labeli = ''
             ind = np.random.randint(0, nsamples.shape[0])
             self.set_parameters_from_list(nsamples[ind, :])
             lstars[i] = self.Lstar
             modlum = TrueLumFunc(self.lum,self.sch_al,self.Lstar,self.phistar)
             lf.append(modlum)
-            ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1, label='')
+            ax1.plot(self.lum[indsort],modlum[indsort],color='r',linestyle='solid',alpha=0.1, label=labeli)
         self.medianLF = np.median(np.array(lf), axis=0)
         self.VeffLF(varying=self.varying)
-        if self.corrf is not None: label = 'Best-fit'
-        else: label = ''
-        ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid',label=label)
+        # label = 'MCMC Best-fit'
+        ax1.plot(self.lum[indsort],self.medianLF[indsort],color='dimgray',linestyle='solid',label='')
         self.VeffPlotCommands(ax1)
         xmin = self.minlum
         xmax = min(max(self.lum),np.median(lstars)+1.0)

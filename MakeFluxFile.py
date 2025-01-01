@@ -69,9 +69,9 @@ def getLineFlux(fn='LAE_catalog_COSMOS_gr-n501_SE_2024_03_06_expanded.csv', tfn=
     lam, trans = getTrans(tfn)
     Tc = trans.max()
     Tint = trapezoid(trans, lam)
-    breakpoint()
     fac_flux = 1.0e-29 * c/wav_filt**2 * Tint/Tc * 1.0e17
     ulf = fac_flux * (ufiltf - ugrf)
+    unb = fac_flux * ufiltf
     dlaef, pcf = getLAEDensity(band=filt.upper())
     try:
         dlaes = dlaef.ev(ra, dec)
@@ -79,7 +79,7 @@ def getLineFlux(fn='LAE_catalog_COSMOS_gr-n501_SE_2024_03_06_expanded.csv', tfn=
         dlaes = dlaef(np.column_stack((ra, dec)))
     dlaes[dlaes<0] = 0.0
     pcs = pcf(np.column_stack((ra, dec)))
-    return name, ra, dec, unumpy.nominal_values(ulf), unumpy.std_devs(ulf), dlaes, pcs, sep
+    return name, ra, dec, unumpy.nominal_values(ulf), unumpy.std_devs(ulf), unumpy.nominal_values(unb), unumpy.std_devs(unb), dlaes, pcs, sep
 
 def getLAEDensity(band='N501'):
     fn = f'COSMOS_{band}_sd_and_pcs.txt'
@@ -93,6 +93,7 @@ def getLAEDensity(band='N501'):
         # pcf = RBS(ra_use, dec_use, pc_use, kx=0, ky=0)
         pcf = RGI((ra_use, dec_use), pc_use, method='nearest', bounds_error=False, fill_value=None)
     except:
+        print("On the exception for density stuff")
         dlaef = GriddataExt(np.column_stack((ra, dec)), dlae)
         pcf = NNI(np.column_stack((ra, dec)), pc)
     return dlaef, pcf
@@ -120,19 +121,20 @@ def main(filter='N501'):
     if filter=='N501': col, wav = 'gr', 5014.0
     elif filter=='N419': col, wav ='rg', 4193.0
     else: col, wav = 'gi', 6750.0
-    fn = f'LAE_catalog_COSMOS_{col}-{filter.lower()}_SE_2024_03_06_expanded.csv'
+    fn = f'LAE_catalog_COSMOS_{col}-{filter.lower()}_SE_half_stacks_2024_08_01_expanded.csv'
     tfn = f'{filter}_Nicole.txt'
-    names, ras, decs, lyf, lyfe, dlaes, pcs, seps = getLineFlux(fn=fn, tfn=tfn, wav_filt=wav)
+    names, ras, decs, lyf, lyfe, nbf, nbfe, dlaes, pcs, seps = getLineFlux(fn=fn, tfn=tfn, wav_filt=wav)
     dat = Table()
     dat['Galaxy_name'] = names
     dat['RA'] = ras
     dat['Dec'] = decs
     dat['Lya_flux'] = lyf
     dat['Lya_flux_e'] = lyfe
+    dat['NB_flux'], dat['NB_flux_e'] = nbf, nbfe
     dat['dist'] = seps
     dat['Density'] = dlaes
     dat['Protocluster'] = pcs
     dat.write(f'Lya{filter}FluxesFinal.dat', format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main('N501')
+    main('N673')
