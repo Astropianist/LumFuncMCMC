@@ -337,7 +337,7 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.colorbar(sc, label='Modified completeness')
     # plt.xlabel('Magnitude')
     # plt.ylabel('Distance from center of field')
-    if use_contam: cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac, mag_corr=aper_corr)
+    if use_contam: cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac, mag_corr=0.0)
     else: nbcontam, cf = None, None
     interp_comp = RGINNExt((dist, mag), comp)
     interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
@@ -359,8 +359,7 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.ylabel('Distance from center of field')
     # plt.show()
     # plt.close('all')
-    plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
-    # breakpoint()
+    # plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
@@ -465,7 +464,7 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     # breakpoint()
 
 class LumFuncMCMC:
-    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0]):
+    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0], extra_text=''):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -561,7 +560,7 @@ class LumFuncMCMC:
         self.filt_name = trans_file.split('_')[0]
         self.delz_use = self.delzf(self.logL_width)
         self.T_EL, self.weight = T_EL, weight
-        self.varying = varying
+        self.varying, self.extra_text = varying, extra_text
         self.aper_corr, self.beta = aper_corr, beta
         
         self.setDLdVdz()
@@ -618,14 +617,14 @@ class LumFuncMCMC:
                 alls_output = pickle.load(f)
             with open(self.vgal_file_name, 'rb') as f:
                 alls_output2 = pickle.load(f)
-            als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
-            vgal = alls_output2['Vgal']
-            self.likeallsf = RectBivariateSpline(als, lss, likes)
-            self.vgalf = RectBivariateSpline(als, lss, vgal)
-            del alls_output, alls_output2
-            # self.plotLike(lss, als, likes, vgal)
-            # breakpoint()
-        except: pass
+        except:
+            return
+        als, lss, likes = alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods']
+        vgal = alls_output2['Vgal']
+        self.likeallsf = RectBivariateSpline(als, lss, likes)
+        self.vgalf = RectBivariateSpline(als, lss, vgal)
+        del alls_output, alls_output2
+        self.plotLike(lss, als, likes, vgal, nameext=self.extra_text)
 
     def getCompInfo(self):
         self.maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
@@ -819,7 +818,8 @@ class LumFuncMCMC:
                 likes[i,j] = np.log(likeij).sum()
                 # time2 = time()
                 # print("Time taken for one iteration:", time2-time1)
-                # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
+                # if j%10==0: self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
+                # breakpoint()
         return als, lss, likes
 
     def calclikeLsalnotused(self, alnum=50, lsnum=50):
@@ -1203,18 +1203,19 @@ class LumFuncMCMC:
         self.medianLF = np.median(np.array(lf), axis=0)
         self.VeffLF(varying=self.varying)
 
-    def plotLike(self, lss, als, likes, vgal):
-        fig1 = plt.figure()
-        sc = plt.contourf(lss, als, likes, levels=10)
-        plt.xlabel(r'$\mathcal{L}_*$')
-        plt.ylabel(r'$\alpha$')
-        plt.colorbar(sc, label='Log likelihood')
-        fig2 = plt.figure()
-        sc = plt.contourf(lss, als, np.log10(vgal), levels=10)
-        plt.xlabel(r'$\mathcal{L}_*$')
-        plt.ylabel(r'$\alpha$')
-        plt.colorbar(sc, label='Log # Obs Galaxies')
-        plt.show()
+    def plotLike(self, lss, als, likes, vgal, nameext='', levels=15):
+        fig1, ax1 = plt.subplots()
+        sc = ax1.contourf(lss, als, likes, levels=levels)
+        ax1.set_xlabel(r'$\mathcal{L}_*$')
+        ax1.set_ylabel(r'$\alpha$')
+        fig1.colorbar(sc, label='Log likelihood')
+        fig1.savefig(f'AllsLike{nameext}.png', bbox_inches='tight', dpi=300)
+        fig2, ax2 = plt.subplots()
+        sc = ax2.contourf(lss, als, np.log10(vgal), levels=levels)
+        ax2.set_xlabel(r'$\mathcal{L}_*$')
+        ax2.set_ylabel(r'$\alpha$')
+        fig2.colorbar(sc, label='Log # Obs Galaxies')
+        fig2.savefig(f'AllsVgal{nameext}.png', bbox_inches='tight', dpi=300)
         plt.close('all')
 
     def plotPracLumFunc(self, tlft, phiobs, al, ls):

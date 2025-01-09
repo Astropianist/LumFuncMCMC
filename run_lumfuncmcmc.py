@@ -267,18 +267,18 @@ def getContCorr(flux, fluxe, nb, nbe, filter='N501'):
     myodr = odr.ODR(data, linear, beta0=[1.5, 0.0])
     out = myodr.run()
     out.pprint()
-    # fig, ax = plt.subplots()
-    # ax.scatter(flux, nb, c='b', s=2, label='')
-    # ax.errorbar(flux, nb, yerr=nbe, xerr=fluxe, fmt='none', linestyle='none', capsize=2, alpha=0.2, label='')
-    # fmin, fmax = flux.min(), flux.max()
-    # farr = np.linspace(fmin, fmax, 1001)
-    # ax.plot(farr, flin(out.beta, farr), 'r-', label=rf'$f_{{\rm NB}} = {out.beta[0]:0.2f}f_{{\rm line}} - {-out.beta[1]:0.2f}$')
-    # ax.set_xlabel(fr'{filter} Line Flux ($10^{{-17}}$ cgs)')
-    # ax.set_ylabel(rf'{filter} NB Flux ($10^{{-17}}$ cgs)')
-    # ax.legend(loc='best', frameon=False)
-    # ax.set_xlim(fmin, fmax)
-    # ax.set_ylim(nb.min(), nb.max())
-    # fig.savefig(f'{filter}_Cont_Corr.png', bbox_inches='tight', dpi=300)
+    fig, ax = plt.subplots()
+    ax.scatter(flux, nb, c='b', s=2, label='')
+    ax.errorbar(flux, nb, yerr=nbe, xerr=fluxe, fmt='none', linestyle='none', capsize=2, alpha=0.2, label='')
+    fmin, fmax = flux.min(), flux.max()
+    farr = np.linspace(fmin, fmax, 1001)
+    ax.plot(farr, flin(out.beta, farr), 'r-', label=rf'$f_{{\rm NB}} = {out.beta[0]:0.2f}f_{{\rm line}} + {out.beta[1]:0.2f}$')
+    ax.set_xlabel(fr'{filter} Line Flux ($10^{{-17}}$ cgs)')
+    ax.set_ylabel(rf'{filter} NB Flux ($10^{{-17}}$ cgs)')
+    ax.legend(loc='best', frameon=False)
+    ax.set_xlim(fmin, fmax)
+    ax.set_ylim(nb.min(), nb.max())
+    fig.savefig(f'{filter}_Cont_Corr.png', bbox_inches='tight', dpi=300)
     out.beta[1]*=1.0e-17
     return out.beta
 
@@ -327,7 +327,7 @@ def read_input_file(args):
         if args.lum_lim<0.0: flux_limi = np.inf
         else: flux_limi = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
         print("Original flux limit:", flux_limi)
-        cgscontami = magAB2cgs(nbcontam[i], args.wav_filt, args.filt_width)
+        cgscontami = magAB2cgs(nbcontami, args.wav_filt, args.filt_width)
         flux_limi = min(flux_limi, cgscontami*1.0e17)
         print("Final flux limit:", flux_limi)
         lum_limi = cgs2lum(flux_limi*1.0e-17, DL)
@@ -354,14 +354,14 @@ def read_input_file(args):
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
         nb, nbe = nbfull[cond_env], nbefull[cond_env]
-        cond_init = np.logical_and(flux>0.0, flux<flux_lim[i])
+        cond_init = np.logical_and(flux>0.0, nb<flux_lim[i])
         lum = np.log10(1.0e-17*flux[cond_init] * 4.0*np.pi*(3.086e24*DL)**2)
         lumb = np.log10(1.0e-17*flux[flux>=flux_lim[i]] * 4.0*np.pi*(3.086e24*DL)**2)
         mag = cgs2magAB(1.0e-17*nb[cond_init], args.wav_filt, args.filt_width)
         comps = interp_comp_simp[i].ev(dist[cond_init], mag)
         # compsorig = interp_comp_simp_orig.ev(dist[cond_init], mag)
         cond = comps>=args.min_comp_frac
-        # plotFluxDistribRaw(flux[cond_init][cond], flux[cond_init][~cond], flux[flux>=flux_lim[i]], filt_name=args.filt_name)
+        plotFluxDistribRaw(flux[cond_init][cond], flux[cond_init][~cond], flux[nb>=flux_lim[i]], filt_name=args.filt_name)
         # plotLumDistribRaw(lum[cond], lum[~cond], lumb, filt_name=args.filt_name)
         densi = dens[cond_env][cond_init][cond]
         # densiavg = np.median(densi)
@@ -426,7 +426,7 @@ def main(argv=None):
         beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i])
 
         # Initialize LumFuncMCMC class
-        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta)
+        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=4.0, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text)
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 
