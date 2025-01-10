@@ -473,7 +473,29 @@ def NewProc():
 
     # plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
 
+def plotMultVeff(*filenames):
+    fig, ax = plt.subplots()
+    add_LumFunc_plot(ax)
+    namefull = ''
+    for i, fn in enumerate(filenames):
+        veffdi = Table.read(fn, format='ascii')
+        lumi, lfi, lfei = veffdi['Luminosity'], veffdi['BinLF'], veffdi['BinLFErr']
+        fne = fn.split('/')[-1]
+        basic = fne.split('_VeffLF')[0]
+        filter_name = fne.split('_')[0]
+        if filter_name=='N673': cb = 3
+        else: cb = 10
+        extra = fne.split('_nb50')[0].split('0.5')[1].split(f'cb{cb}')[1]
+        namei = f'{basic}_{extra}'
+        ax.errorbar(lumi, lfi, yerr=lfei, color=orig_palette_arr[i], linestyle='none', marker=markers_overall[i], label=namei)
+        namefull += namei
+        if i<len(filenames)-1: namefull+='_'
+    ax.legend(loc='best', frameon=False)
+    fig.savefig(f'VeffComp_{namefull}.png', bbox_inches='tight', dpi=300)
+    plt.close('all')
+
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
     # main(alpha_fixed=-1.8)
-    NewProc()
+    # NewProc()
+    plotMultVeff('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata/N501_new_trial_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata_nb50_nw200_ns4000_mcf50_ec_2_env0_bin1_c1.dat', 'LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew/N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1_c1.dat')

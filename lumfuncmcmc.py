@@ -784,6 +784,8 @@ class LumFuncMCMC:
             self.flux_e = None
 
     def calclikeLsal(self, alnum=50, lsnum=50):
+        self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
+        self.Lmed = (bin_edges[:-1] + bin_edges[1:])/2.0
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
@@ -818,8 +820,10 @@ class LumFuncMCMC:
                 likes[i,j] = np.log(likeij).sum()
                 # time2 = time()
                 # print("Time taken for one iteration:", time2-time1)
-                # if j%10==0: self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
-                # breakpoint()
+                # if i%10==0 and j%10==0: 
+                #     truenorm = tlf[:,0] / trapezoid(tlf[:,0], self.logL)
+                #     self.plotPracLumFunc(truenorm, np.median(phiobsnorm, axis=0), als[i], lss[j], likes[i,j])
+                #     breakpoint()
         return als, lss, likes
 
     def calclikeLsalnotused(self, alnum=50, lsnum=50):
@@ -1056,6 +1060,15 @@ class LumFuncMCMC:
         else:
             return -np.inf
         
+    def lnprob_trans_om(self, theta):
+        self.set_parameters_from_list(theta)
+        lp = self.lnprior()
+        if np.isfinite(lp):
+            lnl = self.lnlike_trans_v3()
+            return lnl+lp
+        else:
+            return -np.inf
+        
     def lnprob_norm(self, theta):
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
@@ -1120,6 +1133,7 @@ class LumFuncMCMC:
         else: func = 'lnprob'
         if self.trans_only: func = 'lnprob_trans'
         if self.norm_only: func = 'lnprob_norm'
+        if 'om.pickle' in self.alls_file_name: func = 'lnprob_trans_om'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         start = time()
@@ -1218,12 +1232,13 @@ class LumFuncMCMC:
         fig2.savefig(f'AllsVgal{nameext}.png', bbox_inches='tight', dpi=300)
         plt.close('all')
 
-    def plotPracLumFunc(self, tlft, phiobs, al, ls):
+    def plotPracLumFunc(self, tlft, phiobs, al, ls, likesij):
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
-        ax.plot(self.logL, tlft, 'b-', label='True Luminosity Function')
-        ax.plot(self.logL, phiobs, 'r-', label='Observed Luminosity Function')
-        ax.text(0, 0, f'Alpha: {al:0.2f}; Lstar: {ls:0.2f}', transform=ax.transAxes)
+        ax.plot(self.logL, tlft, 'b-', label='Norm True LF')
+        ax.plot(self.logL, phiobs, 'r-', label='Norm Obs LF')
+        ax.scatter(self.Lmed, self.normhist, c='k', s=8, label='Norm Lum Hist')
+        ax.text(0, 0, f'Alpha: {al:0.2f}; Lstar: {ls:0.2f}; Ln Like {likesij:0.0f}', transform=ax.transAxes)
         ax.legend(loc='best', frameon=False)
         miny = 1.0e-8
         ax.set_ylim(miny, max(tlft.max(), phiobs.max()))
