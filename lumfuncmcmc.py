@@ -429,8 +429,7 @@ def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
     Omega(logL,z0) : Float or 1-D array (same size as logL)
     '''
     if callable(compfunc): 
-        L = 10**logL
-        flux_cgs = L/(4.0*np.pi*(3.086e24*dLz)**2)
+        flux_cgs = lum2cgs(logL, dLz)
         mags = cgs2magAB(flux_cgs, wave, dwave)
         comp = compfunc(mags)
     else: 
@@ -626,7 +625,26 @@ class LumFuncMCMC:
         del alls_output, alls_output2
         self.plotLike(lss, als, likes, vgal, nameext=self.extra_text)
 
-    def getCompInfo(self):
+    def getCompInfo(self, compcut=0.03):
+        self.maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
+        # distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
+        self.distgrid = np.linspace(self.dist_orig.min(), self.dist_orig.max(), num=self.distnum)
+        self.distg, self.magg = np.meshgrid(self.distgrid, self.maggrid, indexing='ij')
+        comps = self.interp_comp_simp.ev(self.distg, self.magg)
+        cond = self.comps<=self.min_comp_frac + compcut
+        minlums = cgs2lum(self.flux[cond], self.DL)
+        self.minlum = np.median(minlums)
+        inds = np.argsort(self.dist[cond])
+        distuse = self.dist[cond][inds]
+        self.minlumf = interp1d(distuse, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
+        comp_avg_dist = np.average(comps,axis=0)
+        self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
+        self.comps1d = self.comp1df(self.mags)
+        self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
+        self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
+        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
+
+    def getCompInfoOld(self):
         self.maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
         # distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
         self.distgrid = np.linspace(self.dist_orig.min(), self.dist_orig.max(), num=self.distnum)
@@ -636,9 +654,9 @@ class LumFuncMCMC:
         roots = np.zeros(self.distnum)
         for i in range(self.distnum):
             func = interp1d(self.maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1]))
-            roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
+            roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.5])[0]
         fluxes = magAB2cgs(roots, self.wav_filt, self.filt_width)
-        minlums = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * fluxes)
+        minlums = cgs2lum(fluxes, self.DL)
         self.minlumf = interp1d(self.distgrid, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
         self.minlum = np.average(self.minlumf(self.dist))
         self.minlum_conv = self.minlum - 3.0*self.lum_err_func(self.minlum)
@@ -674,7 +692,7 @@ class LumFuncMCMC:
                     func = interp1d(self.maggrid, comps_use, bounds_error=False, fill_value=(comps_use[0], comps_use[-1]))
                     roots[i,j] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.0])[0]
             fluxes = magAB2cgs(roots[i], self.wav_filt, self.filt_width)
-            minlumsi = np.log10(4.0*np.pi*(self.DLs[i]*3.086e24)**2 * fluxes)
+            minlumsi = cgs2lum(fluxes, self.DLs[i])
             minlums[i] = np.clip(minlumsi, self.Lc, self.Lh)
         self.minlum2df = RectBivariateSpline(self.zarr, self.distgrid, minlums)
 
@@ -712,13 +730,11 @@ class LumFuncMCMC:
         self.logL_trans_lnpart = self.lum[:,None] + self.logL_discrete
         self.logL_trans_integ = self.logL[:,None] + self.logL_discrete
         
-        L_all = 10**self.logL_trans_lnpart
-        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs = lum2cgs(self.logL_trans_lnpart, self.DL)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_trans_lnpart = self.comp1df(mags)
 
-        L_all = 10**self.logL_trans_integ
-        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs = lum2cgs(self.logL_trans_integ, self.DL)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_trans_integ = self.comp1df(mags)
 
@@ -730,15 +746,13 @@ class LumFuncMCMC:
         for i in range(self.lum.size):
             self.logL_norm[i] = self.lum[i] + np.linspace(-3.0*self.lum_e[i],3.0*self.lum_e[i],self.size_ln_conv)
         self.norm_vals_norm = normalFunc(self.logL_norm,self.lum[:,None],self.lum_e[:,None])
-        L_all = 10**self.logL_norm
-        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs = lum2cgs(self.logL_norm, self.DL)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_norm = self.comp1df(mags)
 
         ###### New combination of everything that is centered for normal distribution around the mean #####
         self.logL_conv = self.logL_norm[:,:,None] + self.logL_discrete
-        L_all = 10**self.logL_conv
-        flux_cgs = L_all/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs = lum2cgs(self.logL_conv, self.DL)
         mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
         self.comps_conv = self.comp1df(mags)
         
@@ -768,19 +782,19 @@ class LumFuncMCMC:
             self.lum_bin_mid = np.array([(self.lum_bin_edges[i]+self.lum_bin_edges[i+1])/2.0 for i in range(self.binned_stat_num)])
             self.lum_err_func = interp1d(self.lum_bin_mid, self.lum_err_bins, bounds_error=False, fill_value=(self.lum_err_bins[0],self.lum_err_bins[-1]))
         else:
-            self.lum = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * self.flux)
-            self.lumnb = np.log10(4.0*np.pi*(self.DL*3.086e24)**2 * self.nb)
+            self.lum = cgs2lum(self.flux, self.DL)
+            self.lumnb = cgs2lum(self.nb, self.DL)
             self.lum_e, self.lumnb_e = None, None
             self.lum_bin_edges, self.lum_err_bins, self.lum_bin_mid, self.lum_err_func = None, None, None, None
 
     def getFluxes(self):
         ''' Set sample fluxes based on luminosities if not available '''
         if self.lum_e is not None:
-            ulum = 10**unumpy.uarray(self.lum,self.lum_e)
-            uflux = ulum/(4.0*np.pi*(self.DL*3.086e24)**2)
+            ulum = unumpy.uarray(self.lum,self.lum_e)
+            uflux = lum2cgs(ulum, self.DL)
             self.flux, self.flux_e = unumpy.nominal_values(uflux), unumpy.std_devs(uflux)
         else:
-            self.flux = 10**self.lum/(4.0*np.pi*(self.DL*3.086e24)**2)
+            self.flux = lum2cgs(self.lum, self.DL)
             self.flux_e = None
 
     def calclikeLsal(self, alnum=50, lsnum=50):
@@ -791,7 +805,7 @@ class LumFuncMCMC:
         # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
         compgrid = np.zeros((self.dist.size, self.logL.size))
         # L_all = 10**self.logL_trans_integ.ravel()
-        flux_cgs_orig = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs_orig = lum2cgs(self.logL, self.DL)
         flux_cgs = flin(self.beta, flux_cgs_orig)
         cond_bad = flux_cgs < flux_cgs_orig
         flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
@@ -822,7 +836,9 @@ class LumFuncMCMC:
                 # print("Time taken for one iteration:", time2-time1)
                 # if i%10==0 and j%10==0: 
                 #     truenorm = tlf[:,0] / trapezoid(tlf[:,0], self.logL)
-                #     self.plotPracLumFunc(truenorm, np.median(phiobsnorm, axis=0), als[i], lss[j], likes[i,j])
+                #     phimednorm = phimed / trapezoid(phimed, self.logL)
+                #     phiobsuse = np.median(phiobsnorm, axis=0)
+                #     self.plotPracLumFunc(truenorm, phimednorm, phiobsuse, als[i], lss[j], likes[i,j])
                 #     breakpoint()
         return als, lss, likes
 
@@ -830,7 +846,7 @@ class LumFuncMCMC:
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
         lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
         compgrid = np.zeros((self.dist.size, self.logL.size))
-        flux_cgs_orig = 10**self.logL/(4.0*np.pi*(3.086e24*self.DL)**2)
+        flux_cgs_orig = lum2cgs(self.logL, self.DL)
         flux_cgs = flin(self.beta, flux_cgs_orig)
         cond_bad = flux_cgs < flux_cgs_orig
         flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
@@ -880,7 +896,7 @@ class LumFuncMCMC:
             #     ml = self.minlum2df.ev(self.zarr, rs[kk])
                 
                 logLr[kk] = np.linspace(ml[kk], max(ml[kk], min(mlh, lss[j] + exceed)), num=self.size_ln)
-            flux_cgs_orig = 10**logLr/(4.0*np.pi*(3.086e24*self.DL)**2)
+            flux_cgs_orig = lum2cgs(logLr, self.DL)
             flux_cgs = flin(self.beta, flux_cgs_orig)
             cond_bad = flux_cgs < flux_cgs_orig
             flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
@@ -1234,18 +1250,25 @@ class LumFuncMCMC:
         fig2.savefig(f'AllsVgal{nameext}.png', bbox_inches='tight', dpi=300)
         plt.close('all')
 
-    def plotPracLumFunc(self, tlft, phiobs, al, ls, likesij):
+    def plotPracLumFunc(self, tlft, phimed, phiobs, al, ls, likesij):
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         ax.plot(self.logL, tlft, 'b-', label='Norm True LF')
+        ax.plot(self.logL, phimed, 'k-', label='Norm TC LF')
         ax.plot(self.logL, phiobs, 'r-', label='Norm Obs LF')
         ax.scatter(self.Lmed, self.normhist, c='k', s=8, label='Norm Lum Hist')
         ax.text(0, 0, f'Alpha: {al:0.2f}; Lstar: {ls:0.2f}; Ln Like {likesij:0.0f}', transform=ax.transAxes)
         ax.legend(loc='best', frameon=False)
-        miny = 1.0e-8
-        ax.set_ylim(miny, max(tlft.max(), phiobs.max()))
-        cond = np.logical_or(tlft>miny, phiobs>miny)
-        ax.set_xlim(self.logL.min(), self.logL[cond].max())
+        # miny = 1.0e-8
+        # ax.set_ylim(miny, max(tlft.max(), phiobs.max()))
+        xmin, xmax = self.Lmed.min()-0.2, self.Lmed.max()+0.2
+        ax.set_xlim(xmin, xmax)
+        cond = np.logical_and(self.logL>=xmin, self.logL<=xmax)
+        ymin = min(tlft[cond].min(), phimed[cond].min(), phiobs[cond].min(), self.normhist.min())
+        ymax = max(tlft[cond].max(), phimed[cond].max(), phiobs[cond].max(), self.normhist.max())
+        ax.set_ylim(ymin, ymax)
+        # cond = np.logical_or(tlft>ymin, phiobs>miny)
+        # ax.set_xlim(self.logL.min(), self.logL[cond].max())
         plt.show()
 
     def add_LumFunc_plot(self,ax1):

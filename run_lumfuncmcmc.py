@@ -212,7 +212,7 @@ def parse_args(argv=None):
 
     if args.environment == 2: args.num_env_bins = 2
     args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
-    if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 3.124, 5014.0, 77.17, 0.0 # -0.2352
+    if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 3.124, 5014.0, 77.17, -0.2352
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 2.449, 4193.0, 75.46, -0.2876
     else: args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 4.552, 6750.0, 101.31, -0.2138
     args.del_red = args.filt_width / args.wav_rest
@@ -266,7 +266,7 @@ def getDensityFrac(args, datfile):
         density_frac[i] = densavg / densiavg
     return density_frac
 
-def getContCorr(flux, fluxe, nb, nbe, filter='N501'):
+def getContCorr(flux, fluxe, nb, nbe, filter='N501', extra_text=''):
     linear = odr.Model(flin)
     data = odr.Data(flux, nb, wd=1.0/fluxe**2, we=1.0/nbe**2)
     myodr = odr.ODR(data, linear, beta0=[1.5, 0.0])
@@ -283,8 +283,9 @@ def getContCorr(flux, fluxe, nb, nbe, filter='N501'):
     ax.legend(loc='best', frameon=False)
     ax.set_xlim(fmin, fmax)
     ax.set_ylim(nb.min(), nb.max())
-    fig.savefig(f'{filter}_Cont_Corr.png', bbox_inches='tight', dpi=300)
+    fig.savefig(f'{filter}_Cont_Corr{extra_text}.png', bbox_inches='tight', dpi=300)
     out.beta[1]*=1.0e-17
+    plt.close(fig)
     return out.beta
 
 def read_input_file(args):
@@ -358,8 +359,8 @@ def read_input_file(args):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
-        # nb, nbe = nbfull[cond_env], nbefull[cond_env]
-        nb, nbe = flux*1.0, fluxe*1.0
+        nb, nbe = nbfull[cond_env], nbefull[cond_env]
+        # nb, nbe = flux*1.0, fluxe*1.0
         cond_init = np.logical_and(flux>0.0, nb<flux_lim[i])
         lum = np.log10(1.0e-17*flux[cond_init] * 4.0*np.pi*(3.086e24*DL)**2)
         lumb = np.log10(1.0e-17*flux[flux>=flux_lim[i]] * 4.0*np.pi*(3.086e24*DL)**2)
@@ -430,7 +431,7 @@ def main(argv=None):
         if args.other_method: alls_file_name = alls_file_name.replace('.pickle', '_om.pickle')
         print("Alls file name:", alls_file_name)
 
-        beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i])
+        beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=args.filt_name, extra_text=args.extra_text)
 
         # Initialize LumFuncMCMC class
         LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text)
