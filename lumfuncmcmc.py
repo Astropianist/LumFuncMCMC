@@ -1223,7 +1223,9 @@ class LumFuncMCMC:
         ax1.set_xlabel(r'$\mathcal{L}_*$')
         ax1.set_ylabel(r'$\alpha$')
         fig1.colorbar(sc, label='Log likelihood')
-        fig1.savefig(f'AllsLike{nameext}.png', bbox_inches='tight', dpi=300)
+        if 'om.pickle' in self.alls_file_name: file_name = f'AllsLike{nameext}_om.png'
+        else: file_name = f'AllsLike{nameext}.png'
+        fig1.savefig(file_name, bbox_inches='tight', dpi=300)
         fig2, ax2 = plt.subplots()
         sc = ax2.contourf(lss, als, np.log10(vgal), levels=levels)
         ax2.set_xlabel(r'$\mathcal{L}_*$')

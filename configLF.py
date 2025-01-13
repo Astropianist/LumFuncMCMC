@@ -33,6 +33,7 @@ contambin = 10
 alnum, lsnum = 101, 101
 contam_type = 'L_LCA'
 T_EL = 1.0
+logL_width=2.0
 trans_file = f'{filt_name}_Nicole.txt'
 corr_file = 'CorrFull.dat'
 # percentiles of each parameter to report in the output file
