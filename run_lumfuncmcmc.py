@@ -359,8 +359,8 @@ def read_input_file(args):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
-        nb, nbe = nbfull[cond_env], nbefull[cond_env]
-        # nb, nbe = flux*1.0, fluxe*1.0
+        # nb, nbe = nbfull[cond_env], nbefull[cond_env]
+        nb, nbe = flux*1.0, fluxe*1.0
         cond_init = np.logical_and(flux>0.0, nb<flux_lim[i])
         lum = np.log10(1.0e-17*flux[cond_init] * 4.0*np.pi*(3.086e24*DL)**2)
         lumb = np.log10(1.0e-17*flux[flux>=flux_lim[i]] * 4.0*np.pi*(3.086e24*DL)**2)
