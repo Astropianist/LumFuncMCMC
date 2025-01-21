@@ -633,10 +633,12 @@ class LumFuncMCMC:
         comps = self.interp_comp_simp.ev(self.distg, self.magg)
         cond = self.comps<=self.min_comp_frac + compcut
         minlums = cgs2lum(self.flux[cond], self.DL)
-        self.minlum = np.median(minlums)
-        inds = np.argsort(self.dist[cond])
-        distuse = self.dist[cond][inds]
-        self.minlumf = interp1d(distuse, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
+        if self.minlum is None:
+            self.minlum = np.median(minlums)
+            inds = np.argsort(self.dist[cond])
+            distuse = self.dist[cond][inds]
+            self.minlumf = interp1d(distuse, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
+        else: self.minlumf = lambda x: self.minlum*np.ones_like(x)
         comp_avg_dist = np.average(comps,axis=0)
         self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
         self.comps1d = self.comp1df(self.mags)
@@ -834,7 +836,7 @@ class LumFuncMCMC:
                 likes[i,j] = np.log(likeij).sum()
                 # time2 = time()
                 # print("Time taken for one iteration:", time2-time1)
-                # if i%10==0 and j%10==0: 
+                # if i%10==0: 
                 #     truenorm = tlf[:,0] / trapezoid(tlf[:,0], self.logL)
                 #     phimednorm = phimed / trapezoid(phimed, self.logL)
                 #     phiobsuse = np.median(phiobsnorm, axis=0)
@@ -1256,7 +1258,8 @@ class LumFuncMCMC:
         ax.plot(self.logL, tlft, 'b-', label='Norm True LF')
         ax.plot(self.logL, phimed, 'k-', label='Norm TC LF')
         ax.plot(self.logL, phiobs, 'r-', label='Norm Obs LF')
-        ax.scatter(self.Lmed, self.normhist, c='k', s=8, label='Norm Lum Hist')
+        condhist = self.normhist>0
+        ax.scatter(self.Lmed[condhist], self.normhist[condhist], c='k', s=8, label='Norm Lum Hist')
         ax.text(0, 0, f'Alpha: {al:0.2f}; Lstar: {ls:0.2f}; Ln Like {likesij:0.0f}', transform=ax.transAxes)
         ax.legend(loc='best', frameon=False)
         # miny = 1.0e-8
@@ -1264,8 +1267,8 @@ class LumFuncMCMC:
         xmin, xmax = self.Lmed.min()-0.2, self.Lmed.max()+0.2
         ax.set_xlim(xmin, xmax)
         cond = np.logical_and(self.logL>=xmin, self.logL<=xmax)
-        ymin = min(tlft[cond].min(), phimed[cond].min(), phiobs[cond].min(), self.normhist.min())
-        ymax = max(tlft[cond].max(), phimed[cond].max(), phiobs[cond].max(), self.normhist.max())
+        ymin = min(tlft[cond].min(), phimed[cond].min(), phiobs[cond].min(), self.normhist[condhist].min())
+        ymax = max(tlft[cond].max(), phimed[cond].max(), phiobs[cond].max(), self.normhist[condhist].max())
         ax.set_ylim(ymin, ymax)
         # cond = np.logical_or(tlft>ymin, phiobs>miny)
         # ax.set_xlim(self.logL.min(), self.logL[cond].max())
