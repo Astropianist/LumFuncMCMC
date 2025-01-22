@@ -605,7 +605,8 @@ class LumFuncMCMC:
             logL_max = self.logL_norm.max() + self.logL_discrete.max()
             self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
         else:
-            self.Omega_arr = Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
+            if self.minlum is None: self.getCompInfo()
+            else: self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
             print("Finished getting Omega array")
         self.setup_logging()
 

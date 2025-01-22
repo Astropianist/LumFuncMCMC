@@ -464,7 +464,7 @@ def main(argv=None):
     if args.environment:
         dir_name = op.join(dir_name, str(args.num_env_bins))
         mkpath(dir_name)
-        lavg, lfbinorig, var, minlum, labels_env = [], [], [], [], []
+        lavg, lfbinorig, var, minlums, labels_env = [], [], [], [], []
         for k in range(len(flux)):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
@@ -505,7 +505,7 @@ def main(argv=None):
         if args.veff_only:
             if args.environment: 
                 LFmod.VeffLF(varying=args.varying)
-                lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+                lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlums.append(LFmod.minlum)
                 if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
                 else: labels_env.append(f'Protocluster: {i}')
                 continue
@@ -531,7 +531,7 @@ def main(argv=None):
                 print("Finished setting median fit and V_eff parameters")
             # LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
             if args.environment: 
-                lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+                lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlums.append(LFmod.minlum)
                 lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
                 if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
                 else: labels_env.append(f'Protocluster: {i}')
@@ -587,7 +587,7 @@ def main(argv=None):
             print("Finished writing VeffLF file")
 
         if args.environment:
-            lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlum.append(LFmod.minlum)
+            lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlums.append(LFmod.minlum)
             lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
             if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
             else: labels_env.append(f'Protocluster: {i}')
@@ -610,7 +610,7 @@ def main(argv=None):
             print("Finished writing settings to file")
     
     if args.environment:
-        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlum, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
+        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlums, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
 
 if __name__ == '__main__':
     main()
