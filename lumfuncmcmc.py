@@ -134,11 +134,12 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
     # plt.plot(bin_check, contamf(bin_check), 'r')
     # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    # if filter=='N673': plt.gca().set_xticks(plt.gca().get_xticks()[:-2])
     # plt.xlim(bin_check.max(), bin_check.min())
+    # plt.ylim(-0.05, 1.05)
     # plt.xlabel('NB Magnitude (AB)')
-    # plt.ylabel(f'Fraction of true LAEs in {filter}')
+    # plt.ylabel('Fraction of true LAEs') # in {filter}')
     # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_final_v2.png'), bbox_inches='tight', dpi=300)
-    # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
 
 def getContaminationOld(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
@@ -453,17 +454,18 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
         ax.plot(lumarr, compf.ev(d, magarr), color=colors[i])
     ax.set_yscale('log')
     ax.set_xlim(lumarr.min(), lumarr.max())
+    ax.set_ylim(1.0e-3, 2.2)
     # ax.legend(loc='best',fontsize='x-small')
     cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
     fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax, label='Distance from center (arcmin)')
     ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)')
-    ax.set_ylabel(f'{fn} Effective Completeness')
+    ax.set_ylabel('Effective Completeness')
     fig.savefig(f'{fn}_EffComp.png',bbox_inches='tight',dpi=300)
     plt.close(fig)
     # breakpoint()
 
 class LumFuncMCMC:
-    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0], extra_text=''):
+    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0], extra_text='', frac_use=1.0):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -532,7 +534,7 @@ class LumFuncMCMC:
         self.line_name = line_name
         self.line_plot_name = line_plot_name
         self.Lc, self.Lh = Lc, Lh
-        self.Omega_0 = Omega_0
+        self.Omega_0, self.frac_use = Omega_0, frac_use
         self.Omega_0_sr = Omega_0/V.sqarcsec
         self.nbins, self.nboot = nbins, nboot
         self.sch_al, self.sch_al_lims = sch_al, sch_al_lims
@@ -1028,7 +1030,7 @@ class LumFuncMCMC:
     def lnlike_trans_v2(self):
         like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
         vgals = self.vgalf.ev(self.sch_al, self.Lstar)
-        num = 10**self.phistar * vgals * self.weight
+        num = 10**self.phistar * self.frac_use * vgals * self.weight
         like_phi = poisson_lnpmf(int(num), self.N)
         return like_alls + like_phi
     
@@ -1183,8 +1185,8 @@ class LumFuncMCMC:
     def VeffLF(self, varying=False):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         print("Ready to calculate V effective method")
-        if varying: self.phifunc = 1.0/(self.dVdz * self.delzf(self.lum - self.minlum) * self.Omega_arr)
-        else: self.phifunc = 1.0/(self.volume * self.Omega_arr)
+        if varying: self.phifunc = 1.0/(self.dVdz * self.delzf(self.lum - self.minlum) * self.Omega_arr * self.frac_use)
+        else: self.phifunc = 1.0/(self.volume * self.Omega_arr * self.frac_use)
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,Lmin=self.minlum, Lmax=self.maxlum)
         if self.corrf is not None:
             ucorr_orig = unumpy.uarray(self.corrf(self.Lavg), self.corref(self.Lavg))
