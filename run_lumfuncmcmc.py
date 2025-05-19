@@ -6,7 +6,7 @@ import logging
 from astropy.table import Table
 from scipy.interpolate import interp1d
 from scipy.stats import ks_2samp
-from lumfuncmcmc import LumFuncMCMC, makeCompFunc, cgs2magAB, magAB2cgs, cgs2lum, lum2cgs
+from lumfuncmcmc import LumFuncMCMC, makeCompFunc, makeCompFuncSamp, cgs2magAB, magAB2cgs, cgs2lum, lum2cgs
 import VmaxLumFunc as V
 from scipy import odr
 import configLF
@@ -199,7 +199,11 @@ def parse_args(argv=None):
     
     parser.add_argument("-ct", "--contam_type",
                          help='''How to calculate contamination''',
-                         type=str, default=None)  
+                         type=str, default=None) 
+
+    parser.add_argument("-ne", "--num_err",
+                        help='''Whether or not to divide sample by environment''',
+                        type=int,default=-1) 
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
@@ -374,7 +378,8 @@ def read_input_file(args):
     interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = [], [], [], [], []
     flux_lim, cgscontam = [], []
     for i in range(numbins):
-        interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, density_frac=density_frac[i], aper_corr=args.aper_corr)
+        if args.num_err<0: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, density_frac=density_frac[i], aper_corr=args.aper_corr)
+        else: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFuncSamp(args.num_err, DL, filter=args.filt_name, file_name=args.interp_name.replace('extrap', 'extrap_samp'), contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, aper_corr=args.aper_corr)
         interp_comp.append(interp_compi); interp_comp_simp.append(interp_comp_simpi); interp_comp_simp_orig.append(interp_comp_simp_origi); nbcontam.append(nbcontami); cf.append(cfi)
         if args.lum_lim<0.0: flux_limi = np.inf
         else: flux_limi = lum2cgs(args.lum_lim, DL) * 1.0e17
@@ -452,6 +457,7 @@ def main(argv=None):
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
     output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    if args.num_err>0: output_filename += f'_{args.num_err}'
     # if args.filt_name=='N673': output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
@@ -480,6 +486,7 @@ def main(argv=None):
         alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         if args.other_method: alls_file_name = alls_file_name.replace('.pickle', '_om.pickle')
+        if args.num_err>0: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_{args.num_err}.pickle'), vgal_file_name.replace('.pickle', f'_{args.num_err}.pickle')
         print("Alls file name:", alls_file_name)
 
         beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=args.filt_name, extra_text=args.extra_text)

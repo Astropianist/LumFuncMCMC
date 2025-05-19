@@ -6,7 +6,7 @@ from uncertainties import unumpy, ufloat
 from scipy.interpolate import interp1d, RectBivariateSpline
 from scipy.integrate import trapezoid
 from scipy.interpolate import RegularGridInterpolator as RGIScipy
-from scipy.stats import binned_statistic
+from scipy.stats import binned_statistic, poisson, uniform
 from math import lgamma
 from astropy.table import Table
 from time import time
@@ -37,7 +37,7 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_12_26_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0, mag_corr=0.0): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_12_26_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0, mag_corr=0.0, nsamp=25): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
     file_name = file_name_orig.replace('N419', filter)
     if not op.exists(file_name):
         x = np.linspace(0, 100, 1001)
@@ -93,7 +93,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # bin_edges[-1] += 1.0e-6 # Want to make sure the last flux is included
     bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.0
     contam, contaml, contamh = np.ones(binnum), np.zeros(binnum), np.zeros(binnum)
-    flss, fass = np.ones(binnum, dtype=int), np.ones(binnum, dtype=int)
+    flss, fass, fassn = np.ones(binnum, dtype=int), np.ones(binnum, dtype=int), np.ones(binnum)
     for i in range(binnum):
         cond = np.logical_and(nb_all>=bin_edges[i], nb_all<bin_edges[i+1])
         cond_lae = np.logical_and(nb_lae>=bin_edges[i], nb_lae<bin_edges[i+1])
@@ -103,11 +103,11 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
         fagns, fctms = nb_agn[cond_agn].size, nb_ctm[cond_ctm].size
         fas_new = fls + fagns + fctms*density_frac
         contam[i] = fls/fas_new
-        flss[i], fass[i] = fls, fas
+        flss[i], fass[i], fassn[i] = fls, fas, fas_new
         if fls>num.max(): contaml[i], contamh[i] = np.sqrt(fls)/fas_new, np.sqrt(fls)/fas_new
         else:
             cond_pois = np.where(fls==num)[0][0]
-            contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
+            contaml[i], contamh[i] = (fls-lb[cond_pois])/fas_new, (hb[cond_pois]-fls)/fas_new
         if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
         if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
         if fls==0: contamh[i], contaml[i] = 0.0, 0.0
@@ -122,6 +122,23 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     else:
         indcontam = np.argmin(np.abs(ctc - contam_lim))
         nbcontam = test_contam[indcontam]
+
+    # # pois = poisson.rvs(flss, size=(nsamp, binnum))
+    # maxs = poisson.cdf(fassn, flss)
+    # u = uniform.rvs(scale=maxs, size=(nsamp, binnum))
+    # pois = poisson.ppf(u, flss)
+    # contamsamp = pois / fassn
+    # nbcsamp = -99.0 * np.ones(nsamp)
+    # for i in range(nsamp):
+    #     contamsf = interp1d(bin_centers, contamsamp[i], kind=interp_type, fill_value=(contam[0], 1.0), bounds_error=False)
+    #     ctc = contamsf(test_contam)
+    #     if ctc.min()<=contam_lim:
+    #         indcs = np.argmin(np.abs(ctc - contam_lim))
+    #         nbcsamp[i] = test_contam[indcs]
+
+    # obj = {}
+    # obj['mags'], obj['contams'], obj['nbcontams'] = bin_centers, contamsamp, nbcsamp
+    # pickle.dump(obj, open(f'{filter}_contamination_samp.pickle', 'wb'))
 
     # print(f"nbcontam: {nbcontam:0.2f}")
 
@@ -140,6 +157,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # plt.xlabel('NB Magnitude (AB)')
     # plt.ylabel('Fraction of true LAEs') # in {filter}')
     # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_final_v2.png'), bbox_inches='tight', dpi=300)
+    # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
 
 def getContaminationOld(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
@@ -328,6 +346,32 @@ class RGINNExt:
         if type(xi)==tuple: vals[idxs] = self.nearest((xi[0][idxs], xi[1][idxs]))
         else: vals[idxs] = self.nearest( xi[idxs] )
         return vals
+
+def makeCompFuncSamp(num, DL, file_name='cosmos_completeness_n501_grid_extrap_samp.pickle', filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, mag_min=28., mag_max=21., use_contam=True, aper_corr=0.0, interp_type='linear'):
+    with open(file_name,'rb') as f:
+        dat = pickle.load(f)
+    mag, dist, comp = dat['Mags']+aper_corr, dat['Dist'], dat['CompSamps'][num]
+    if use_contam:
+        with open(f'{filter}_contamination_samp.pickle', 'rb') as f:
+            obj = pickle.load(f)
+        bin_centers, contam, nbcontam = obj['mags'], obj['contams'][num], obj['nbcontams'][num]
+        cf = interp1d(bin_centers, contam, kind=interp_type, fill_value=1.0, bounds_error=False)
+    interp_comp = RGINNExt((dist, mag), comp)
+    interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
+    distcontam = np.linspace(dist.min(), dist.max(), distnum)
+    magcontam = np.linspace(mag.min(), mag.max(), magnum)
+    if use_contam:
+        dc, mc = np.meshgrid(distcontam, magcontam, indexing='ij')
+        # cgs17 = magAB2cgs(mc, wave, dwave)*1.0e17
+        contampart = 1.0/cf(mc)
+        contampart[mc<nbcontam] = 1.0/contam_lim
+
+        vals = interp_comp_simp_orig.ev(dc, mc) * contampart
+        interp_comp_simp = RectBivariateSpline(distcontam, magcontam, vals, kx=1, ky=1)
+    else: interp_comp_simp = interp_comp_simp_orig
+
+    # plot_Comp(interp_comp_simp, mag, comp, dist, DL, f'{filter}_{num}', wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
+    return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0, use_contam=True, aper_corr=0.0):
     with open(file_name,'rb') as f:
