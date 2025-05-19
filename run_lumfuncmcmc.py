@@ -457,7 +457,7 @@ def main(argv=None):
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
     output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
-    if args.num_err>0: output_filename += f'_{args.num_err}'
+    if args.num_err>=0: output_filename += f'_{args.num_err}'
     # if args.filt_name=='N673': output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
@@ -486,7 +486,7 @@ def main(argv=None):
         alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         if args.other_method: alls_file_name = alls_file_name.replace('.pickle', '_om.pickle')
-        if args.num_err>0: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_{args.num_err}.pickle'), vgal_file_name.replace('.pickle', f'_{args.num_err}.pickle')
+        if args.num_err>=0: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_{args.num_err}.pickle'), vgal_file_name.replace('.pickle', f'_{args.num_err}.pickle')
         print("Alls file name:", alls_file_name)
 
         beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=args.filt_name, extra_text=args.extra_text)
