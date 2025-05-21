@@ -207,7 +207,7 @@ def parse_args(argv=None):
     
     parser.add_argument("-co", "--combo",
                         help='''Whether or not to run ''',
-                        type=int,default=-1) 
+                        action='count',default=0) 
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
