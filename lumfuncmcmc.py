@@ -1226,11 +1226,14 @@ class LumFuncMCMC:
         self.log.info(self.samples.shape)
         self.log.info("Median lnprob: %.5f; Max lnprob: %.5f"%(np.median(sampler.lnprobability), np.amax(sampler.lnprobability)))
 
-    def VeffLF(self, varying=False):
+    def VeffLF(self, varying=False, combo=False, phifunc=None, lum=None):
         ''' Use V_Eff method to calculate properly weighted measured luminosity function '''
         print("Ready to calculate V effective method")
-        if varying: self.phifunc = 1.0/(self.dVdz * self.delzf(self.lum - self.minlum) * self.Omega_arr * self.frac_use)
-        else: self.phifunc = 1.0/(self.volume * self.Omega_arr * self.frac_use)
+        if phifunc is not None: self.phifunc, self.lum = phifunc, lum
+        else:
+            if varying: self.phifunc = 1.0/(self.dVdz * self.delzf(self.lum - self.minlum) * self.Omega_arr * self.frac_use)
+            else: self.phifunc = 1.0/(self.volume * self.Omega_arr * self.frac_use)
+        if combo: return
         self.Lavg, self.lfbinorig, self.var = V.getBootErrLog(self.lum,self.phifunc,self.nboot,self.nbins,Lmin=self.minlum, Lmax=self.maxlum)
         if self.corrf is not None:
             ucorr_orig = unumpy.uarray(self.corrf(self.Lavg), self.corref(self.Lavg))

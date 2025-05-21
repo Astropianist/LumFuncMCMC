@@ -204,6 +204,10 @@ def parse_args(argv=None):
     parser.add_argument("-ne", "--num_err",
                         help='''Whether or not to divide sample by environment''',
                         type=int,default=-1) 
+    
+    parser.add_argument("-co", "--combo",
+                        help='''Whether or not to run ''',
+                        type=int,default=-1) 
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
@@ -441,14 +445,60 @@ def read_input_file(args):
     print("Weights for different density regions:", weights)
     return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf, density_frac, nbs, nbes
 
-def main(argv=None):
+def getVeffCombo(args=None, numtot=25):
+    if args is None: args = parse_args()
+    assert args.trans_only
+    ecnum = 2
+    dir_name_first = 'LFMCMCOdin'
+    output_filename_orig = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    i = 0
+    if args.corr: 
+        corrfile = Table.read(args.corr_file, format='ascii')
+        logL, corr, corre = corrfile['logL'], corrfile['Corr'], corrfile['CorrErr']
+        cond = np.logical_and(np.isfinite(corr), np.isfinite(corre))
+        corrf = interp1d(logL[cond], corr[cond], kind='linear', bounds_error=False, fill_value=(corr[cond][0], corr[cond][-1]))
+        corref = interp1d(logL[cond], corre[cond], kind='linear', bounds_error=False, fill_value=(corre[cond][0], corre[cond][-1]))
+    else:
+        corrf, corref = None, None
+    lums, phis, lummins, lummaxs = np.zeros(0), np.zeros(0), np.zeros(numtot), np.zeros(numtot)
+    
+    for j in range(numtot):
+        args.num_err = j
+        flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e = read_input_file(args)
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
+
+        beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=args.filt_name, extra_text=args.extra_text)
+
+        if args.lum_min>0: minlum = args.lum_min
+        else: minlum = None
+        # Initialize LumFuncMCMC class
+        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=1, frac_use=args.frac_use)
+        print("Initialized LumFuncMCMC class")
+        LFmod.VeffLF(combo=True)
+        lums, phis = np.concatenate(lums, LFmod.lum), np.concatenate(phis, LFmod.phifunc)
+        lummins[j], lummaxs[j] = LFmod.minlum, LFmod.maxlum
+
+    LFmod.minlum, LFmod.maxlum = np.median(lummins), np.median(lummaxs)
+    LFmod.VeffLF(phifunc=phis, lum=lums)
+
+    T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
+                        names=['Luminosity', 'BinLF', 'BinLFErr'])
+    output_filename = output_filename_orig + '_combo'
+    dir_name = op.join(dir_name_first, output_filename)
+    mkpath(dir_name)
+    T.write('%s/%s_VeffLF_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr),
+            overwrite=True, format='ascii.fixed_width_two_line')
+    print("Finished writing VeffLF file")
+
+def main(args=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
     # Get Inputs
-    if argv == None:
-        argv = sys.argv
-        argv.remove('run_lumfuncmcmc.py')
+    # if argv == None:
+    #     argv = sys.argv
+    #     argv.remove('run_lumfuncmcmc.py')
 
-    args = parse_args(argv)
+    if args is None: args = parse_args()
 
     # Make output folder if it doesn't exist
     if args.err_corr: ecnum = 1
@@ -628,5 +678,7 @@ def main(argv=None):
         LFmod.plotVeffEnv(lavg, lfbinorig, var, minlums, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    if args.combo: getVeffCombo(args=args)
+    else: main(args=args)
     # test_funcs()

@@ -494,6 +494,9 @@ def plotMultVeff(*filenames):
     fig.savefig(f'VeffComp_{namefull}.png', bbox_inches='tight', dpi=300)
     plt.close('all')
 
+def getErrComp(filter='N501'):
+    pass
+
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
     # main(alpha_fixed=-1.8)
