@@ -460,7 +460,7 @@ def getVeffCombo(args=None, numtot=25):
         corref = interp1d(logL[cond], corre[cond], kind='linear', bounds_error=False, fill_value=(corre[cond][0], corre[cond][-1]))
     else:
         corrf, corref = None, None
-    lums, phis, lummins, lummaxs = np.zeros(0), np.zeros(0), np.zeros(numtot), np.zeros(numtot)
+    lums, phis = np.zeros(0), np.zeros(0)
     
     for j in range(numtot):
         args.num_err = j
@@ -476,14 +476,12 @@ def getVeffCombo(args=None, numtot=25):
         LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=1, frac_use=args.frac_use)
         print("Initialized LumFuncMCMC class")
         LFmod.VeffLF(combo=True)
-        lums, phis = np.concatenate(lums, LFmod.lum), np.concatenate(phis, LFmod.phifunc)
-        lummins[j], lummaxs[j] = LFmod.minlum, LFmod.maxlum
+        lums, phis = np.concatenate((lums, LFmod.lum)), np.concatenate((phis, LFmod.phifunc))
 
-    LFmod.minlum, LFmod.maxlum = np.median(lummins), np.median(lummaxs)
     LFmod.VeffLF(phifunc=phis, lum=lums)
 
-    T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
-                        names=['Luminosity', 'BinLF', 'BinLFErr'])
+    T = Table([LFmod.Lavg, LFmod.lfbinorig/numtot, np.sqrt(LFmod.var)/numtot, LFmod.lfbinorig_orig/numtot, np.sqrt(LFmod.var_orig)/numtot],
+                        names=['Luminosity', 'BinLF', 'BinLFErr', 'BinLFOrig', 'BinLFErrOrig'])
     output_filename = output_filename_orig + '_combo'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)

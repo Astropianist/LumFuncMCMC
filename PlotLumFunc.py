@@ -8,6 +8,7 @@ from astropy.table import Table
 from astropy.io import fits
 import os.path as op
 from itertools import cycle
+from glob import glob
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
 sns.set_style("ticks")
@@ -402,6 +403,39 @@ def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral
     ax.legend(loc='best', frameon=False)
     fig.savefig(f'LumFuncCompN501.png', bbox_inches='tight', dpi=300)
 
+def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, Lnum=401, rndsamples=50, ymin=5.0e-7, ymax=3.0e-2):
+    fn = glob(op.join(base_dir+'_combo', "*VeffLF*.dat"))[0]
+    veff = Table.read(fn, format='ascii')
+    vlum, vlf, vlfe, vlfo, vlfeo = veff['Luminosity'], veff['BinLF'], veff['BinLFErr'], veff['BinLFOrig'], veff['BinLFErrOrig']
+    logL = np.linspace(Lmin, Lmax, Lnum)
+    fig, ax = plt.subplots()
+    lfs, lfbests = [], []
+    add_LumFunc_plot(ax)
+    ax.errorbar(vlum, vlf, yerr=vlfe, fmt='b^', linestyle='none', capsize=2, label=r'V$_{\rm eff}$ + Filter')
+    ax.errorbar(vlum, vlfo, yerr=vlfeo, fmt='cs', linestyle='none', capsize=2, label=r'V$_{\rm eff}$')
+    for i in range(numtot):
+        fpf = glob(op.join(base_dir+f'_{i}', '*fitposterior*.dat'))[0]
+        dat = Table.read(fpf,format='ascii')
+        samplei = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+        del dat
+        nsamples = getnsamples(samplei)
+        lf, lfbest = getSamples(logL, nsamples, rndsamples=rndsamples)
+        lfs.append(lf); lfbests.append(lfbest)
+    lfrealbest = np.median(lfbests, axis=0)
+    for i in range(numtot):
+        for j in range(rndsamples):
+            if i==0 and j==0: label='MCMC solutions'
+            else: label=''
+            ax.plot(logL, lfs[i][j], linestyle='-', color='r', alpha=0.02, label=label)
+    ax.plot(logL, lfrealbest, 'k-')
+    leg = ax.legend(loc='best', frameon=False)
+    for lh in leg.legend_handles:
+        lh.set_alpha(1)
+    ax.set_xlim(Lmin, Lmax)
+    ax.set_ylim(ymin, ymax)
+    fig.savefig(f'ComboLF{filter}.png', bbox_inches='tight', dpi=300)
+    plt.close('all')
+
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
 
@@ -500,5 +534,6 @@ def getErrComp(filter='N501'):
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
     # main(alpha_fixed=-1.8)
-    NewProc()
+    # NewProc()
     # plotMultVeff('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata/N501_new_trial_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata_nb50_nw200_ns4000_mcf50_ec_2_env0_bin1_c1.dat', 'LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew/N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1_c1.dat')
+    plotLumFuncCombo('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10lumminnv')
