@@ -104,16 +104,21 @@ def add_LumFunc_plot(ax1, no_ylabel=False):
     if not no_ylabel: ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
     ax1.minorticks_on()
 
-def getSamples(logL, nsamples, rndsamples=200, sa=-1.6, ret_prop=0, pers_use=[16, 50, 84]):
+def getSamples(logL, nsamples, rndsamples=200, sa=-1.6, ret_prop=0, pers_use=[16, 50, 84], return_params=False):
     lf = []
     if nsamples.shape[1]==4: alpha = nsamples[:,2]
     else: alpha = np.repeat(sa, nsamples.shape[0])
     if ret_prop: return np.percentile(alpha, pers_use), np.percentile(nsamples[:,0], pers_use), np.percentile(nsamples[:,1], pers_use)
+    Lstars, alphas, phistars = np.zeros(rndsamples), np.zeros(rndsamples), np.zeros(rndsamples)
     for i in np.arange(rndsamples):
         ind = np.random.randint(0, nsamples.shape[0])
-        modlum = TrueLumFunc(logL, alpha[ind], nsamples[ind, 0], nsamples[ind, 1])
+        Lstars[i], alphas[i], phistars[i] = nsamples[ind, 0], alpha[ind], nsamples[ind, 1]
+        modlum = TrueLumFunc(logL, alphas[i], Lstars[i], phistars[i])
         lf.append(modlum)
-    medianLF = np.median(np.array(lf), axis=0)
+        
+    lf = np.array(lf)
+    medianLF = np.median(lf, axis=0)
+    if return_params: return lf, medianLF, Lstars, alphas, phistars
     return lf, medianLF
 
 def getnsamples(samples, lnprobcut=7.5):
@@ -403,7 +408,76 @@ def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral
     ax.legend(loc='best', frameon=False)
     fig.savefig(f'LumFuncCompN501.png', bbox_inches='tight', dpi=300)
 
-def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, Lnum=401, rndsamples=50, ymin=5.0e-7, ymax=3.0e-2):
+def plotLumFuncStd(logL, lfs_new, lfs_old, filter, numtot=25, Lmin=42.0, Lmax=43.8, rndsamples=50, ymin=5.0e-7, ymax=3.0e-2, rndfac=5, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], maxdiff=0.21, stdver=0):
+    assert filter.lower()=='n501'
+    z = 3.1
+    lfs_new_med, lfs_new_std = np.median(lfs_new, axis=(0,1)), np.std(lfs_new, axis=(0,1))
+    lfs_old_med, lfs_old_std = np.median(lfs_old, axis=0), np.std(lfs_old, axis=0)
+    lfs_rat = lfs_new_std / lfs_old_std
+    print("Median std ratio: ", np.median(lfs_rat))
+
+    ######### Literature area #########
+    sob = fits.getdata(sobfile, 1)
+    sobs = sob['Sample']
+    logLsob, logLsobe, phisob = sob['log_Lum_bin'], sob['delta_bin'], 10**sob['Phi_final']
+    phiseu, phisel = calc_phi_err(phisob, sob['Phi_final_err_up']), calc_phi_err(phisob, sob['Phi_final_err_down'])
+    sobo = fits.getdata(sobothers, 1)
+    zavg = (sobo['z_min'] + sobo['z_max']) / 2
+    ref, logLso, logLsoe, phiso = sobo['Reference'], sobo['LogL'], sobo['D_LogL'], 10**sobo['LogPhi']
+    phisoeu, phisoel = calc_phi_err(phiso, sobo['D_LogPhi_up']), calc_phi_err(phiso, sobo['D_LogPhi_down'])
+    refuniq = np.unique(ref)
+    markref = []
+    for refi in refuniq:
+        markref.append(next(markers))
+
+    ##### Plot area #####
+    fig, ax = plt.subplots()
+    add_LumFunc_plot(ax)
+    if not stdver:
+        for i in range(numtot):
+            for j in range(rndsamples):
+                if i==0 and j==0: label='Varied completeness'
+                else: label=''
+                ax.plot(logL, lfs_new[i][j], linestyle='-', color='r', alpha=0.02, label=label)
+        for j in range(rndsamples*rndfac):
+            if j==0: label='Fixed completeness'
+            else: label=''
+            ax.plot(logL, lfs_old[j], linestyle='-', color='b', alpha=0.02, label=label)
+    else:
+        ax.plot(logL, lfs_new_med, linestyle='-', color='r', label='Varied completeness')
+        ax.plot(logL, lfs_old_med, linestyle='-', color='b', label='Fixed completeness')
+        ax.fill_between(logL, lfs_new_med - lfs_new_std, lfs_new_med + lfs_new_std, color='r', alpha=0.1, label='')
+        ax.fill_between(logL, lfs_old_med - lfs_old_std, lfs_old_med + lfs_old_std, color='b', alpha=0.1, label='')
+
+    condsob = sobs == sobkeys[1]
+    ax.errorbar(logLsob[condsob], phisob[condsob], yerr=np.row_stack((phisel[condsob], phiseu[condsob])), xerr=logLsobe[condsob]/2, linestyle='none', marker=markers_overall[0], color='k', label='', capsize=2)
+    condsobo = abs(zavg-z)<maxdiff
+    refsj = np.unique(ref[condsobo])
+    for k, rj in enumerate(refsj):
+        if rj=='Konno+2016': continue
+        ind = np.where(refuniq==rj)[0][0]
+        condsofull = np.logical_and(condsobo, ref==rj)
+        ax.errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=orig_palette_arr[k+3], label='', capsize=2)
+    leg = ax.legend(loc='best', frameon=False)
+    for lh in leg.legend_handles:
+        lh.set_alpha(1)
+    ax.set_xlim(Lmin, Lmax)
+    ax.set_ylim(ymin, ymax)
+    figname = f'LFCompCombo{filter}.png'
+    if stdver: figname = figname.replace('Combo', 'ComboStd')
+    fig.savefig(figname, bbox_inches='tight', dpi=300)
+    plt.close('all')
+    
+    fig, ax = plt.subplots()
+    ax.plot(logL, lfs_rat, 'b-')
+    ax.set_xlim(Lmin, Lmax)
+    ax.set_ylim(lfs_rat.min(), lfs_rat.max())
+    ax.set_xlabel(r"$\log$ L (erg s$^{-1}$)")
+    ax.set_ylabel('Ratio of standard deviation (varied/fixed)')
+    fig.savefig(f'LFCompStdRat{filter}.png', bbox_inches='tight', dpi=300)
+    plt.close('all')
+
+def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, Lnum=401, rndsamples=50, ymin=5.0e-7, ymax=3.0e-2, rndfac=5):
     fn = glob(op.join(base_dir+'_combo', "*VeffLF*.dat"))[0]
     veff = Table.read(fn, format='ascii')
     vlum, vlf, vlfe, vlfo, vlfeo = veff['Luminosity'], veff['BinLF'], veff['BinLFErr'], veff['BinLFOrig'], veff['BinLFErrOrig']
@@ -413,13 +487,14 @@ def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, L
     add_LumFunc_plot(ax)
     ax.errorbar(vlum, vlf, yerr=vlfe, fmt='b^', linestyle='none', capsize=2, label=r'V$_{\rm eff}$ + Filter')
     ax.errorbar(vlum, vlfo, yerr=vlfeo, fmt='cs', linestyle='none', capsize=2, label=r'V$_{\rm eff}$')
+    aln, lsn, psn = np.zeros((numtot, rndsamples)), np.zeros((numtot, rndsamples)), np.zeros((numtot, rndsamples))
     for i in range(numtot):
         fpf = glob(op.join(base_dir+f'_{i}', '*fitposterior*.dat'))[0]
         dat = Table.read(fpf,format='ascii')
         samplei = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
         del dat
         nsamples = getnsamples(samplei)
-        lf, lfbest = getSamples(logL, nsamples, rndsamples=rndsamples)
+        lf, lfbest, lsn[i], aln[i], psn[i] = getSamples(logL, nsamples, rndsamples=rndsamples, return_params=True)
         lfs.append(lf); lfbests.append(lfbest)
     lfrealbest = np.median(lfbests, axis=0)
     for i in range(numtot):
@@ -435,6 +510,14 @@ def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, L
     ax.set_ylim(ymin, ymax)
     fig.savefig(f'ComboLF{filter}.png', bbox_inches='tight', dpi=300)
     plt.close('all')
+
+    fpf = glob(op.join(base_dir, f'{filter}*fitposterior*.dat'))[0]
+    dat = Table.read(fpf,format='ascii')
+    samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+    del dat
+    nsamples = getnsamples(samples)
+    lfs_old, _, lso, alo, pso = getSamples(logL, nsamples, rndsamples=rndsamples*rndfac, return_params=True)
+    plotLumFuncStd(logL, np.array(lfs).astype(float), lfs_old.astype(float), filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=1)
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
