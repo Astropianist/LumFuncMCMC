@@ -275,7 +275,7 @@ def showAllCorr():
     if filter=='N501': alpha, ml = -1.6, 41.58
     elif filter=='N419': alpha, ml = -2.0, 41.47
     else: alpha, ml = -1.1, 41.83
-    image_dir = op.join('TransExp', 'FinalDelz')
+    image_dir = op.join('TransExp', 'NewDelz')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
     fn_base = f'{filter}Corr_ng{ngal}_bn20_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'
     fn_base43 = f'{filter}Corr_ng{ngal}_bn8_al{alpha:0.1f}_delz{delz:0.2f}_ml{ml:0.2f}'

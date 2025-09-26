@@ -289,13 +289,13 @@ def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419
 
 def plotFluxDistribRaw(flux_comp, flux_incomp, flux_bright, flux_low, bins=40, filt_name='N419', extra_text=''):
     # if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
-    fig = plt.figure()
+    fig = plt.figure(figsize=(6,6))
     val = 50
     if filt_name=='N673': val = 32
     labb = f'Contamination over {val}% (removed)'
     plt.hist([np.log10(flux_comp), np.log10(flux_incomp), np.log10(flux_bright)], histtype='barstacked', bins=bins, color=['blue', 'lightgrey', 'gold'], label=[fr'Above {flux_low:0.2f} $\times 10^{{-17}}$ erg cm$^{{-2}}$ s$^{{-1}}$ (kept)', fr'Below {flux_low:0.2f} $\times 10^{{-17}}$ erg cm$^{{-2}}$ s$^{{-1}}$ (removed)', labb])
-    plt.xlabel(r'Log flux ($10^{-17}$ erg cm$^{-2}$ s$^{-1}$)')
-    plt.ylabel(f'Number of sources')
+    plt.xlabel(r'Log flux ($10^{-17}$ erg cm$^{-2}$ s$^{-1}$)', fontsize='large')
+    plt.ylabel(f'Number of sources', fontsize='large')
     plt.xlim(-0.3, 2.05)
     plt.ylim(0, 725)
     plt.legend(loc='best', frameon=False, fontsize='x-small')
@@ -332,8 +332,8 @@ def getContCorr(flux, fluxe, nb, nbe, filter='N501', extra_text=''):
     farr = np.linspace(fmin, fmax, 1001)
     ax.plot(farr, flin(out.beta, farr), 'r-', label=rf'$f_{{\rm NB}} = {out.beta[0]:0.2f}f_{{\rm line}} - {-out.beta[1]:0.2f}$')
     ax.plot(farr, farr, 'k--', label='1-1')
-    ax.set_xlabel(fr'{filter} Line Flux ($10^{{-17}}$ cgs)')
-    ax.set_ylabel(rf'{filter} NB Flux ($10^{{-17}}$ cgs)')
+    ax.set_xlabel(fr'{filter} Line Flux ($10^{{-17}}$ erg cm$^{{-2}}$ s$^{{-1}}$)')
+    ax.set_ylabel(rf'{filter} NB Flux ($10^{{-17}}$ erg cm$^{{-2}}$ s$^{{-1}}$)')
     ax.legend(loc='best', frameon=False)
     ax.set_xlim(fmin, fmax)
     ax.set_ylim(nb.min(), nb.max())
@@ -427,8 +427,7 @@ def read_input_file(args):
         if args.lum_min>0: cond = lum>=args.lum_min
         else: cond = comps>=args.min_comp_frac
         fluxmin = lum2cgs(args.lum_min, DL)*1.0e17
-        # plotFluxDistribRaw(flux[cond_init][cond], flux[cond_init][~cond], flux[nb>=flux_lim[i]], fluxmin, filt_name=args.filt_name, extra_text=args.extra_text)
-        # breakpoint()
+        plotFluxDistribRaw(flux[cond_init][cond], flux[cond_init][~cond], flux[nb>=flux_lim[i]], fluxmin, filt_name=args.filt_name, extra_text=args.extra_text)
         # plotLumDistribRaw(lum[cond], lum[~cond], lumb, filt_name=args.filt_name)
         densi = dens[cond_env][cond_init][cond]
         # densiavg = np.median(densi)

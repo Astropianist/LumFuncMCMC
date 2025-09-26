@@ -37,6 +37,20 @@ def poisson_lnpmf(k, mu):
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
+def makeTransFigs(filter, lam, trans, dlogL, delz, pden, lammin=4900., lammax=5125.):
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
+    ax[0].plot(lam, trans, 'b-')
+    ax[1].plot(dlogL, delz, 'b-')
+    ax[2].semilogy(dlogL, pden, 'b-')
+    ax[0].set_xlim(lammin, lammax); ax[0].set_ylim(trans.min(), trans.max())
+    ax[1].set_xlim(dlogL.min()-0.01, dlogL.max()); ax[1].set_ylim(delz.min(), delz.max())
+    ax[2].set_xlim(dlogL.min()-0.01, dlogL.max()); ax[2].set_ylim(pden.min()-0.01, pden.max())
+    ax[0].set_xlabel(r'$\lambda$ ($\AA$)'); ax[0].set_ylabel('Transmission')
+    ax[1].set_xlabel(r'$\log L - \log L_{\rm min}$ (erg s$^{-1}$)'); ax[1].set_ylabel(r'$\Delta z$')
+    ax[2].set_xlabel(r'$\log L - \log L_{\rm min}$ (erg s$^{-1}$)'); ax[2].set_ylabel(r'Probability Density')
+    plt.tight_layout()
+    fig.savefig(f'{filter}_TransInfo.png', bbox_inches='tight', dpi=300)
+
 def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_12_26_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0, mag_corr=0.0, nsamp=25): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
     file_name = file_name_orig.replace('N419', filter)
     if not op.exists(file_name):
@@ -142,21 +156,21 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
 
     # print(f"nbcontam: {nbcontam:0.2f}")
 
-    # plt.figure()
-    # plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
-    # for i, bc in enumerate(bin_centers):
-    #     if contam[i] > 0.5: locy = contam[i] - contaml[i]-0.05
-    #     else: locy = contam[i] + contamh[i] + 0.05
-    #     plt.text(bc, locy, fr'$\frac{{{flss[i]}}}{{{fass[i]}}}$', color='k', horizontalalignment='center')
-    # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
-    # plt.plot(bin_check, contamf(bin_check), 'r')
-    # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
-    # if filter=='N673': plt.gca().set_xticks(plt.gca().get_xticks()[:-2])
-    # plt.xlim(bin_check.max(), bin_check.min())
-    # plt.ylim(-0.05, 1.05)
-    # plt.xlabel('NB Magnitude (AB)')
-    # plt.ylabel('Fraction of true LAEs') # in {filter}')
-    # plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_final_v2.png'), bbox_inches='tight', dpi=300)
+    plt.figure(figsize=(6,6))
+    plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
+    for i, bc in enumerate(bin_centers):
+        if contam[i] > 0.5: locy = contam[i] - contaml[i]-0.05
+        else: locy = contam[i] + contamh[i] + 0.05
+        plt.text(bc, locy, fr'$\frac{{{flss[i]}}}{{{fass[i]}}}$', color='k', horizontalalignment='center')
+    bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
+    plt.plot(bin_check, contamf(bin_check), 'r')
+    plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
+    if filter=='N673': plt.gca().set_xticks(plt.gca().get_xticks()[:-2])
+    plt.xlim(bin_check.max(), bin_check.min())
+    plt.ylim(-0.05, 1.05)
+    plt.xlabel('NB Magnitude (AB)', fontsize='large')
+    plt.ylabel('Fraction of true LAEs', fontsize='large') # in {filter}')
+    plt.savefig(op.join('Contamination', f'{filter}_Contam_{binnum}_{contam_type}_final_v2.png'), bbox_inches='tight', dpi=300)
     # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
 
@@ -331,6 +345,9 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000
     interp_type = 'linear'
     transpdf, logL_discrete, delzf = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete, interp_type=interp_type, wav_rest=wav_rest)
 
+    # filter = file_name.split('_')[0]
+    # makeTransFigs(filter, lam, trans, logL_discrete, delzf(logL_discrete), transpdf(logL_discrete))
+
     return transpdf, logL_discrete, delzf # (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
@@ -404,7 +421,7 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.ylabel('Distance from center of field')
     # plt.show()
     # plt.close('all')
-    # plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
+    plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
@@ -492,7 +509,7 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     cmap = plt.cm.plasma
     norm = plt.Normalize(vmin=dist.min(), vmax=dist.max())
     colors = cmap(norm(dist))
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(6,6))
     for i, d in enumerate(dist):
         # ax.scatter(lumvals, comp[i], c=colors[i], s=10)
         ax.plot(lumarr, compf.ev(d, magarr), color=colors[i])
@@ -501,9 +518,10 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     ax.set_ylim(1.0e-3, 2.2)
     # ax.legend(loc='best',fontsize='x-small')
     cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
-    fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax, label='Distance from center (arcmin)')
-    ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)')
-    ax.set_ylabel('Effective Completeness')
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+    cb.set_label('Distance from center (arcmin)', fontsize='large')
+    ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)', fontsize='large')
+    ax.set_ylabel('Effective Completeness', fontsize='large')
     fig.savefig(f'{fn}_EffComp.png',bbox_inches='tight',dpi=300)
     plt.close(fig)
     # breakpoint()
@@ -888,7 +906,7 @@ class LumFuncMCMC:
                 #     phimednorm = phimed / trapezoid(phimed, self.logL)
                 #     phiobsuse = np.median(phiobsnorm, axis=0)
                 #     self.plotPracLumFunc(truenorm, phimednorm, phiobsuse, als[i], lss[j], likes[i,j])
-                #     breakpoint()
+                # breakpoint()
         return als, lss, likes
 
     def calclikeLsalnotused(self, alnum=50, lsnum=50):
@@ -1066,7 +1084,7 @@ class LumFuncMCMC:
         # num = self.del_red * trapezoid(integ, self.logL)
         # time4 = time()
         # like_phi = np.log(self.rv.pmf(np.average(nums).astype(int)))
-        like_phi = poisson_lnpmf(int(num), self.N)
+        like_phi = poisson_lnpmf(self.N, int(num))
         # time5 = time()
         # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4, "Total:", time5-time1)
         return like_alls + like_phi
@@ -1075,7 +1093,7 @@ class LumFuncMCMC:
         like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
         vgals = self.vgalf.ev(self.sch_al, self.Lstar)
         num = 10**self.phistar * self.frac_use * vgals * self.weight
-        like_phi = poisson_lnpmf(int(num), self.N)
+        like_phi = poisson_lnpmf(self.N, int(num))
         return like_alls + like_phi
     
     def lnlike_trans_v3(self):
