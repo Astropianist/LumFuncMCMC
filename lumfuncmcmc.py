@@ -665,9 +665,9 @@ class LumFuncMCMC:
         
         if not self.transsim:
             self.get1DComp()
-            logL_min = self.logL_norm.min()
-            logL_max = self.logL_norm.max() + self.logL_discrete.max()
-            self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
+            # logL_min = self.logL_norm.min()
+            # logL_max = self.logL_norm.max() + self.logL_discrete.max()
+            # self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
         else:
             if self.minlum is None: self.getCompInfo()
             else: self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
@@ -906,6 +906,38 @@ class LumFuncMCMC:
                 #     phimednorm = phimed / trapezoid(phimed, self.logL)
                 #     phiobsuse = np.median(phiobsnorm, axis=0)
                 #     self.plotPracLumFunc(truenorm, phimednorm, phiobsuse, als[i], lss[j], likes[i,j])
+        return als, lss, likes
+
+    def calclikeLsalTH(self, alnum=50, lsnum=50):
+        self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
+        self.Lmed = (bin_edges[:-1] + bin_edges[1:])/2.0
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+        # compgrid = np.zeros((len(self.dist), *self.logL_trans_integ.shape))
+        compgrid = np.zeros((self.dist.size, self.logL.size))
+        # L_all = 10**self.logL_trans_integ.ravel()
+        flux_cgs_orig = lum2cgs(self.logL, self.DL)
+        flux_cgs = flin(self.beta, flux_cgs_orig)
+        cond_bad = flux_cgs < flux_cgs_orig
+        flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+        for i, dist in enumerate(self.dist):
+            if i%400==0: print(f"Got to i={i} for calculating comps grid")
+            compgrid[i] = self.interp_comp_simp.ev(dist, mags)
+
+        likes = np.zeros((alnum, lsnum))
+        for i in range(alnum):
+            print(f"Got to i={i} in main al ls loop")
+            for j in range(lsnum):
+                # tic = time()
+                tlf = TrueLumFuncNoPhi(self.lum, als[i], lss[j])
+                tlfll = TrueLumFuncNoPhi(self.logL, als[i], lss[j])
+                phiobs = self.comps * tlf
+                fornorm = compgrid * tlfll
+                phiobsnorm = phiobs / trapezoid(fornorm, self.logL, axis=1)
+                likes[i,j] = np.log(phiobsnorm).sum()
+                # toc = time()
+                # print("Time per iteration: ", toc-tic)
                 # breakpoint()
         return als, lss, likes
 
@@ -977,6 +1009,45 @@ class LumFuncMCMC:
                 tlf = TrueLumFuncNoPhi(logLr, als[i], lss[j])
                 integ = self.dVdzs[:,None,None] * comps * rs[None,:,None] * tlf[None]
                 vgal[i,j] = integ_mult * trapezoid(trapezoid(trapezoid(integ, logLr[None], axis=2), rs), self.zarr)
+                # time2 = time()
+                # print(f"Time to go through one vgal calculation: {time2-time1}")
+                # breakpoint()
+        return als, lss, vgal
+
+    def calcVgalPhistarTH(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
+        fac_sr_to_arcmin = np.pi / 180. / 60.
+        integ_mult = 2 * np.pi * fac_sr_to_arcmin**2 * self.volume
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+        R = np.sqrt(self.Omega_0_sr/np.pi) # Angular radius of circular field in radians
+        rs = np.linspace(0, R, rnum) / fac_sr_to_arcmin # Get radial position in arcmin
+        vgal = np.zeros((alnum, lsnum))
+        # logLr = np.zeros((rnum, self.size_ln))
+        mlh = cgs2lum(self.flux_lim, self.DL)
+        # ml = self.minlum2df.ev(self.z, rs)
+        ml = self.minlumf(rs)
+        
+        for j in range(lsnum):
+            print(f"Got to j={j} in main al ls loop")
+            logLr = np.zeros((rnum, self.size_ln))
+            for kk in range(rnum):
+            #     ml = self.minlumf(rs[kk])
+            #     ml = self.minlum2df.ev(self.zarr, rs[kk])
+                
+                logLr[kk] = np.linspace(ml[kk], max(ml[kk], min(mlh, lss[j] + exceed)), num=self.size_ln)
+            flux_cgs_orig = lum2cgs(logLr, self.DL)
+            flux_cgs = flin(self.beta, flux_cgs_orig)
+            cond_bad = flux_cgs < flux_cgs_orig
+            flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
+            mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+            comps = self.interp_comp_simp.ev(rs[:,None], mags)
+            comps[comps<self.min_comp_frac] = 0.0
+            
+            for i in range(alnum):
+                # time1 = time()
+                tlf = TrueLumFuncNoPhi(logLr, als[i], lss[j])
+                integ = comps * rs[:,None] * tlf
+                vgal[i,j] = integ_mult * trapezoid(trapezoid(integ, logLr, axis=1), rs)
                 # time2 = time()
                 # print(f"Time to go through one vgal calculation: {time2-time1}")
                 # breakpoint()

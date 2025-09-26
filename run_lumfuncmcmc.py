@@ -147,6 +147,10 @@ def parse_args(argv=None):
     parser.add_argument("-to", "--trans_only",
                         help='''Whether or not to use transmission pdf only''',
                         action='count',default=0)
+
+    parser.add_argument("-th", "--top_hat",
+                        help='''Whether or not to use top hat filter''',
+                        action='count',default=0)
     
     parser.add_argument("-no", "--norm_only",
                         help='''Whether or not to use normal (error) pdf only''',
@@ -174,11 +178,6 @@ def parse_args(argv=None):
     
     parser.add_argument("-va", "--varying",
                         help='''Whether or not to vary volume for veff''',
-                        action='count',default=0)
-    
-    parser.add_argument("-om", "--other_method",
-                        help='''Whether or not to use other MLE 
-                        method''',
                         action='count',default=0)
 
     parser.add_argument("-neb", "--num_env_bins",
@@ -532,7 +531,7 @@ def main(args=None):
     for i in range(len(flux)):
         alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
-        if args.other_method: alls_file_name = alls_file_name.replace('.pickle', '_om.pickle')
+        if args.top_hat: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_th.pickle'), vgal_file_name.replace('.pickle', f'_th.pickle')
         if args.num_err>=0: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_{args.num_err}.pickle'), vgal_file_name.replace('.pickle', f'_{args.num_err}.pickle')
         print("Alls file name:", alls_file_name)
 
@@ -546,7 +545,7 @@ def main(args=None):
         _ = LFmod.get_params()
 
         if args.alls:
-            if args.other_method: als, lss, likes = LFmod.calclikeLsalnotused(alnum=args.alnum, lsnum=args.lsnum)
+            if args.top_hat: als, lss, likes = LFmod.calclikeLsalTH(alnum=args.alnum, lsnum=args.lsnum)
             else: als, lss, likes = LFmod.calclikeLsal(alnum=args.alnum, lsnum=args.lsnum)
             alls_output = {}
             alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
@@ -556,7 +555,8 @@ def main(args=None):
             pickle.dump(alls_output, open(alls_file_name, 'wb'))
             continue
         if args.vgal:
-            als2, lss2, vgal = LFmod.calcVgalPhistar(alnum=args.alnum, lsnum=args.lsnum)
+            if args.top_hat: als2, lss2, vgal = LFmod.calcVgalPhistarTH(alnum=args.alnum, lsnum=args.lsnum)
+            else: als2, lss2, vgal = LFmod.calcVgalPhistar(alnum=args.alnum, lsnum=args.lsnum)
             # assert np.all(als==als2)
             # assert np.all(lss==lss2)
             alls_output = {}
