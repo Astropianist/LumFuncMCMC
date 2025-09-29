@@ -503,6 +503,7 @@ def main(args=None):
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
     output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    if args.top_hat: output_filename += '_th'
     if args.num_err>=0: output_filename += f'_{args.num_err}'
     # if args.filt_name=='N673': output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
