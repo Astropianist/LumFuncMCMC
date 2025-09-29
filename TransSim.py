@@ -65,7 +65,7 @@ def parse_args():
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
     else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
     args.trans_file = f'{args.filt_name}_Nicole.txt'
-    args.delz = args.filt_width / C.wav_rest
+    args.delz = args.filt_width / C.wav_rest * 1.5
     return args
 
 def add_LumFunc_plot(ax1):
@@ -172,7 +172,7 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
     delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type, maglow = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type, args.maglow
     minlum = max(Lc, minlumorig)
     DL = V.cosmo.luminosity_distance(args.redshift).value
-    interp_comp, interp_comp_simp_orig, interp_comp_simp, _, _ = L.makeCompFunc(DL, filter=args.filt_name, file_name=args.interp_name, use_contam=False)
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, _, _ = L.makeCompFunc(DL, filter=args.filt_name, file_name=args.interp_name, use_contam=True)
     # cgscontam = L.magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(numlum))
@@ -305,21 +305,9 @@ def main():
     image_dir = 'TransExp'
     mkpath(image_dir)
     alpha_fixed, delz, varying, Lc, numgal, binnum = args.alpha_fixed, args.delz, args.varying, args.Lc, args.numgal, args.binnum
-    if filter=='N501':
-        if alpha_fixed==-1.6: this_work = [alpha_fixed, 42.47, -2.74]
-        else: 
-            print("Not one of the sanctioned alpha fixed values")
-            return
-    elif filter=='N419':
-        if alpha_fixed==-2.0: this_work = [alpha_fixed, 42.56, -3.19]
-        else: 
-            print("Not one of the sanctioned alpha fixed values")
-            return
-    else:
-        if alpha_fixed==-1.1: this_work = [alpha_fixed, 42.53, -2.71]
-        else: 
-            print("Not one of the sanctioned alpha fixed values")
-            return
+    if filter=='N501': this_work = [-2.25, 42.79, -3.39]
+    elif filter=='N419': this_work = [-2.52, 42.80, -3.80]
+    else: this_work = [-2.08, 43.11, -3.81]
     # plotTransCurve('N501_Nicole.txt', image_dir='', lam_min=4900., lam_max=5125.)
     # plotTransCurve('N673_Nicole.txt', image_dir='', lam_min=6600., lam_max=6900.)
     # plotTransCurve('N419_Nicole.txt', image_dir='', lam_min=4100., lam_max=4300.)
@@ -340,5 +328,5 @@ def main():
     dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    # main()
-    showAllCorr()
+    main()
+    # showAllCorr()
