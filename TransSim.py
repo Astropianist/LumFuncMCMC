@@ -169,6 +169,11 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp', va
     fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz:0.2f}_al{al}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
+def compareReds(r1, r2):
+    plt.hist(r1, bins=100, color='b', alpha=0.5)
+    plt.hist(r2, bins=100, color='r', alpha=0.5)
+    plt.show()
+
 def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varying=0, image_dir='TransExp', corrf=None):
     delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type, maglow = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type, args.maglow
     minlum = max(Lc, minlumorig)
@@ -190,22 +195,24 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     lums_mod, logLs, delzf, delzfv2 = calc_new_lums(lums, reds, file_name=file_name, interp_type=interp_type)
     # bin_centers, hist = bin_lums(lums_mod)
     condtf = lums_mod>=minlum_use
-    plot_hists(lums, lums_mod, delz, al, logLs, varying=varying)
+    plot_hists(lums[condth], lums_mod[condtf], delz, al, logLs, varying=varying)
     mkpath(image_dir)
     # outname_list = [f'Veff_al{al}_delz{delz:0.2f}_vary{varying}', f'VeffTrans_al{al}_delz{delz:0.2f}_vary{varying}']
     # minlum_use = max(Lc, minlum_onered)
     # mu = np.median(minlum_use)
     print("minlum_use:", minlum_use)
-    # dzl, dzlm = delzf(lums-minlum_use), delzf(lums_mod-minlum_use)
-    # delz_eff = [np.average(dzl), np.average(dzlm)]
+    dzlm = delzf(lums_mod[condtf]-minlum_use)
+    delz_eff = np.average(dzlm)
     # delz_effv2 = [np.average(delzfv2(lums-minlum_use)), np.average(delzfv2(lums_mod-minlum_use))]
-    # print("Delz_eff:", delz_eff)
+    print("Delz_eff:", delz_eff)
     # print("Delz_effv2:", delz_effv2)
     lumlist = [lums[condth], lums_mod[condtf]]
     distlist = [dists[condth], dists[condtf]]
+    delReds = [args.del_red, delz_eff]
+    # compareReds(reds[condth], reds[condtf])
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
-        lumobj = L.LumFuncMCMC(args.redshift, del_red=args.del_red, lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use)
+        lumobj = L.LumFuncMCMC(args.redshift, del_red=delReds[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use)
 
         lumobj.VeffLF(varying=varying)
         lf.append(lumobj.lfbinorig)
@@ -285,13 +292,13 @@ def showAllCorr():
     if filter=='N501': ml = 41.58
     elif filter=='N419': ml = 41.47
     else: ml = 41.83
-    image_dir = op.join('TransExp', 'NewDelz')
+    image_dir = op.join('TransExp', 'NewMethod')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
     fn_base = f'{filter}Corr_ng{numgal}_bn20_al{alpha_fixed}_delz{delz:0.2f}_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
         # if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
-        fn = op.join(image_dir, f'{fn_base}_Lc{Lc:0.1f}_corr0_var{varying}.dat')
+        fn = op.join(image_dir, f'{fn_base}_Lc{Lc:0.1f}_corr0_var{varying}_new.dat')
         dat = Table.read(fn, format='ascii')
         bc, co, coe = dat['logL'], dat['Corr'], dat['CorrErr']
         cond = ~np.isnan(co)
@@ -305,7 +312,7 @@ def showAllCorr():
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
     corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.dat'), format='ascii', overwrite=True)
-    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}_new.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
