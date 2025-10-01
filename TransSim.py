@@ -61,9 +61,9 @@ def parse_args():
     args = parser.parse_args()
     args.field_name = 'COSMOS'
     args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
-    if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width = 3.124, 5014.0, 77.17
-    elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
-    else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
+    if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 3.124, 5014.0, 77.17, 0.0705
+    elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 2.449, 4193.0, 75.46, 0.0688
+    else: args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 4.552, 6750.0, 101.31, 0.0922
     args.trans_file = f'{args.filt_name}_Nicole.txt'
     args.del_red = args.filt_width / C.wav_rest
     args.delz = args.del_red * 1.5
@@ -201,14 +201,14 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     # minlum_use = max(Lc, minlum_onered)
     # mu = np.median(minlum_use)
     print("minlum_use:", minlum_use)
-    dzlm = delzf(lums_mod[condtf]-minlum_use)
-    delz_eff = np.average(dzlm)
-    # delz_effv2 = [np.average(delzfv2(lums-minlum_use)), np.average(delzfv2(lums_mod-minlum_use))]
-    print("Delz_eff:", delz_eff)
+    # dzlm = delzf(lums_mod[condtf]-minlum_use)
+    # delz_eff = np.average(dzlm)
+    # # delz_effv2 = [np.average(delzfv2(lums-minlum_use)), np.average(delzfv2(lums_mod-minlum_use))]
+    # print("Delz_eff:", delz_eff)
     # print("Delz_effv2:", delz_effv2)
     lumlist = [lums[condth], lums_mod[condtf]]
     distlist = [dists[condth], dists[condtf]]
-    delReds = [args.del_red, delz_eff]
+    delReds = [args.del_red, args.delz_eff]
     # compareReds(reds[condth], reds[condtf])
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
@@ -292,7 +292,7 @@ def showAllCorr():
     if filter=='N501': ml = 41.58
     elif filter=='N419': ml = 41.47
     else: ml = 41.83
-    image_dir = op.join('TransExp', 'NewMethod')
+    image_dir = op.join('TransExp', 'NewMethod2')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
     fn_base = f'{filter}Corr_ng{numgal}_bn20_al{alpha_fixed}_delz{delz:0.2f}_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
