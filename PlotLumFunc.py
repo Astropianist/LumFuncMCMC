@@ -496,7 +496,6 @@ def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, L
         del dat
         nsamples = getnsamples(samplei)
         lf, _, _, _, _ = getSamples(logL, nsamples, rndsamples=rndsamples, return_params=True)
-        # psn[i] += 0.04 #Correct for issue in normalization equation
         lfs.append(lf) #; lfbests.append(lfbest)
     # lfrealbest = np.median(lfbests, axis=0)
     # for i in range(numtot):
@@ -519,7 +518,7 @@ def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, L
     del dat
     nsamples = getnsamples(samples)
     lfs_old, _, _, _, _ = getSamples(logL, nsamples, rndsamples=rndsamples*rndfac, return_params=True)
-    plotLumFuncStd(logL, np.array(lfs).astype(float)+0.04, lfs_old.astype(float)+0.04, filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=1)
+    plotLumFuncStd(logL, np.array(lfs).astype(float)*1.1, lfs_old.astype(float)*1.1, filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=1)
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
