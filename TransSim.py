@@ -237,17 +237,15 @@ def plot_corr(bin_centers, corr, plotname, filtname, image_dir='TransExp', corre
     mkpath(image_dir)
     bcmin = np.inf
     bcmax = -np.inf
-    if filtname=='N501': bcmf_use = bcmf
-    else: bcmf_use = np.inf
     fig, ax = plt.subplots()
     if corrfull is not None: 
-        cond = bcs<bcmf_use
+        cond = bcs<bcmf
         col = next(orig_palette)
         ax.plot(bcs[cond], corrfull[cond], color=col, linestyle='--', marker='none', label='Overall')
         ax.fill_between(bcs[cond], corrfull[cond]-correfull[cond], corrfull[cond]+correfull[cond], color=col, alpha=0.2, label='')
     if type(bin_centers)==list:
         for bc, co, coe, lc in zip(bin_centers, corr, corre, lcs):
-            condbc = bc<bcmf_use
+            condbc = bc<bcmf
             ax.errorbar(bc[condbc], co[condbc], coe[condbc], color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
             bcmin, bcmax = min(bcmin, bc.min()), max(bcmax, bc[condbc].max())
         ax.legend(loc='best', frameon=False)
@@ -343,5 +341,5 @@ def main():
     dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main()
-    # showAllCorr()
+    # main()
+    showAllCorr()

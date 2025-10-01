@@ -1422,14 +1422,14 @@ class LumFuncMCMC:
 
     def VeffPlotCommands(self, ax):
         markersize = self.nfreeparams * 1
-        cond_veff = self.Lavg >= self.minlum
+        cond_veff = np.logical_and(self.Lavg >= self.minlum, self.lfbinorig>1.0e-12)
         if self.corrf is not None: label=r'$V_{\rm eff}$ + Filter'
         else: label=r'$V_{\rm eff}$'
         ax.errorbar(self.Lavg[cond_veff],self.lfbinorig[cond_veff],yerr=np.sqrt(self.var[cond_veff]),fmt='b^', label=label, markersize=markersize)
-        ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='', markersize=markersize)
+        # ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig[~cond_veff],yerr=np.sqrt(self.var[~cond_veff]),fmt='b^',alpha=0.2, label='', markersize=markersize)
         if self.corrf is not None:
             ax.errorbar(self.Lavg[cond_veff],self.lfbinorig_orig[cond_veff],yerr=np.sqrt(self.var_orig[cond_veff]),fmt='cs', label=r'$V_{\rm eff}$', markersize=markersize)
-            ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='cs',alpha=0.2, label='', markersize=markersize)
+            # ax.errorbar(self.Lavg[~cond_veff],self.lfbinorig_orig[~cond_veff],yerr=np.sqrt(self.var_orig[~cond_veff]),fmt='cs',alpha=0.2, label='', markersize=markersize)
         leg = ax.legend(loc='best', frameon=False, fontsize='x-small')
         for lh in leg.legend_handles:
             lh.set_alpha(1)

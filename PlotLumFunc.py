@@ -478,46 +478,48 @@ def plotLumFuncStd(logL, lfs_new, lfs_old, filter, numtot=25, Lmin=42.0, Lmax=43
     plt.close('all')
 
 def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, Lnum=401, rndsamples=50, ymin=5.0e-7, ymax=3.0e-2, rndfac=5):
-    fn = glob(op.join(base_dir+'_combo', "*VeffLF*.dat"))[0]
-    veff = Table.read(fn, format='ascii')
-    vlum, vlf, vlfe, vlfo, vlfeo = veff['Luminosity'], veff['BinLF'], veff['BinLFErr'], veff['BinLFOrig'], veff['BinLFErrOrig']
+    # fn = glob(op.join(base_dir+'_combo', "*VeffLF*.dat"))[0]
+    # veff = Table.read(fn, format='ascii')
+    # vlum, vlf, vlfe, vlfo, vlfeo = veff['Luminosity'], veff['BinLF'], veff['BinLFErr'], veff['BinLFOrig'], veff['BinLFErrOrig']
+    # vlf += 0.04; vlfo += 0.04
     logL = np.linspace(Lmin, Lmax, Lnum)
-    fig, ax = plt.subplots()
-    lfs, lfbests = [], []
-    add_LumFunc_plot(ax)
-    ax.errorbar(vlum, vlf, yerr=vlfe, fmt='b^', linestyle='none', capsize=2, label=r'V$_{\rm eff}$ + Filter')
-    ax.errorbar(vlum, vlfo, yerr=vlfeo, fmt='cs', linestyle='none', capsize=2, label=r'V$_{\rm eff}$')
-    aln, lsn, psn = np.zeros((numtot, rndsamples)), np.zeros((numtot, rndsamples)), np.zeros((numtot, rndsamples))
+    # fig, ax = plt.subplots()
+    lfs = []
+    # add_LumFunc_plot(ax)
+    # ax.errorbar(vlum, vlf, yerr=vlfe, fmt='b^', linestyle='none', capsize=2, label=r'V$_{\rm eff}$ + Filter')
+    # ax.errorbar(vlum, vlfo, yerr=vlfeo, fmt='cs', linestyle='none', capsize=2, label=r'V$_{\rm eff}$')
+    # aln, lsn, psn = np.zeros((numtot, rndsamples)), np.zeros((numtot, rndsamples)), np.zeros((numtot, rndsamples))
     for i in range(numtot):
         fpf = glob(op.join(base_dir+f'_{i}', '*fitposterior*.dat'))[0]
         dat = Table.read(fpf,format='ascii')
         samplei = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
         del dat
         nsamples = getnsamples(samplei)
-        lf, lfbest, lsn[i], aln[i], psn[i] = getSamples(logL, nsamples, rndsamples=rndsamples, return_params=True)
-        lfs.append(lf); lfbests.append(lfbest)
-    lfrealbest = np.median(lfbests, axis=0)
-    for i in range(numtot):
-        for j in range(rndsamples):
-            if i==0 and j==0: label='MCMC solutions'
-            else: label=''
-            ax.plot(logL, lfs[i][j], linestyle='-', color='r', alpha=0.02, label=label)
-    ax.plot(logL, lfrealbest, 'k-')
-    leg = ax.legend(loc='best', frameon=False)
-    for lh in leg.legend_handles:
-        lh.set_alpha(1)
-    ax.set_xlim(Lmin, Lmax)
-    ax.set_ylim(ymin, ymax)
-    fig.savefig(f'ComboLF{filter}.png', bbox_inches='tight', dpi=300)
-    plt.close('all')
+        lf, _, _, _, _ = getSamples(logL, nsamples, rndsamples=rndsamples, return_params=True)
+        # psn[i] += 0.04 #Correct for issue in normalization equation
+        lfs.append(lf) #; lfbests.append(lfbest)
+    # lfrealbest = np.median(lfbests, axis=0)
+    # for i in range(numtot):
+    #     for j in range(rndsamples):
+    #         if i==0 and j==0: label='MCMC solutions'
+    #         else: label=''
+    #         ax.plot(logL, lfs[i][j], linestyle='-', color='r', alpha=0.02, label=label)
+    # ax.plot(logL, lfrealbest, 'k-')
+    # leg = ax.legend(loc='best', frameon=False)
+    # for lh in leg.legend_handles:
+    #     lh.set_alpha(1)
+    # ax.set_xlim(Lmin, Lmax)
+    # ax.set_ylim(ymin, ymax)
+    # fig.savefig(f'ComboLF{filter}.png', bbox_inches='tight', dpi=300)
+    # plt.close('all')
 
     fpf = glob(op.join(base_dir, f'{filter}*fitposterior*.dat'))[0]
     dat = Table.read(fpf,format='ascii')
     samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
     del dat
     nsamples = getnsamples(samples)
-    lfs_old, _, lso, alo, pso = getSamples(logL, nsamples, rndsamples=rndsamples*rndfac, return_params=True)
-    plotLumFuncStd(logL, np.array(lfs).astype(float), lfs_old.astype(float), filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=1)
+    lfs_old, _, _, _, _ = getSamples(logL, nsamples, rndsamples=rndsamples*rndfac, return_params=True)
+    plotLumFuncStd(logL, np.array(lfs).astype(float)+0.04, lfs_old.astype(float)+0.04, filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=1)
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -617,6 +619,6 @@ def getErrComp(filter='N501'):
 if __name__ == '__main__':
     # main(alpha_fixed=-1.49)
     # main(alpha_fixed=-1.8)
-    NewProc()
+    # NewProc()
     # plotMultVeff('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata/N501_new_trial_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata_nb50_nw200_ns4000_mcf50_ec_2_env0_bin1_c1.dat', 'LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew/N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1_c1.dat')
-    # plotLumFuncCombo('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10lumminnv')
+    plotLumFuncCombo('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10lumminnv')
