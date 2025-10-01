@@ -65,7 +65,8 @@ def parse_args():
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width = 2.449, 4193.0, 75.46
     else: args.redshift, args.wav_filt, args.filt_width = 4.552, 6750.0, 101.31
     args.trans_file = f'{args.filt_name}_Nicole.txt'
-    args.delz = args.filt_width / C.wav_rest * 1.5
+    args.del_red = args.filt_width / C.wav_rest
+    args.delz = args.del_red * 1.5
     return args
 
 def add_LumFunc_plot(ax1):
@@ -121,7 +122,7 @@ def calc_lum(mag, dL, wav_filt, filt_width):
     lum = flux * (4.0*np.pi*(3.086e24*dL)**2)
     return np.log10(lum)
 
-def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=44.0, zc=3.125, maglow=30.0, corrf=None):
+def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=45.0, zc=3.125, maglow=30.0, corrf=None):
     # zmin, zmax = (wavmin - C.wav_rest) / C.wav_rest, (wavmax - C.wav_rest) / C.wav_rest
     reds = np.random.uniform(zmin, zmax, numgal)
     logL = np.random.uniform(Lc, Lh, numlum)
@@ -168,7 +169,7 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp', va
     fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz:0.2f}_al{al}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
-def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varying=0, image_dir='TransExp', corrf=None):
+def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varying=0, image_dir='TransExp', corrf=None):
     delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type, maglow = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type, args.maglow
     minlum = max(Lc, minlumorig)
     DL = V.cosmo.luminosity_distance(args.redshift).value
@@ -180,27 +181,31 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
     zmin, zmax = zcent - delz, zcent + delz
     reds, lums, comps1df, dL = select_gal(args, al, ls, phis, zmin, zmax, interp_comp_simp_orig, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow, corrf=corrf, zc=args.redshift)
     maxlum = lums.max()
+    zminth, zmaxth = zcent - args.del_red/2, zcent + args.del_red/2
+    condth = np.logical_and(reds>=zminth, reds<=zmaxth)
     # dL_full = cosmo.luminosity_distance(reds).value
     # minlums_accept = calc_lum(maglow, dL_full)
-    minlum_onered = calc_lum(maglow, dL, args.wav_filt, args.filt_width)
+    minlum_use = calc_lum(maglow, dL, args.wav_filt, args.filt_width)
     # bin_centers_orig, hist_orig = bin_lums(lums)
     lums_mod, logLs, delzf, delzfv2 = calc_new_lums(lums, reds, file_name=file_name, interp_type=interp_type)
     # bin_centers, hist = bin_lums(lums_mod)
+    condtf = lums_mod>=minlum_use
     plot_hists(lums, lums_mod, delz, al, logLs, varying=varying)
     mkpath(image_dir)
     # outname_list = [f'Veff_al{al}_delz{delz:0.2f}_vary{varying}', f'VeffTrans_al{al}_delz{delz:0.2f}_vary{varying}']
     # minlum_use = max(Lc, minlum_onered)
-    minlum_use = minlum_onered
+    # mu = np.median(minlum_use)
     print("minlum_use:", minlum_use)
-    delz_eff = [np.average(delzf(lums-minlum_use)), np.average(delzf(lums_mod-minlum_use))]
-    delz_effv2 = [np.average(delzfv2(lums-minlum_use)), np.average(delzfv2(lums_mod-minlum_use))]
-    # delz_use = [C.del_red, 2*delz]
-    print("Delz_eff:", delz_eff)
-    print("Delz_effv2:", delz_effv2)
-    lumlist = [lums, lums_mod]
+    # dzl, dzlm = delzf(lums-minlum_use), delzf(lums_mod-minlum_use)
+    # delz_eff = [np.average(dzl), np.average(dzlm)]
+    # delz_effv2 = [np.average(delzfv2(lums-minlum_use)), np.average(delzfv2(lums_mod-minlum_use))]
+    # print("Delz_eff:", delz_eff)
+    # print("Delz_effv2:", delz_effv2)
+    lumlist = [lums[condth], lums_mod[condtf]]
+    distlist = [dists[condth], dists[condtf]]
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
-        lumobj = L.LumFuncMCMC(args.redshift, del_red=delz_eff[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=dists, dist=dists, logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh)
+        lumobj = L.LumFuncMCMC(args.redshift, del_red=args.del_red, lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use)
 
         lumobj.VeffLF(varying=varying)
         lf.append(lumobj.lfbinorig)
@@ -221,19 +226,23 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=44.0, minlumorig=41.5, varyi
     # breakpoint()
     return lumobj.Lavg, corr, minlum_use
 
-def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None):
+def plot_corr(bin_centers, corr, plotname, filtname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None, bcmf=43.6):
     mkpath(image_dir)
     bcmin = np.inf
     bcmax = -np.inf
+    if filtname=='N501': bcmf_use = bcmf
+    else: bcmf_use = np.inf
     fig, ax = plt.subplots()
     if corrfull is not None: 
+        cond = bcs<bcmf_use
         col = next(orig_palette)
-        ax.plot(bcs, corrfull, color=col, linestyle='--', marker='none', label='Overall')
-        ax.fill_between(bcs, corrfull-correfull, corrfull+correfull, color=col, alpha=0.2, label='')
+        ax.plot(bcs[cond], corrfull[cond], color=col, linestyle='--', marker='none', label='Overall')
+        ax.fill_between(bcs[cond], corrfull[cond]-correfull[cond], corrfull[cond]+correfull[cond], color=col, alpha=0.2, label='')
     if type(bin_centers)==list:
         for bc, co, coe, lc in zip(bin_centers, corr, corre, lcs):
-            ax.errorbar(bc, co, coe, color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
-            bcmin, bcmax = min(bcmin, bc.min()), max(bcmax, bc.max())
+            condbc = bc<bcmf_use
+            ax.errorbar(bc[condbc], co[condbc], coe[condbc], color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
+            bcmin, bcmax = min(bcmin, bc.min()), max(bcmax, bc[condbc].max())
         ax.legend(loc='best', frameon=False)
     else: 
         ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
@@ -296,7 +305,7 @@ def showAllCorr():
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
     corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.dat'), format='ascii', overwrite=True)
-    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     args = parse_args()
@@ -319,12 +328,12 @@ def main():
     else: 
         corrf = None
     bin_centers, corr_n501, minlum_use = get_corrections(args, *this_work, varying=varying, Lc=Lc, corrf=corrf)
-    plot_corr(bin_centers, corr_n501, f'{filter}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.png', image_dir=image_dir)
+    plot_corr(bin_centers, corr_n501, f'{filter}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.png', filter, image_dir=image_dir, )
 
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}.dat'), format='ascii', overwrite=True)
+    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
     main()
