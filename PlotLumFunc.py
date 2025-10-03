@@ -24,7 +24,7 @@ colors_overall += ["cloudy blue", "browny orange", "dark sea green"]
 sns.set_palette(sns.xkcd_palette(colors_overall))
 orig_palette_arr = sns.color_palette()
 orig_palette = cycle(tuple(orig_palette_arr))
-markers_overall = ['o','^','*','s','+','v','<','>', '1', '8', 'P']
+markers_overall = ['o','*','s','+','v','<','>', '1', '8', 'P']
 markers = cycle(tuple(markers_overall))
 
 Lsun = 3.8e33
@@ -330,9 +330,8 @@ def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=
 def calc_phi_err(phi, logphierr):
     return np.log(10) * phi * logphierr
 
-def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.8, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=5.0e-7, ymax=3.0e-2, sa=-1.6, llims_low=[42.0, 42.1, 42.2]):
+def OtherLFData(sobfile, sobothers):
     herenz = {'lum':np.array([42.3, 42.5, 42.7, 42.9, 43.1, 43.3]), 'phi':np.array([5.9e-3, 3.1e-3, 1.4e-3, 4.8e-4, 1.5e-4, 2.3e-5]), 'phierr':np.array([8.6e-4, 4.1e-4, 2.3e-4, 1.2e-4, 5.9e-5, 2.3e-5])}
-    logL = np.linspace(Lmin, Lmax, Lnum)
     sob = fits.getdata(sobfile, 1)
     sobs = sob['Sample']
     logLsob, logLsobe, phisob = sob['log_Lum_bin'], sob['delta_bin'], 10**sob['Phi_final']
@@ -346,6 +345,11 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
     for refi in refuniq:
         colref.append(next(orig_palette))
         markref.append(next(markers))
+    return herenz, sobs, logLsob, logLsobe, phisob, phiseu, phisel, zavg, ref, logLso, logLsoe, phiso, phisoeu, phisoel, refuniq, colref, markref
+
+def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', Lmin=42.0, Lmax=43.8, Lnum=1001, sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], sobzs=[2.5, 3.2, 4.6], maxdiff=0.21, llims=[43.1, 43.1, 43.2], ymin=5.0e-7, ymax=3.0e-2, sa=-1.6, llims_low=[42.0, 42.1, 42.2], veffdats=None):
+    logL = np.linspace(Lmin, Lmax, Lnum)
+    herenz, sobs, logLsob, logLsobe, phisob, phiseu, phisel, zavg, ref, logLso, logLsoe, phiso, phisoeu, phisoel, refuniq, colref, markref = OtherLFData(sobfile, sobothers)
     samples = []
     for fpf in fitpostfs:
         dat = Table.read(fpf,format='ascii')
@@ -360,6 +364,12 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
         nsamples = getnsamples(samples[i])
         lf, lfbest = getSamples(logL, nsamples, sa=sa)
         ax[i].plot(logL, lfbest, linestyle='-', color=coli, label=rf'Nagaraj+25 $z={z}$')
+        if veffdats is not None and (i==0 or i==1):
+            # if i==2: lvd, alvd = r'"" $\bf{\rm{No}}$ Contam Removal', 0.1
+            lvd, alvd = '"" Normal Contam Removal', 0.25
+            vlum, vlf, vlfe = veffdats[i]['Luminosity'], veffdats[i]['BinLF'], veffdats[i]['BinLFErr']
+            condv = vlf>1.0e-12
+            ax[i].errorbar(vlum[condv], vlf[condv], yerr=vlfe[condv], fmt='b^', label=lvd, alpha=alvd)
         for lfi in lf:
             ax[i].plot(logL, lfi, linestyle='-', color=coli, alpha=0.05, label='')
         condsob = sobs == sobkeys[i]
@@ -380,12 +390,12 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
         ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
         condvi = logL<=llims_low[i]
         ax[i].fill_between(logL[condvi], ymin*np.ones_like(logL[condvi]), ymax*np.ones_like(logL[condvi]), color='k', alpha=0.1, label='')
-        ax[i].legend(loc='best', frameon=False, fontsize='x-small')
+        ax[i].legend(loc='best', frameon=False, fontsize=8)
     ax[0].set_xlim(Lmin, Lmax)
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("FullLitCompcorrsnew.png", bbox_inches='tight', dpi=300)
+    fig.savefig("FullLitCompcorrsnew_vf.png", bbox_inches='tight', dpi=300)
 
 def plotStuff(logLV, lfV, lfeV, logL, bflf, this_work=None, sobral1=None, sobral2=None):
     fig, ax = plt.subplots()
@@ -417,18 +427,7 @@ def plotLumFuncStd(logL, lfs_new, lfs_old, filter, numtot=25, Lmin=42.0, Lmax=43
     print("Median std ratio: ", np.median(lfs_rat))
 
     ######### Literature area #########
-    sob = fits.getdata(sobfile, 1)
-    sobs = sob['Sample']
-    logLsob, logLsobe, phisob = sob['log_Lum_bin'], sob['delta_bin'], 10**sob['Phi_final']
-    phiseu, phisel = calc_phi_err(phisob, sob['Phi_final_err_up']), calc_phi_err(phisob, sob['Phi_final_err_down'])
-    sobo = fits.getdata(sobothers, 1)
-    zavg = (sobo['z_min'] + sobo['z_max']) / 2
-    ref, logLso, logLsoe, phiso = sobo['Reference'], sobo['LogL'], sobo['D_LogL'], 10**sobo['LogPhi']
-    phisoeu, phisoel = calc_phi_err(phiso, sobo['D_LogPhi_up']), calc_phi_err(phiso, sobo['D_LogPhi_down'])
-    refuniq = np.unique(ref)
-    markref = []
-    for refi in refuniq:
-        markref.append(next(markers))
+    _, sobs, logLsob, logLsobe, phisob, phiseu, phisel, zavg, ref, logLso, logLsoe, phiso, phisoeu, phisoel, refuniq, colref, markref = OtherLFData(sobfile, sobothers)
 
     ##### Plot area #####
     fig, ax = plt.subplots()
@@ -457,7 +456,7 @@ def plotLumFuncStd(logL, lfs_new, lfs_old, filter, numtot=25, Lmin=42.0, Lmax=43
         if rj=='Konno+2016': continue
         ind = np.where(refuniq==rj)[0][0]
         condsofull = np.logical_and(condsobo, ref==rj)
-        ax.errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=orig_palette_arr[k+3], label='', capsize=2)
+        ax.errorbar(logLso[condsofull], phiso[condsofull], yerr=np.row_stack((phisoel[condsofull], phisoeu[condsofull])), xerr=logLsoe[condsofull]/2, linestyle='none', marker=markref[ind], color=colref[ind], label='', capsize=2)
     leg = ax.legend(loc='best', frameon=False)
     for lh in leg.legend_handles:
         lh.set_alpha(1)
@@ -518,7 +517,7 @@ def plotLumFuncCombo(base_dir, numtot=25, filter='N501', Lmin=42.0, Lmax=43.8, L
     del dat
     nsamples = getnsamples(samples)
     lfs_old, _, _, _, _ = getSamples(logL, nsamples, rndsamples=rndsamples*rndfac, return_params=True)
-    plotLumFuncStd(logL, np.array(lfs).astype(float)*1.1, lfs_old.astype(float)*1.1, filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=1)
+    plotLumFuncStd(logL, np.array(lfs).astype(float)*1.1, lfs_old.astype(float)*1.1, filter, numtot=numtot, Lmin=Lmin, Lmax=Lmax, rndsamples=rndsamples, ymin=ymin, ymax=ymax, rndfac=rndfac, stdver=0)
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
     ''' Calculate true luminosity function (Schechter form)
@@ -573,6 +572,11 @@ def NewProc():
     fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10om09', 'N501_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10om09_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
     fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4om09', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4om09_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
 
+    veffnc_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam', 'N419_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
+    veffnc_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam', 'N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
+    veffnc_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4nocontam', 'N673_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
+    veffdats = [Table.read(veffnc_z24, format='ascii'), Table.read(veffnc_z31, format='ascii'), Table.read(veffnc_z45, format='ascii')]
+
     # fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N419_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw120_ns2000_mcf50_ec_2_env0_bin1.dat')
     # fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N501_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1.dat')
     # fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N673_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw120_ns2000_mcf50_ec_2_env0_bin1.dat')
@@ -580,16 +584,16 @@ def NewProc():
     reds = [2.4, 3.1, 4.5]
     # plotEvolution([fits_z24, fits_z31, fits_z45], reds)
     # plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5)
-    plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.32, 43.45, 43.67], llims_low=[42.20, 42.36, 42.50])
+    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5)
+    plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.32, 43.45, 43.67], llims_low=[42.20, 42.36, 42.50], veffdats=veffdats)
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
-    getIntegInfo(fits_z24, llow=42.5)
-    getIntegInfo(fits_z31, llow=42.5)
-    getIntegInfo(fits_z45, llow=42.5)
+    # getIntegInfo(fits_z24, llow=42.5)
+    # getIntegInfo(fits_z31, llow=42.5)
+    # getIntegInfo(fits_z45, llow=42.5)
     # plotLLComp(dat_z45)
 
-    plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
+    # plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
 
 def plotMultVeff(*filenames):
     fig, ax = plt.subplots()

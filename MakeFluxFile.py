@@ -117,6 +117,27 @@ def main_old(wav_filt=5014.0):
     dat['Cell_area'] = cellarea
     dat.write('LyaN501Fluxes.dat', format='ascii', overwrite=True)
 
+def getIntRem(filter='N501', distmax=1.0):
+    fnew, fold, fir = f'Lya{filter}FluxesFinal.dat', f'Lya{filter}FluxesFinalOld.dat', f'Lya{filter}FluxesFinalIntRem.dat'
+    new, old, ir = Table.read(fnew, format='ascii'), Table.read(fold, format='ascii'), Table.read(fir, format='ascii')
+    gno, gni = old['Galaxy_name'], ir['Galaxy_name']
+    inds_int = []
+    for i, go in enumerate(gno):
+        if go not in gni: inds_int.append(i)
+    inds_int = np.array(inds_int)
+    ran, decn, rai, deci = new['RA'], new['Dec'], old['RA'][inds_int], old['Dec'][inds_int]
+    coordsn, coordsi = SkyCoord(ran, decn, unit='degree'), SkyCoord(rai, deci, unit='degree')
+    indsrem, minseps = [], []
+    for i, ci in enumerate(coordsi):
+        sep = coordsn.separation(ci).arcsec
+        minseps.append(sep.min())
+        if sep.min()<distmax: indsrem.append(np.argmin(sep))
+    indsrem = np.array(indsrem)
+    inds_all = np.arange(len(ran))
+    inds_keep = np.setdiff1d(inds_all, indsrem)
+    new_ir = new[inds_keep]
+    new_ir.write(f'Lya{filter}FluxesIntRemNew.dat', format='ascii', overwrite=True)
+
 def main(filter='N501'):
     if filter=='N501': col, wav = 'gr', 5014.0
     elif filter=='N419': col, wav ='rg', 4193.0
@@ -137,4 +158,5 @@ def main(filter='N501'):
     dat.write(f'Lya{filter}FluxesFinal.dat', format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main('N673')
+    # main('N673')
+    getIntRem('N419')

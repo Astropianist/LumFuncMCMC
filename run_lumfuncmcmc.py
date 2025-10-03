@@ -207,6 +207,10 @@ def parse_args(argv=None):
     parser.add_argument("-co", "--combo",
                         help='''Whether or not to run ''',
                         action='count',default=0) 
+    
+    parser.add_argument("-duc", "--dont_use_contam",
+                        help='''Whether to turn off contam treatment ''',
+                        action='count',default=0) 
 
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
@@ -380,7 +384,7 @@ def read_input_file(args):
     interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = [], [], [], [], []
     flux_lim, cgscontam = [], []
     for i in range(numbins):
-        if args.num_err<0: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, density_frac=density_frac[i], aper_corr=args.aper_corr)
+        if args.num_err<0: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, density_frac=density_frac[i], aper_corr=args.aper_corr, use_contam=not args.dont_use_contam)
         else: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFuncSamp(args.num_err, DL, filter=args.filt_name, file_name=args.interp_name.replace('extrap', 'extrap_samp'), contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, aper_corr=args.aper_corr)
         interp_comp.append(interp_compi); interp_comp_simp.append(interp_comp_simpi); interp_comp_simp_orig.append(interp_comp_simp_origi); nbcontam.append(nbcontami); cf.append(cfi)
         if args.lum_lim<0.0: flux_limi = np.inf

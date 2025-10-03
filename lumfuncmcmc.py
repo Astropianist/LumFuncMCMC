@@ -400,7 +400,7 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     # plt.xlabel('Magnitude')
     # plt.ylabel('Distance from center of field')
     if use_contam: cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac, mag_corr=0.0)
-    else: nbcontam, cf = None, None
+    else: nbcontam, cf = -99.0, None
     interp_comp = RGINNExt((dist, mag), comp)
     interp_comp_simp_orig = RectBivariateSpline(dist, mag, comp, kx=1, ky=1)
     distcontam = np.linspace(dist.min(), dist.max(), distnum)
