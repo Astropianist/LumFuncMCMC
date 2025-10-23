@@ -1,3 +1,5 @@
+''' Derive corrections for transmission effects for the V/V_max method using the technique from the Sobral+18 (and related) papers '''
+
 import numpy as np 
 from uncertainties import unumpy, ufloat
 import matplotlib.pyplot as plt 
@@ -5,12 +7,14 @@ from astropy.table import Table
 import argparse as ap
 # from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
+from scipy.signal import savgol_filter
 import lumfuncmcmc as L
-from VmaxLumFunc import cosmo
+import VmaxLumFunc as V
 import configLF as C
 import os.path as op
 from distutils.dir_util import mkpath
 from astropy.table import Table
+import pickle
 from itertools import cycle
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
@@ -46,7 +50,9 @@ def parse_args():
                                formatter_class=ap.RawTextHelpFormatter)
 
     parser.add_argument("-it", "--interp_type", help='''Method for interpolation''', type=str, default='cubic')
+    parser.add_argument("-tf", "--filt_name", help='''Filter name''', type=str, default='N501')
     parser.add_argument("-dz", "--delz", help='''Width in redshift distribution''', type=float, default=0.1)
+    parser.add_argument("-ml", "--maglow", help='''Low magnitude used for simulation''', type=float, default=30.)
     parser.add_argument("-v", "--varying", help='''Vary the volume used in Veff''', action='count', default=0)
     parser.add_argument("-c", "--corrf", help='''Add correction for reverse experiment (kind of)''', action='count', default=0)
     parser.add_argument("-af", "--alpha_fixed", help='''Fixed alpha used in run that fit the Schechter curve used''', type=float, default=-1.6)
@@ -56,6 +62,14 @@ def parse_args():
     parser.add_argument("-ng", "--numgal", help='''Number of galaxies selected for experiment''', type=int, default=100000)
     parser.add_argument("-bn", "--binnum", help='''Number of bins for Veff and correction''', type=int, default=20)
     args = parser.parse_args()
+    args.field_name = 'COSMOS'
+    args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
+    if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 3.124, 5014.0, 77.17, 0.0705
+    elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 2.449, 4193.0, 75.46, 0.0688
+    else: args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 4.552, 6750.0, 101.31, 0.0922
+    args.trans_file = f'{args.filt_name}_Nicole.txt'
+    args.del_red = args.filt_width / C.wav_rest
+    args.delz = args.del_red * 1.5
     return args
 
 def add_LumFunc_plot(ax1):
@@ -65,81 +79,86 @@ def add_LumFunc_plot(ax1):
     ax1.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
     ax1.minorticks_on()
 
-def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_dir=op.join('TransExp', 'VeffPlots')):
+def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_dir=op.join('TransExp', 'VeffPlotsNew'), varying=0, filter='N501'):
+    ''' Compare luminosity functions (based on V/V_max method) for data without and with tranmsission effects considered '''
     mkpath(image_dir)
     fig, ax = plt.subplots()
     add_LumFunc_plot(ax)
     ax.errorbar(logLs, lfs[0], yerr=np.sqrt(vars[0]), fmt='bs', linestyle='none', label='Original')
     ax.errorbar(logLs, lfs[1], yerr=np.sqrt(vars[1]), fmt='r^', linestyle='none', label='Convolved')
     ax.legend(loc='best', frameon=False)
-    fig.savefig(op.join(image_dir, f'VeffComp_ng{ngal}_bn{bn}_al{alpha}_delz{delz}_ml{minlum_use:0.2f}_Lc{lc}.png'), bbox_inches='tight', dpi=200)
+    fig.savefig(op.join(image_dir, f'VeffComp{filter}_ng{ngal}_bn{bn}_al{alpha}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{lc}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
-def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp'):
+def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp', lam_min=4400., lam_max=5500.):
+    ''' Plot transmission curve '''
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     fig, ax = plt.subplots()
     ax.plot(lam, tra, 'b-')
-    ax.set_yscale('log')
+    # ax.set_yscale('log')
     ax.set_xlabel(r'$\lambda$')
     ax.set_ylabel('Tranmission')
-    fig.savefig(op.join(image_dir,'TransCurve.png'), bbox_inches='tight', dpi=150)
+    ax.set_xlim(lam_min, lam_max)
+    pn = file_name.split('.')[0]
+    fig.savefig(op.join(image_dir,f'TransCurve_{pn}.png'), bbox_inches='tight', dpi=150)
 
 def get1DComp(interp_comp, maghigh=19., maglow=30., magnum=25, distnum=100):
+    ''' Calculate completeness (just 1D for computational reasons, averaging over survey positional effects)'''
     maggrid = np.linspace(maghigh, maglow, magnum)
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(distnum))
     distgrid = np.sort(dists)
     distg, magg = np.meshgrid(distgrid, maggrid, indexing='ij')
-    comps = interp_comp((distg.ravel(), magg.ravel()))
-    comps = comps.reshape(distnum, magnum)
-    comp_avg_dist = np.average(comps, axis=0)
+    # comps = interp_comp((distg.ravel(), magg.ravel()))
+    comps = interp_comp.ev(distg, magg)
+    # comps = comps.reshape(distnum, magnum)
+    comp_avg_dist = np.median(comps, axis=0)
     comps1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], 0))
     return comps1df
 
-def calc_mags(logL, dL):
+def calc_mags(logL, dL, wav_filt, filt_width):
+    ''' Calculate AB magnitudes from luminosities, luminosity distance(s), and filter properties'''
     lum = 10**logL
     flux_cgs = lum/(4.0*np.pi*(3.086e24*dL)**2)
-    mags = L.cgs2magAB(flux_cgs, C.wav_filt, C.filt_width)
+    mags = L.cgs2magAB(flux_cgs, wav_filt, filt_width)
     return mags
 
-def calc_lum(mag, dL):
-    flux = L.magAB2cgs(mag, C.wav_filt, C.filt_width)
+def calc_lum(mag, dL, wav_filt, filt_width):
+    ''' AB magnitude to luminosity '''
+    flux = L.magAB2cgs(mag, wav_filt, filt_width)
     lum = flux * (4.0*np.pi*(3.086e24*dL)**2)
     return np.log10(lum)
 
-def select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=44.0, zc=3.125, maglow=30.0, corrf=None):
+def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=45.0, zc=3.125, maglow=30.0, corrf=None):
+    ''' Select a large number of galaxies from a uniform distribution in redshift and an assumed "true" luminosity function and account for effective completeness '''
     # zmin, zmax = (wavmin - C.wav_rest) / C.wav_rest, (wavmax - C.wav_rest) / C.wav_rest
     reds = np.random.uniform(zmin, zmax, numgal)
     logL = np.random.uniform(Lc, Lh, numlum)
-    tlf = L.TrueLumFunc(logL, al, ls, phis)
+    tlf_orig = L.TrueLumFunc(logL, al, ls, phis)
     comps1df = get1DComp(interp_comp, maglow=maglow)
-    dL = cosmo.luminosity_distance(zc).value
-    mags = calc_mags(logL, dL)
-    tlf *= comps1df(mags)
+    dL = V.cosmo.luminosity_distance(zc).value
+    mags = calc_mags(logL, dL, args.wav_filt, args.filt_width)
+    tlf = tlf_orig * comps1df(mags)
     if corrf is not None: 
         corrs = corrf(logL)
         tlf *= 10**corrs
     lums = np.random.choice(logL, size=numgal, p=tlf/tlf.sum())
-    # breakpoint()
     return reds, lums, comps1df, dL
 
-def calc_new_lums(lums, reds, file_name='N501_with_atm.txt', interp_type='cubic'):
-    logLfuncz, delzf = L.getRealLumRed(file_name, interp_type, C.wav_rest)
+def calc_new_lums(lums, reds, file_name='N501_with_atm.txt', interp_type='cubic', size_lprime=51):
+    ''' Calculate the observed luminosities based on the true luminosities of the sources (modified by completeness), their redshifts, and the filter transmission curve '''
+    logLfuncz, delzfv2, _ = L.getRealLumRed(file_name, interp_type, C.wav_rest)
+    _, _, delzf = L.getBoundsTransPDF(logL_width=8.0,wav_rest=C.wav_rest,num_discrete=size_lprime,file_name=file_name)
     logLs = logLfuncz(reds)
     # mags = calc_mags(logLs, dL)
     # comp = comps1df(mags)
     # logLs_use = np.random.choice(logLs, logLs.size, p=comp/comp.sum())
     # _, _, delzf = L.getBoundsTransPDF(logLs.max(), file_name=file_name)
-    return lums - logLs, logLs, delzf
+    return lums - logLs, logLs, delzf, delzfv2
 
-def bin_lums(lums, binnum=10, minlum=41.5, maxlum=43.5):
-    bin_edges = np.linspace(minlum, maxlum, binnum+1)
-    bin_centers = np.array([(bin_edges[i]+bin_edges[i+1])/2.0 for i in range(binnum)])
-    hist, _ = np.histogram(lums, bin_edges)
-    return bin_centers, hist
-
-def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp'):
+def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp', varying=0):
+    ''' Show "true" and transmission-corrected luminosity distributions of galaxies'''
     fig, ax = plt.subplots(ncols=2)
     ax[0].hist(lums, bins=bins, color='r', alpha=0.5, density=True, label='Drawn from TLF')
     ax[0].hist(lums_mod, bins=bins, color='b', alpha=0.5, density=True, label='Convolved')
@@ -152,41 +171,51 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp'):
     # ax[1].set_ylabel('PDF')
     ax[0].legend(loc='best', frameon=False)
     plt.tight_layout()
-    fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz}_al{al}.png'), bbox_inches='tight', dpi=200)
+    fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz:0.2f}_al{al}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
-def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', interp_type='cubic', numgal=100000, numlum=100000, Lc=40.0, Lh=44.0, binnum=20, minlumorig=41.5, varying=0, image_dir='TransExp', min_comp_frac=1.0e-6, maglow=30.0, corrf=None):
+def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varying=0, image_dir='TransExp', corrf=None):
+    ''' Calculate the luminosity function using the V/V_max method for selected galaxies (taken from a "true" luminosity function and modified based on effective completeness) through both a top-hat filter and the true filter. The ratio of these luminosity function results gives the filter corrections for the V/V_max method '''
+    delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type, maglow = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type, args.maglow
     minlum = max(Lc, minlumorig)
-    interp_comp = L.makeCompFunc()
+    DL = V.cosmo.luminosity_distance(args.redshift).value
+    interp_comp, interp_comp_simp_orig, interp_comp_simp, _, _ = L.makeCompFunc(DL, filter=args.filt_name, file_name=args.interp_name, use_contam=True)
+    # cgscontam = L.magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(numlum))
-    zcent = (C.wav_filt - C.wav_rest) / C.wav_rest
+    zcent = (args.wav_filt - C.wav_rest) / C.wav_rest
     zmin, zmax = zcent - delz, zcent + delz
-    reds, lums, comps1df, dL = select_gal(al, ls, phis, zmin, zmax, interp_comp, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow, corrf=corrf)
+    reds, lums, comps1df, dL = select_gal(args, al, ls, phis, zmin, zmax, interp_comp_simp_orig, numgal=numgal, numlum=numlum, Lc=Lc, Lh=Lh, maglow=maglow, corrf=corrf, zc=args.redshift)
     maxlum = lums.max()
+    zminth, zmaxth = zcent - args.del_red/2, zcent + args.del_red/2
+    condth = np.logical_and(reds>=zminth, reds<=zmaxth)
     # dL_full = cosmo.luminosity_distance(reds).value
     # minlums_accept = calc_lum(maglow, dL_full)
-    minlum_onered = calc_lum(maglow, dL)
-    # bin_centers_orig, hist_orig = bin_lums(lums)
-    lums_mod, logLs, delzf = calc_new_lums(lums, reds, file_name=file_name, interp_type=interp_type)
-    # bin_centers, hist = bin_lums(lums_mod)
-    plot_hists(lums, lums_mod, delz, al, logLs)
+    minlum_use = calc_lum(maglow, dL, args.wav_filt, args.filt_width)
+    lums_mod, logLs, delzf, delzfv2 = calc_new_lums(lums, reds, file_name=file_name, interp_type=interp_type)
+    condtf = lums_mod>=minlum_use
+    plot_hists(lums[condth], lums_mod[condtf], delz, al, logLs, varying=varying)
     mkpath(image_dir)
-    # outname_list = [f'Veff_al{al}_delz{delz}_vary{varying}', f'VeffTrans_al{al}_delz{delz}_vary{varying}']
+    # outname_list = [f'Veff_al{al}_delz{delz:0.2f}_vary{varying}', f'VeffTrans_al{al}_delz{delz:0.2f}_vary{varying}']
     # minlum_use = max(Lc, minlum_onered)
-    minlum_use = minlum_onered
+    # mu = np.median(minlum_use)
     print("minlum_use:", minlum_use)
-    delz_eff = [np.average(delzf(lums-minlum_use)), np.average(delzf(lums_mod-minlum_use))]
-    delz_use = [C.del_red, 2*delz]
-    print("Delz_eff:", delz_eff)
-    lumlist = [lums, lums_mod]
+    # dzlm = delzf(lums_mod[condtf]-minlum_use)
+    # delz_eff = np.average(dzlm)
+    # # delz_effv2 = [np.average(delzfv2(lums-minlum_use)), np.average(delzfv2(lums_mod-minlum_use))]
+    # print("Delz_eff:", delz_eff)
+    # print("Delz_effv2:", delz_effv2)
+    lumlist = [lums[condth], lums_mod[condtf]]
+    distlist = [dists[condth], dists[condtf]]
+    delReds = [args.del_red, args.delz_eff]
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
-        lumobj = L.LumFuncMCMC(C.redshift, del_red=delz_eff[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=dists, dist=dists, logL_width=logLs.max(), transsim=True, minlum=minlum, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp)
+        lumobj = L.LumFuncMCMC(args.redshift, del_red=delReds[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use)
+
         lumobj.VeffLF(varying=varying)
         lf.append(lumobj.lfbinorig)
         vars.append(lumobj.var)
-    plotVeffComp(lumobj.Lavg, lf, vars, delz, al, minlum_use, Lc, numgal, binnum)
+    plotVeffComp(lumobj.Lavg, lf, vars, delz, al, minlum_use, Lc, numgal, binnum, varying=varying, filter=args.filt_name)
     lf0 = unumpy.uarray(lf[0], np.sqrt(vars[0]))
     lf1 = unumpy.uarray(lf[1], np.sqrt(vars[1]))
     print("vars[0]:", vars[0])
@@ -202,24 +231,34 @@ def get_corrections(al, ls, phis, delz=0.1, file_name='N501_with_atm.txt', inter
     # breakpoint()
     return lumobj.Lavg, corr, minlum_use
 
-def plot_corr(bin_centers, corr, plotname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None):
+def plot_corr(bin_centers, corr, plotname, filtname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None, bcmf=43.6):
+    ''' Plot the filter corrections as a function of luminosity '''
     mkpath(image_dir)
+    bcmin = np.inf
+    bcmax = -np.inf
     fig, ax = plt.subplots()
     if corrfull is not None: 
+        cond = bcs<bcmf
         col = next(orig_palette)
-        ax.plot(bcs, corrfull, color=col, linestyle='--', marker='none', label='Overall')
-        ax.fill_between(bcs, corrfull-correfull, corrfull+correfull, color=col, alpha=0.2, label='')
+        ax.plot(bcs[cond], corrfull[cond], color=col, linestyle='--', marker='none', label='Overall')
+        ax.fill_between(bcs[cond], corrfull[cond]-correfull[cond], corrfull[cond]+correfull[cond], color=col, alpha=0.2, label='')
     if type(bin_centers)==list:
         for bc, co, coe, lc in zip(bin_centers, corr, corre, lcs):
-            ax.errorbar(bc, co, coe, color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
+            condbc = bc<bcmf
+            ax.errorbar(bc[condbc], co[condbc], coe[condbc], color=next(orig_palette), marker=next(markers), label=f'Lower limit: {lc}')
+            bcmin, bcmax = min(bcmin, bc.min()), max(bcmax, bc[condbc].max())
         ax.legend(loc='best', frameon=False)
-    else: ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
-    ax.set_xlabel('Log Luminosity (erg/s)')
+    else: 
+        ax.errorbar(bin_centers, unumpy.nominal_values(corr), yerr=unumpy.std_devs(corr), fmt='b-*')
+        bcmin, bcmax = bin_centers.min(), bin_centers.max()
+    ax.set_xlabel('Observed Log Luminosity (erg/s)')
     ax.set_ylabel('Log Correction (True/Obs)')
+    ax.set_xlim(bcmin, bcmax)
     fig.savefig(op.join(image_dir, plotname), bbox_inches='tight', dpi=300)
     plt.close('all')
 
 def getOverallCorr(bcall, corrall, correall, num=1001):
+    ''' Combine results of different experiments (with different minimum luminosities to better populate the bright end) '''
     corrfs, correfs = [], []
     corrs, corres = np.zeros((len(bcall), num)), np.zeros((len(bcall), num))
     bcmin, bcmax = np.inf, -np.inf
@@ -229,64 +268,82 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
         bcmax = max(bcmax, bcall[i][cond].max())
     bcs = np.linspace(bcmin, bcmax, num)
     for i in range(len(bcall)):
-        corrfs.append(interp1d(bcall[i], corrall[i], kind='cubic', bounds_error=False, fill_value=np.nan))
-        correfs.append(interp1d(bcall[i], correall[i], kind='cubic', bounds_error=False, fill_value=np.nan))
+        if len(bcall[i]) < 4: interp_type = 'linear'
+        else: interp_type = 'cubic'
+        corrfs.append(interp1d(bcall[i], corrall[i], kind=interp_type, bounds_error=False, fill_value=np.nan))
+        correfs.append(interp1d(bcall[i], correall[i], kind=interp_type, bounds_error=False, fill_value=np.nan))
         corrs[i] = corrfs[i](bcs)
         corres[i] = correfs[i](bcs)
     ws = 1/corres
     corrfull = np.nansum(corrs*ws, axis=0) / np.nansum(ws, axis=0)
     correfull = np.sqrt(len(bcall)) / np.nansum(ws, axis=0)
-
+    # wl = int(len(corrfull_orig)*0.8)
+    # wl = len(corrfull_orig)
+    # corrfull = savgol_filter(corrfull_orig, wl, 5)
+    # correfull = savgol_filter(correfull_orig, wl, 5)
     return bcs, corrfull, correfull
 
 def showAllCorr():
-    image_dir = 'TransExp'
-    Lcvals = [40.46, 41.0, 42.0, 42.5, 42.8, 43.1]
-    fn_base = 'N501Corr_ng2500000_bn20_al-1.6_delz0.2_ml40.46'
-    fn_base43 = 'N501Corr_ng2500000_bn8_al-1.6_delz0.2_ml40.46'
+    ''' Partnered with getOverallCorr and plot_corr to calculate and plot the corrections in all filters '''
+    args = parse_args()
+    filter, numgal, delz, varying = args.filt_name, args.numgal, args.delz, args.varying
+    alpha_fixed = -1.6
+    if filter=='N501': ml = 41.58
+    elif filter=='N419': ml = 41.47
+    else: ml = 41.83
+    image_dir = op.join('TransExp', 'NewMethod2')
+    Lcvals = [41.0, 42.0, 42.5, 42.8]
+    fn_base = f'{filter}Corr_ng{numgal}_bn20_al{alpha_fixed}_delz{delz:0.2f}_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
-        if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
-        elif Lc>43: fn = op.join(image_dir, f'{fn_base43}_Lc{Lc}.dat')
-        else: fn = op.join(image_dir, f'{fn_base}_Lc{Lc}.dat')
+        # if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
+        fn = op.join(image_dir, f'{fn_base}_Lc{Lc:0.1f}_corr0_var{varying}_new.dat')
         dat = Table.read(fn, format='ascii')
         bc, co, coe = dat['logL'], dat['Corr'], dat['CorrErr']
+        cond = ~np.isnan(co)
+        if Lc > ml: bc, co, coe = bc[cond][1:], co[cond][1:], coe[cond][1:]
+        if filter=='N419': 
+            if Lc==42.8: bc, co, coe = bc[:-1], co[:-1], coe[:-1]
         bcall.append(bc); corrall.append(co); correall.append(coe)
     bcs, corrfull, correfull = getOverallCorr(bcall, corrall, correall)
+    # cad = {'bcall': bcall, 'corrall': corrall, 'bcs': bcs, 'lcs': Lcvals, 'corre': correall, 'corrfull': corrfull, 'correfull': correfull}
+    # pickle.dump(cad, open(f'FilterCorr{filter}.pickle', 'wb'))
     corrdat = Table()
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, 'CorrFull.dat'), format='ascii')
-    plot_corr(bcall, corrall, plotname='MixCorrsOverall.png', image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.dat'), format='ascii', overwrite=True)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}_new.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
+    ''' Run code to get transmission experiment for a given filter and minimum luminosity '''
     args = parse_args()
+    filter = args.filt_name
     image_dir = 'TransExp'
     mkpath(image_dir)
-    alpha_fixed, delz, varying, interp_type, min_comp_frac, Lc, numgal, binnum = args.alpha_fixed, args.delz, args.varying, args.interp_type, args.min_comp_frac, args.Lc, args.numgal, args.binnum
-    if alpha_fixed==-1.6: this_work = [alpha_fixed, 42.435, -2.701]
-    elif alpha_fixed==-1.8: this_work = [alpha_fixed, 42.513, -2.856]
-    else: 
-        print("Not one of the sanctioned alpha fixed values")
-        return
-    # plotTransCurve()
+    alpha_fixed, delz, varying, Lc, numgal, binnum = args.alpha_fixed, args.delz, args.varying, args.Lc, args.numgal, args.binnum
+    if filter=='N501': this_work = [-2.25, 42.79, -3.39]
+    elif filter=='N419': this_work = [-2.52, 42.80, -3.80]
+    else: this_work = [-2.08, 43.11, -3.81]
+    # plotTransCurve('N501_Nicole.txt', image_dir='', lam_min=4900., lam_max=5125.)
+    # plotTransCurve('N673_Nicole.txt', image_dir='', lam_min=6600., lam_max=6900.)
+    # plotTransCurve('N419_Nicole.txt', image_dir='', lam_min=4100., lam_max=4300.)
     # bin_centers, corr_perf = get_corrections(*this_work, delz=0.0317, file_name=perf_filt)
     # plot_corr(bin_centers, corr_perf, f'TopHatCorr_al{alpha_fixed}.png')
     if args.corrf:
-        corrfile = Table.read(op.join(image_dir, 'CorrFull.dat'), format='ascii')
+        corrfile = Table.read(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{numgal}.dat'), format='ascii')
         logL, corr = corrfile['logL'], corrfile['Corr']
         corrf = interp1d(logL, corr, kind='linear', bounds_error=False, fill_value=(corr[0], corr[-1]))
     else: 
         corrf = None
-    bin_centers, corr_n501, minlum_use = get_corrections(*this_work, delz=delz, varying=varying, interp_type=interp_type, min_comp_frac=min_comp_frac, Lc=Lc, numlum=numgal, numgal=numgal, binnum=binnum, corrf=corrf)
-    plot_corr(bin_centers, corr_n501, f'N501CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.png', image_dir=image_dir)
+    bin_centers, corr_n501, minlum_use = get_corrections(args, *this_work, varying=varying, Lc=Lc, corrf=corrf)
+    plot_corr(bin_centers, corr_n501, f'{filter}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.png', filter, image_dir=image_dir, )
 
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'N501Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}.dat'), format='ascii')
+    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main()
-    # showAllCorr()
+    # main()
+    showAllCorr()
