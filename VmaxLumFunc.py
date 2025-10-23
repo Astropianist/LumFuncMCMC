@@ -1,3 +1,4 @@
+''' Deriving V/V_max-method luminosity functions '''
 import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d

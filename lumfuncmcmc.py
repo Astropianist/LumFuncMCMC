@@ -1,3 +1,5 @@
+''' Backbone file for calculating luminosity functions '''
+
 import numpy as np 
 import logging
 import emcee
@@ -26,18 +28,21 @@ sns.set_style({"xtick.direction": "in","ytick.direction": "in",
                })
 
 c = 3.0e18 # Speed of light in Angstroms/s
-num_cores = 20 #In Joel's thingy
 
 def flin(B, x):
+    ''' Linear function '''
     return B[0]*x + B[1]
 
 def poisson_lnpmf(k, mu):
+    ''' Log poisson probability mass function '''
     return k*np.log(mu) - lgamma(k+1) - mu
 
 def consecutive(data, stepsize=1):
+    ''' Find regions of consecutive values in an array (for continuity purposes)--typically used on an array of indices'''
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
 def makeTransFigs(filter, lam, trans, dlogL, delz, pden, lammin=4900., lammax=5125.):
+    ''' To make plots of tranmission curve information (including the effects on measuring luminosities and effective volumes)'''
     fig, ax = plt.subplots(1, 3, figsize=(12, 4))
     ax[0].plot(lam, trans, 'b-')
     ax[1].plot(dlogL, delz, 'b-')
@@ -52,6 +57,7 @@ def makeTransFigs(filter, lam, trans, dlogL, delz, pden, lammin=4900., lammax=51
     fig.savefig(f'{filter}_TransInfo.png', bbox_inches='tight', dpi=300)
 
 def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analysis_12_26_2024.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, contam_lim=0.01, test_contam_num=10001, contam_type='L_LCA', density_frac=1.0, mag_corr=0.0, nsamp=25): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
+    ''' Determine contamination fraction as a function of narrow-band magnitude and make a nifty plot showing it'''
     file_name = file_name_orig.replace('N419', filter)
     if not op.exists(file_name):
         x = np.linspace(0, 100, 1001)
@@ -65,7 +71,7 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     nb_mag, cl = dat['NARROWBAND_MAGNITUDE']+mag_corr, dat['CLASSIFICATION']
     # ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
     # condlae = np.logical_or(np.logical_and(ps=='s', cl=='LAE'), ps!='s')
-    assert contam_type == 'L_LCA'
+    assert contam_type == 'L_LCA' #Can un-comment other contamination options if desired
     speclae = np.where(cl=='LAE')[0]
     specagn = np.where(cl=='AGN')[0]
     specctm = np.where(cl=='CONTAM')[0]
@@ -174,81 +180,8 @@ def getContamination(filter='N419', file_name_orig='N419_LAE_Contamination_Analy
     # breakpoint()
     return contamf, contamhf, contamlf, nbcontam
 
-def getContaminationOld(filter='N419', file_name_orig='COSMOS_N419_bright.csv', interp_type='linear', errtab='confidence_interval_1s.txt', binnum=5, full_cat_orig='LyaN419FluxesFinal.dat', contam_lim=0.01, test_contam_num=10001): #cat_noagn_orig='LyaN419FluxesFinalIntRem.dat':
-    file_name = file_name_orig.replace('N419', filter)
-    full_cat = full_cat_orig.replace('N419', filter)
-    # cat_noagn = cat_noagn_orig.replace('N419', filter)
-    full_catd = Table.read(full_cat, format='ascii')
-    # cat_noagnd = Table.read(cat_noagn, format='ascii')
-    galf = full_catd['Galaxy_name']# , cat_noagnd['Galaxy_name']
-    # ids_bad_old = np.setdiff1d(galf, galn)
-    dat = Table.read(file_name, format='csv')
-    ids_desi, flux, z, ps, cl, comment = dat['ID'], dat['Lya Flux'], dat['z'], dat['P/S'], dat['Class'], dat['Comment']
-    desi = np.zeros(flux.size, dtype=int)
-    for i in range(len(desi)):
-        if 'ODIN-DESI' in comment[i]: desi[i] = 1
-    # breakpoint()
-    allnot = np.where(np.logical_or(dat['P/S'].mask==True, dat['P/S']=='p'))
-    # intersect, inds_not, cat_not = np.intersect1d(ids_desi[allnot], ids_bad_old, return_indices=True)
-    condlae = np.logical_or(np.logical_and(ps=='s', cl=='LAE'), ps!='s')
-    # speclae = np.where(np.logical_and.reduce((ps=='s', cl=='LAE')))[0]
-    speclae = np.where(condlae)[0]
-    # allspec = np.where(np.logical_and(ps=='s', desi<=1))[0]
-    allspec = np.arange(len(flux))
-    # allspec = np.concatenate((allspec, inds_not))
-    pois = Table.read(errtab, format='ascii')
-    num, lb, hb = pois['Num'], pois['LowBound'], pois['HighBound']
-    flux_lae = flux[speclae]
-    flux_all = flux[allspec]
-    # print("Total LAE sample size:", flux_lae.size)
-    # print("Total sample size:", flux_all.size)
-    pers = np.linspace(0, 100, binnum+1)
-    bin_edges = np.percentile(flux_all, pers)
-    # bin_edges = np.geomspace(flux_all.min(), flux_all.max(), binnum+1)
-    # bin_edges[0] = min(bin_edges[0], flux_all.min())
-    # bin_edges[-1] = max(bin_edges[-1], flux_all.max())
-    bin_edges[-1] += 1.0e-6 # Want to make sure the last flux is included
-    bin_centers = (bin_edges[:-1] + bin_edges[1:])/2.0
-    contam, contaml, contamh = np.ones(binnum), np.zeros(binnum), np.zeros(binnum)
-    # for i in range(binnum):
-    #     cond = np.logical_and(flux_all>=bin_edges[i], flux_all<bin_edges[i+1])
-    #     cond_lae = np.logical_and(flux_lae>=bin_edges[i], flux_lae<bin_edges[i+1])
-    #     fls, fas = flux_lae[cond_lae].size, flux_all[cond].size
-    #     # print(f"For bin {i}: fls = {fls}")
-    #     # for j in range(fls):
-    #     #     idsi = ids_desi[speclae][cond_lae][j]
-    #     #     if idsi in ids_bad_old: 
-    #     #         print(f"Galaxy ID {idsi} in old bad list but not new DESI-based list")
-    #     #         fls -= 1
-    #     contam[i] = fls/fas
-    #     cond_pois = np.where(fls==num)[0][0]
-    #     contaml[i], contamh[i] = (fls-lb[cond_pois])/fas, (hb[cond_pois]-fls)/fas
-    #     if contamh[i]<0 or np.isnan(contamh[i]): contamh[i] = 0.0
-    #     if contaml[i]<0 or np.isnan(contaml[i]): contaml[i] = 0.0
-    contamf = interp1d(bin_centers, contam, kind=interp_type, fill_value=(1.0, contam[-1]), bounds_error=False)
-    contamhf = interp1d(bin_centers, contamh, kind=interp_type, fill_value=(0.0, contamh[-1]), bounds_error=False)
-    contamlf = interp1d(bin_centers, contaml, kind=interp_type, fill_value=(0.0, contaml[-1]), bounds_error=False)
-
-    test_contam = np.linspace(bin_edges[0], bin_edges[-1], test_contam_num)
-    ctc = contamf(test_contam)
-    if ctc.min() > contam_lim: 
-        cgscontam = 1.0 # A large value of flux in cgs units
-    else:
-        indcontam = np.argmin(np.abs(ctc - contam_lim))
-        cgscontam = test_contam[indcontam]*1.0e-17
-
-    # plt.figure()
-    # plt.errorbar(bin_centers, contam, yerr=np.row_stack((contaml, contamh)), xerr=np.row_stack((bin_centers-bin_edges[:-1], bin_edges[1:]-bin_centers)), fmt='bs')
-    # bin_check = np.linspace(bin_edges.min(), bin_edges.max(), 1001)
-    # plt.plot(bin_check, contamf(bin_check), 'r')
-    # plt.fill_between(bin_check, contamf(bin_check)-contamlf(bin_check), contamf(bin_check)+contamhf(bin_check), color='r', alpha=0.1)
-    # plt.xlabel(r'Flux (10$^{-17}$ cgs)')
-    # plt.ylabel('Fraction of true LAEs')
-    # plt.show()
-    # breakpoint()
-    return contamf, contamhf, contamlf, cgscontam
-
 def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=1215.67, delznum=51):
+    ''' Determine the true luminosity of a source given a transmission curve and a redshift (this routine creates interpolation functions that can be used to evaluate the result at (a) desired redshift(s))'''
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     cond = tra>0.0
@@ -269,6 +202,7 @@ def getRealLumRed(file_name='N501_Nicole.txt', interp_type='cubic', wav_rest=121
     return interp1d(zs, del_logL, kind=interp_type, bounds_error=False, fill_value = (del_logL[0], del_logL[-1])), delzf, zs[np.argmax(tra)]
 
 def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wav_rest=1215.67):
+    ''' Given a transmission curve, determine the probability distribution function of the true luminosity of a source being higher (assuming that sources are distributed uniformly along the redshift axis)'''
     del_logL = np.log10(tra.max()) - np.log10(tra)
     il, ir = 0, len(del_logL)-1
     while del_logL[il+1]-del_logL[il]<0.0 or del_logL[il+1]>(del_logL.max()-del_logL.min())/2.0: il+=1
@@ -322,6 +256,7 @@ def getTransPDF(lam, tra, pdflen=10000, num_discrete=51, interp_type='cubic', wa
     return interp1d(del_logL_arr, pdf_arr, kind=interp_type, fill_value=(pdf_arr[0], 0.0), bounds_error=False), logL_discrete, interp1d(del_logL_arr_orig, del_z_arr, kind=interp_type, fill_value=(del_z_arr[0],del_z_arr[-1]), bounds_error=False)
 
 def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000, fulllen=10000, wav_rest=1215.67, maglen=101, num_discrete=51):
+    ''' Partner routine with getTransPDF that determines the transmission curve based on input files (and only includes the desired extent in the wings) '''
     trans_dat = Table.read(file_name, format='ascii')
     lam, trans = trans_dat['lambda'], trans_dat['transmission']
     cond = trans>0.0
@@ -345,12 +280,15 @@ def getBoundsTransPDF(logL_width=2.0, file_name='N501_Nicole.txt', pdflen=100000
     interp_type = 'linear'
     transpdf, logL_discrete, delzf = getTransPDF(lam_full[left_ind:right_ind], trans_full[left_ind:right_ind], pdflen=pdflen, num_discrete=num_discrete, interp_type=interp_type, wav_rest=wav_rest)
 
-    # filter = file_name.split('_')[0]
+    # filt = file_name.split('_')[0]
+    # transfigs = {'filter': filt, 'lam': lam, 'trans': trans, 'logL_discrete': logL_discrete, 'dz': delzf(logL_discrete), 'pdf': transpdf(logL_discrete)}
+    # pickle.dump(transfigs, open(f'FilterFig{filt}.pickle', 'wb'))
     # makeTransFigs(filter, lam, trans, logL_discrete, delzf(logL_discrete), transpdf(logL_discrete))
 
     return transpdf, logL_discrete, delzf # (lam_full[right_ind]-lam_full[left_ind])/wav_rest #, interp1d(logLs, delz, bounds_error=False, fill_value=(delz[0],delz[-1]))
 
 class RGINNExt:
+    ''' Multi-dimensional linear interpolation within convex hull of points and nearest point within hull for points outside; function created with help of stackoverflow '''
     def __init__( self, points, values, method='cubic' ):
         self.interp = RGIScipy(points, values, method=method,
                                               bounds_error=False, fill_value=np.nan)
@@ -365,6 +303,7 @@ class RGINNExt:
         return vals
 
 def makeCompFuncSamp(num, DL, file_name='cosmos_completeness_n501_grid_extrap_samp.pickle', filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, mag_min=28., mag_max=21., use_contam=True, aper_corr=0.0, interp_type='linear'):
+    ''' In an experiment to understand the effects of uncertainties on completeness and contamination, get the effective completeness curve for a particular realization of completeness'''
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags']+aper_corr, dat['Dist'], dat['CompSamps'][num]
@@ -391,6 +330,7 @@ def makeCompFuncSamp(num, DL, file_name='cosmos_completeness_n501_grid_extrap_sa
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=5, filter='N501', wave=1215.67, dwave=73.0, distnum=21, magnum=1001, contam_lim=0.01, contam_type='L_LCA', mag_min=28., mag_max=21., density_frac=1.0, use_contam=True, aper_corr=0.0):
+    ''' Determine the effective completeness curve (or just completeness if use_contam is False); plot this curve'''
     with open(file_name,'rb') as f:
         dat = pickle.load(f)
     mag, dist, comp = dat['Mags']+aper_corr, dat['Dist'], dat['Comp']
@@ -425,19 +365,23 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
+    ''' cgs flux to AB magnitude conversion '''
     Flam = cgs/dwave
     Fnu = Flam*wave**2/c
     return -2.5*np.log10(Fnu)-48.6
 
 def magAB2cgs(mag, wave, dwave):
+    ''' AB magnitude to cgs flux conversion '''
     Fnu = 10**(-0.4*(mag+48.6))
     Flam = Fnu*c/wave**2
     return Flam * dwave
 
 def lum2cgs(lum, DL):
+    ''' Luminosity to cgs flux conversion given a luminosity distance '''
     return 10**lum / (4.0*np.pi*(3.086e24*DL)**2)
 
 def cgs2lum(cgs, DL):
+    ''' cgs flux to luminosity conversion given luminosity distance'''
     return np.log10(cgs * 4.0*np.pi*(3.086e24*DL)**2)
 
 def TrueLumFunc(logL,alpha,logLstar,logphistar):
@@ -462,15 +406,8 @@ def TrueLumFunc(logL,alpha,logLstar,logphistar):
     return np.log(10.0) * 10**logphistar * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
 
 def TrueLumFuncNoPhi(logL,alpha,logLstar):
+    ''' Same as truelumfunc but with log(phi*)=0 '''
     return np.log(10.0) * 10**((logL-logLstar)*(alpha+1))*np.exp(-10**(logL-logLstar))
-
-def MakeTLFInterp(logL_range, alpha_range, logLstar_range, num_dim=201):
-    logL = np.linspace(logL_range[0],logL_range[1],num_dim)
-    alpha = np.linspace(alpha_range[0],alpha_range[1],num_dim)
-    logLstar = np.linspace(logLstar_range[0],logLstar_range[1],num_dim)
-    Lg, ag, Lsg = np.meshgrid(logL, alpha, logLstar, indexing='ij', sparse=True)
-    tlf = TrueLumFuncNoPhi(Lg, ag, Lsg)
-    return RGIScipy((logL, alpha, logLstar), tlf, method='cubic', bounds_error=False, fill_value = 0.0)
 
 def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
     ''' Calculate fractional area of the sky in which galaxies have fluxes large enough so that they can be detected
@@ -499,9 +436,11 @@ def Omega(logL,dLz,compfunc,Omega_0,wave,dwave):
     return Omega_0/V.sqarcsec * comp
 
 def normalFunc(x,mu,sig):
+    ''' Normal probability distribution function '''
     return 1.0/(np.sqrt(2.0*np.pi)*sig) * np.exp(-(x-mu)**2/(2.0*sig**2))
 
 def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=1215.67, dwave=73.0):
+    ''' Plot (effective) completeness curve '''
     magarr = np.linspace(mag_min, mag_max, 31)
     cgs = magAB2cgs(magarr, wave=wave, dwave=dwave)
     lumarr = cgs2lum(cgs, DL)
@@ -527,6 +466,7 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
     # breakpoint()
 
 class LumFuncMCMC:
+    ''' A class to facilitate the calculation of the luminosity function given input fluxes and other information '''
     def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0], extra_text='', frac_use=1.0):
         ''' Initialize LumFuncMCMC class
 
@@ -665,9 +605,6 @@ class LumFuncMCMC:
         
         if not self.transsim:
             self.get1DComp()
-            # logL_min = self.logL_norm.min()
-            # logL_max = self.logL_norm.max() + self.logL_discrete.max()
-            # self.tlf_interp = MakeTLFInterp([logL_min, logL_max], self.sch_al_lims, self.Lstar_lims)
         else:
             if self.minlum is None: self.getCompInfo()
             else: self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
@@ -691,6 +628,7 @@ class LumFuncMCMC:
         self.plotLike(lss, als, likes, vgal, nameext=self.extra_text)
 
     def getCompInfo(self, compcut=0.03):
+        ''' Create several arrays that will be used in efficient calculations of luminosity functions (numpy shenanigans)'''
         self.maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
         # distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
         self.distgrid = np.linspace(self.dist_orig.min(), self.dist_orig.max(), num=self.distnum)
@@ -711,43 +649,8 @@ class LumFuncMCMC:
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
         self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
 
-    def getCompInfoOld(self):
-        self.maggrid = np.linspace(self.maghigh, self.maglow, self.magnum)
-        # distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
-        self.distgrid = np.linspace(self.dist_orig.min(), self.dist_orig.max(), num=self.distnum)
-        self.distg, self.magg = np.meshgrid(self.distgrid, self.maggrid, indexing='ij')
-        comps = self.interp_comp_simp.ev(self.distg, self.magg)
-        # comps = comps.reshape(self.distnum, self.magnum)
-        roots = np.zeros(self.distnum)
-        for i in range(self.distnum):
-            func = interp1d(self.maggrid, comps[i], bounds_error=False, fill_value=(comps[i][0], comps[i][-1]))
-            roots[i] = fsolve(lambda x: func(x)-self.min_comp_frac, [25.5])[0]
-        fluxes = magAB2cgs(roots, self.wav_filt, self.filt_width)
-        minlums = cgs2lum(fluxes, self.DL)
-        self.minlumf = interp1d(self.distgrid, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
-        self.minlum = np.average(self.minlumf(self.dist))
-        self.minlum_conv = self.minlum - 3.0*self.lum_err_func(self.minlum)
-        comp_avg_dist = np.average(comps,axis=0)
-        self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
-        self.comps1d = self.comp1df(self.mags)
-        self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
-        self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
-        self.Omega_gen = Omega(self.logL,self.DL,self.comp1df,self.Omega_0,self.wav_filt,self.filt_width)
-
-    def plotFluxDists(self, bins=40):
-        hist, bin_edges = np.histogram(self.flux*1.0e17, bins=bins)
-        bin_centers = (bin_edges[:-1] + bin_edges[1:])/2
-        contam = self.cf(bin_centers)
-        fig, ax = plt.subplots()
-        ax.stairs(hist, bin_edges, fill=True, color='b', alpha=0.5, label='Original')
-        ax.stairs(hist*contam, bin_edges, fill=True, color='r', alpha=0.5, label='De-contaminated')
-        ax.set_xlabel(r'Flux ($10^{-17}$ cgs)')
-        ax.set_ylabel('Number of sources')
-        ax.set_yscale('log')
-        ax.legend(loc='best', frameon=False)
-        fig.savefig(f'FluxDistsContam_{self.filt_name}.png', bbox_inches='tight', dpi=300)
-
-    def getminlum_z_func(self):
+    def getminlum_z_func(self): 
+        ''' This functionality of treating the minimum luminosity as a function of redshift is not used given the computational expenses '''
         comps = self.interp_comp_simp.ev(self.distg, self.magg)
         roots = np.zeros((self.size_lprime, self.distnum))
         minlums = np.zeros((self.size_lprime, self.distnum))
@@ -764,6 +667,7 @@ class LumFuncMCMC:
         self.minlum2df = RectBivariateSpline(self.zarr, self.distgrid, minlums)
 
     def getmaxlum_z_func(self):
+        ''' Ditto as minimum--not used for computational reasons'''
         lums = cgs2lum(self.flux_lim, self.DLs)
         self.maxlumf = interp1d(self.zarr, lums, kind='linear', bounds_error=False, fill_value=(lums[0], lums[-1]))
 
@@ -865,6 +769,7 @@ class LumFuncMCMC:
             self.flux_e = None
 
     def calclikeLsal(self, alnum=50, lsnum=50):
+        ''' Get log likelihood values for the alpha and L* parameters (shape part of the luminosity function) on a grid'''
         self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
         self.Lmed = (bin_edges[:-1] + bin_edges[1:])/2.0
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
@@ -909,6 +814,7 @@ class LumFuncMCMC:
         return als, lss, likes
 
     def calclikeLsalTH(self, alnum=50, lsnum=50):
+        ''' Calculate alpha, L* likelihood with a perfect top-hat filter '''
         self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
         self.Lmed = (bin_edges[:-1] + bin_edges[1:])/2.0
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
@@ -940,39 +846,9 @@ class LumFuncMCMC:
                 # print("Time per iteration: ", toc-tic)
                 # breakpoint()
         return als, lss, likes
-
-    def calclikeLsalnotused(self, alnum=50, lsnum=50):
-        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
-        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
-        compgrid = np.zeros((self.dist.size, self.logL.size))
-        flux_cgs_orig = lum2cgs(self.logL, self.DL)
-        flux_cgs = flin(self.beta, flux_cgs_orig)
-        cond_bad = flux_cgs < flux_cgs_orig
-        flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
-        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
-        for i, dist in enumerate(self.dist):
-            if i%400==0: print(f"Got to i={i} for calculating comps grid")
-            compgrid[i] = self.interp_comp_simp.ev(dist, mags)
-
-        ldo = len(self.dist)
-        likes = np.zeros((alnum, lsnum))
-        for i in range(alnum):
-            print(f"Got to i={i} in main al ls loop")
-            for j in range(lsnum):
-                # time1 = time()
-                tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
-                phimed = trapezoid(tlf*self.trans_conv[None], self.logL_trans_integ, axis=1)
-                phiobs = compgrid * phimed
-                likeij = np.zeros(ldo)
-                for k in range(ldo):
-                    likeij[k] = np.interp(self.lum[k], self.logL, phiobs[k])
-                likes[i,j] = np.log(likeij).sum()
-                # time2 = time()
-                # print("Time taken for one iteration:", time2-time1)
-                # self.plotPracLumFunc(tlf[:,0], phimed, als[i], lss[j])
-        return als, lss, likes
     
     def calcVgalPhistar(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
+        ''' Calculate number of observed galaxies predicted by Schechter parameters if phi* = 1 (log phi* = 0)'''
         fac_sr_to_arcmin = np.pi / 180. / 60.
         integ_mult = 2 * np.pi * fac_sr_to_arcmin**2
         # self.getminlum_z_func()
@@ -1015,6 +891,7 @@ class LumFuncMCMC:
         return als, lss, vgal
 
     def calcVgalPhistarTH(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
+        ''' Calculate number of observed galaxies given Schechter parameters (with phi* = 1) if we had a perfect top-hat filter'''
         fac_sr_to_arcmin = np.pi / 180. / 60.
         integ_mult = 2 * np.pi * fac_sr_to_arcmin**2 * self.volume
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
@@ -1108,7 +985,7 @@ class LumFuncMCMC:
 
     def lnlike(self):
         ''' Calculate the log likelihood and return the value and stellar mass
-        of the model as well as other derived parameters
+        of the model as well as other derived parameters (an old version -- need care to see if it works properly)
 
         Returns
         -------
@@ -1120,6 +997,7 @@ class LumFuncMCMC:
         return lnpart - fullint
     
     def lnlike_conv(self):
+        ''' Likelihood with convolution of both measurement errors and transmission effects; a bit out of date: use with care '''
         tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_conv,self.sch_al,self.Lstar)
         not_norm = tlf*self.comps_conv*self.trans_conv
         trapezoid_inner = trapezoid(not_norm,self.logL_conv)
@@ -1132,49 +1010,24 @@ class LumFuncMCMC:
         return lnpart - fullint
 
     def lnlike_trans(self):
+        ''' Likelihood with transmission effects; a bit out of date; to use with care '''
         tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_lnpart,self.sch_al,self.Lstar)
         lnpart = np.log(trapezoid(tlf*self.comps_trans_lnpart*self.trans_conv,self.logL_trans_lnpart)).sum()
         integ = 10**self.phistar * TrueLumFuncNoPhi(self.logL_trans_integ,self.sch_al,self.Lstar) * self.not_tlf
         fullint = self.Omega_0_sr * self.dVdz * trapezoid(trapezoid(integ,self.logL_trans_integ),self.logL)
         lnold = lnpart - fullint
         return lnold
-
-    def lnlike_trans_new(self):
-        # time1 = time()
-        like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
-        # time2 = time()
-        tlf = TrueLumFunc(self.logL, self.sch_al, self.Lstar, self.phistar)
-        integ = tlf[:,None] * self.trans_mult
-        zinteg = trapezoid(integ, self.zarr)
-        # time3 = time()
-        num = trapezoid(zinteg * self.Omega_full, self.logL)
-        # integ = tlf[:,None] * self.ptransmult
-        # integ = tlf * self.ptransmult
-        
-        # num = trapezoid(trapezoid(integ, self.zarr), self.logL)
-        # num = self.del_red * trapezoid(integ, self.logL)
-        # time4 = time()
-        # like_phi = np.log(self.rv.pmf(np.average(nums).astype(int)))
-        like_phi = poisson_lnpmf(self.N, int(num))
-        # time5 = time()
-        # print("Times:", time2-time1, time3-time2, time4-time3, time5-time4, "Total:", time5-time1)
-        return like_alls + like_phi
     
     def lnlike_trans_v2(self):
+        ''' Version of ln likelihood used for our analysis '''
         like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
         vgals = self.vgalf.ev(self.sch_al, self.Lstar)
         num = 10**self.phistar * self.frac_use * vgals * self.weight
         like_phi = poisson_lnpmf(self.N, int(num))
         return like_alls + like_phi
-    
-    def lnlike_trans_v3(self):
-        like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
-        vgals = self.vgalf.ev(self.sch_al, self.Lstar)
-        num = 10**self.phistar * vgals * self.weight
-        like_tot = like_alls + self.N * self.phistar * np.log(10) - 10**self.phistar * num
-        return like_tot
 
     def lnlike_norm(self):
+        ''' Likelihood with just measurement errors included; use with care '''
         tlf = 10**self.phistar * TrueLumFuncNoPhi(self.logL_norm,self.sch_al,self.Lstar)
         lnpart = np.log(trapezoid(tlf*self.comps_norm*self.norm_vals_norm,self.logL_norm)).sum()
         integ = 10**self.phistar * TrueLumFuncNoPhi(self.logL,self.sch_al,self.Lstar) * self.Omega_gen
@@ -1182,7 +1035,7 @@ class LumFuncMCMC:
         return lnpart - fullint
 
     def lnprob(self, theta):
-        ''' Calculate the log probability 
+        ''' Calculate the log probability (old version)
 
         Returns
         -------
@@ -1197,6 +1050,7 @@ class LumFuncMCMC:
             return -np.inf
         
     def lnprob_conv(self, theta):
+        ''' lnprob in case of full convolution (errors and transmission): use with care '''
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
@@ -1206,6 +1060,7 @@ class LumFuncMCMC:
             return -np.inf
         
     def lnprob_trans(self, theta):
+        ''' lnprob used in our work '''
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
@@ -1214,16 +1069,8 @@ class LumFuncMCMC:
         else:
             return -np.inf
         
-    def lnprob_trans_om(self, theta):
-        self.set_parameters_from_list(theta)
-        lp = self.lnprior()
-        if np.isfinite(lp):
-            lnl = self.lnlike_trans_v3()
-            return lnl+lp
-        else:
-            return -np.inf
-        
     def lnprob_norm(self, theta):
+        ''' lnprob in case of just measurement errors and no transmission effects; use with care '''
         self.set_parameters_from_list(theta)
         lp = self.lnprior()
         if np.isfinite(lp):
@@ -1287,7 +1134,6 @@ class LumFuncMCMC:
         else: func = 'lnprob'
         if self.trans_only: func = 'lnprob_trans'
         if self.norm_only: func = 'lnprob_norm'
-        if 'om.pickle' in self.alls_file_name: func = 'lnprob_trans_om'
         sampler = emcee.EnsembleSampler(self.nwalkers, ndim, getattr(self,func))
         # Do real run
         start = time()
@@ -1375,13 +1221,13 @@ class LumFuncMCMC:
         self.VeffLF(varying=self.varying)
 
     def plotLike(self, lss, als, likes, vgal, nameext='', levels=15):
+        ''' Plot alpha, L* likelihoods from the grid and the number o galaxies given alpha, L*, with phi* = 1'''
         fig1, ax1 = plt.subplots()
         sc = ax1.contourf(lss, als, likes, levels=levels)
         ax1.set_xlabel(r'$\mathcal{L}_*$')
         ax1.set_ylabel(r'$\alpha$')
         fig1.colorbar(sc, label='Log likelihood')
-        if 'om.pickle' in self.alls_file_name: file_name = f'AllsLike{nameext}_om.png'
-        else: file_name = f'AllsLike{nameext}.png'
+        file_name = f'AllsLike{nameext}.png'
         fig1.savefig(file_name, bbox_inches='tight', dpi=300)
         fig2, ax2 = plt.subplots()
         sc = ax2.contourf(lss, als, np.log10(vgal), levels=levels)
@@ -1392,6 +1238,7 @@ class LumFuncMCMC:
         plt.close('all')
 
     def plotPracLumFunc(self, tlft, phimed, phiobs, al, ls, likesij):
+        ''' For testing purposes '''
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         ax.plot(self.logL, tlft, 'b-', label='Norm True LF')
@@ -1421,6 +1268,7 @@ class LumFuncMCMC:
         ax1.minorticks_on()
 
     def VeffPlotCommands(self, ax):
+        ''' Part of V/V_max method plotting '''
         markersize = self.nfreeparams * 1
         cond_veff = np.logical_and(self.Lavg >= self.minlum, self.lfbinorig>1.0e-12)
         if self.corrf is not None: label=r'$V_{\rm eff}$ + Filter'
@@ -1435,6 +1283,7 @@ class LumFuncMCMC:
             lh.set_alpha(1)
 
     def plotVeff(self, outname, imgtype='png', varying=False):
+        ''' Plot V/V_max method results'''
         self.VeffLF(varying=varying)
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
@@ -1442,6 +1291,7 @@ class LumFuncMCMC:
         fig.savefig(outname+'.'+imgtype, bbox_inches='tight', dpi=300)
 
     def plotVeffEnv(self, Lavgs, lfbinorigs, vars, minlums, labels, outname, imgtype='png', fmt_seq=['b^', 'r*', 'ko', 'mx', 'cs', 'gh', 'y+'], lflums=None, lfs=None, linestyle_seq=['-', '--', '-.', ':', '-', '--', '-.', ':']):
+        ''' Plot V/V_max method in multiple environments'''
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         ilist = np.arange(len(Lavgs))
@@ -1533,7 +1383,7 @@ class LumFuncMCMC:
         plt.close(fig)
 
     def add_fitinfo_to_table(self, percentiles, start_value=1, lnprobcut=7.5):
-        ''' Assumes that "Ln Prob" is the last column in self.samples'''
+        ''' Put the Schechter parameter basic fitting results into a table. This assumes that "Ln Prob" is the last column in self.samples'''
         nsamples = []
         while len(nsamples)<len(self.samples)//4: 
             chi2sel = (self.samples[:, -1] >

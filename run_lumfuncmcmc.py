@@ -1,4 +1,5 @@
-import sys
+""" Code to run luminosity function calculation on narrow-band data and create several output files"""
+
 import argparse as ap
 import numpy as np
 import os.path as op
@@ -228,6 +229,7 @@ def parse_args(argv=None):
 
     if args.environment == 2: args.num_env_bins = 2
     args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
+    # Values here are specific to ODIN; if using for another survey, this code needs to be edited
     if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 3.124, 5014.0, 77.17, -0.2352
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 2.449, 4193.0, 75.46, -0.2876
     else: args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 4.552, 6750.0, 101.31, -0.2138
@@ -240,12 +242,15 @@ def parse_args(argv=None):
     return args
 
 def flin(B, x):
+    ''' Linear function '''
     return B[0]*x + B[1]
 
 def power(x, a, b):
+    ''' Power function '''
     return a*x**b
 
 def doubp(x, a1, b1, b2, x0):
+    ''' Double power law '''
     a2 = a1*x0**(b1-b2)
     y = np.zeros_like(x)
     y[x<x0] = a1*x[x<x0]**b1
@@ -253,6 +258,7 @@ def doubp(x, a1, b1, b2, x0):
     return y
 
 def doubpv2(x, a1, b1, a2, x0):
+    ''' Different double power law'''
     b2 = (a1-a2)*x0 + b1
     y = np.zeros_like(x)
     y[x<x0] = a1*x[x<x0] + b1
@@ -260,6 +266,7 @@ def doubpv2(x, a1, b1, a2, x0):
     return y
 
 def test_funcs(func=doubpv2, p0=(-1.0, 40.0, -3.0, 42.5)):
+    ''' Just testing double power law on fitting the luminosity function; the new contamination method removes the need for this as the Schechter curve fits well '''
     args = parse_args()
     dir_name_first = 'LFMCMCOdin'
     output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec2_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
@@ -279,6 +286,7 @@ def test_funcs(func=doubpv2, p0=(-1.0, 40.0, -3.0, 42.5)):
     plt.show()
 
 def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419'):
+    ''' Plotting raw luminosity function (straight from data) assuming single redshift for all sources; inputs are included luminosities (above minimum threshold), luminosities below threshold, and luminosities above maximum threshold (for contamination) '''
     # if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
     fig = plt.figure()
     labb = 'Contamination over 50% (removed)'
@@ -290,6 +298,7 @@ def plotLumDistribRaw(lum_comp, lum_incomp, lum_bright, bins=40, filt_name='N419
     plt.close(fig)
 
 def plotFluxDistribRaw(flux_comp, flux_incomp, flux_bright, flux_low, bins=40, filt_name='N419', extra_text=''):
+    ''' Plotting raw flux distributions '''
     # if filt_name=='N673': labb = 'Above bright luminosity cutoff (removed)'
     fig = plt.figure(figsize=(6,6))
     val = 50
@@ -305,6 +314,7 @@ def plotFluxDistribRaw(flux_comp, flux_incomp, flux_bright, flux_low, bins=40, f
     plt.close(fig)
 
 def getDensityFrac(args, datfile):
+    ''' Retrieve fraction to modify area of survey for specific environment'''
     dens = datfile['Density']
     pc = datfile['Protocluster']
     if args.environment: numbins = args.num_env_bins
@@ -322,6 +332,7 @@ def getDensityFrac(args, datfile):
     return density_frac
 
 def getContCorr(flux, fluxe, nb, nbe, filter='N501', extra_text=''):
+    ''' Calculate and plot narrow-band to line flux relation (since completeness and contamination is done with narrow-band fluxes but the luminosity function requires line fluxes)'''
     linear = odr.Model(flin)
     data = odr.Data(flux, nb, wd=1.0/fluxe**2, we=1.0/nbe**2)
     myodr = odr.ODR(data, linear, beta0=[1.5, 0.0])
@@ -440,6 +451,9 @@ def read_input_file(args):
 
         fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(densi); areas.append(areai[conda].sum())
         nbs.append(nb[cond_init][cond]); nbes.append(nbe[cond_init][cond])
+    # FluxesRaw = {'KeptFlux': flux[cond_init][cond], 'FaintFlux': flux[cond_init][~cond], 'BrightFlux': flux[nb>=flux_lim[i]], 'Fluxmin': fluxmin}
+    # pickle.dump(FluxesRaw, open(f'Figure1RawFluxes{args.filt_name}.pickle', 'wb'))
+    
     areas = np.array(areas)
     for i in range(numbins):
         weights[i] = areas[i]/areas.sum()
@@ -447,6 +461,7 @@ def read_input_file(args):
     return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf, density_frac, nbs, nbes
 
 def getVeffCombo(args=None, numtot=25):
+    ''' Do V/V_max method with several iterations of completeness and contamination (to consider uncertainties in those quantities) '''
     if args is None: args = parse_args()
     assert args.trans_only
     ecnum = 2
@@ -539,6 +554,9 @@ def main(args=None):
         if args.num_err>=0: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_{args.num_err}.pickle'), vgal_file_name.replace('.pickle', f'_{args.num_err}.pickle')
         print("Alls file name:", alls_file_name)
 
+        # ccorr = Table()
+        # ccorr['flux'], ccorr['flue_e'], ccorr['nb'], ccorr['nb_e'] = flux[i], flux_e[i], nb[i], nb_e[i]
+        # ccorr.write(f'FinalFluxes{args.filt_name}.dat', format='ascii', overwrite=True)
         beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=args.filt_name, extra_text=args.extra_text)
 
         if args.lum_min>0: minlum = args.lum_min

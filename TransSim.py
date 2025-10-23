@@ -1,3 +1,5 @@
+''' Derive corrections for transmission effects for the V/V_max method using the technique from the Sobral+18 (and related) papers '''
+
 import numpy as np 
 from uncertainties import unumpy, ufloat
 import matplotlib.pyplot as plt 
@@ -12,6 +14,7 @@ import configLF as C
 import os.path as op
 from distutils.dir_util import mkpath
 from astropy.table import Table
+import pickle
 from itertools import cycle
 import seaborn as sns
 sns.set_context("paper",font_scale=1.3) # options include: talk, poster, paper
@@ -77,6 +80,7 @@ def add_LumFunc_plot(ax1):
     ax1.minorticks_on()
 
 def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_dir=op.join('TransExp', 'VeffPlotsNew'), varying=0, filter='N501'):
+    ''' Compare luminosity functions (based on V/V_max method) for data without and with tranmsission effects considered '''
     mkpath(image_dir)
     fig, ax = plt.subplots()
     add_LumFunc_plot(ax)
@@ -87,6 +91,7 @@ def plotVeffComp(logLs, lfs, vars, delz, alpha, minlum_use, lc, ngal, bn, image_
     plt.close('all')
 
 def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp', lam_min=4400., lam_max=5500.):
+    ''' Plot transmission curve '''
     trans_dat = Table.read(file_name, format='ascii')
     lam, tra = trans_dat['lambda'], trans_dat['transmission']
     fig, ax = plt.subplots()
@@ -99,6 +104,7 @@ def plotTransCurve(file_name='N501_with_atm.txt', image_dir='TransExp', lam_min=
     fig.savefig(op.join(image_dir,f'TransCurve_{pn}.png'), bbox_inches='tight', dpi=150)
 
 def get1DComp(interp_comp, maghigh=19., maglow=30., magnum=25, distnum=100):
+    ''' Calculate completeness (just 1D for computational reasons, averaging over survey positional effects)'''
     maggrid = np.linspace(maghigh, maglow, magnum)
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(distnum))
@@ -112,17 +118,20 @@ def get1DComp(interp_comp, maghigh=19., maglow=30., magnum=25, distnum=100):
     return comps1df
 
 def calc_mags(logL, dL, wav_filt, filt_width):
+    ''' Calculate AB magnitudes from luminosities, luminosity distance(s), and filter properties'''
     lum = 10**logL
     flux_cgs = lum/(4.0*np.pi*(3.086e24*dL)**2)
     mags = L.cgs2magAB(flux_cgs, wav_filt, filt_width)
     return mags
 
 def calc_lum(mag, dL, wav_filt, filt_width):
+    ''' AB magnitude to luminosity '''
     flux = L.magAB2cgs(mag, wav_filt, filt_width)
     lum = flux * (4.0*np.pi*(3.086e24*dL)**2)
     return np.log10(lum)
 
 def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numlum=1000000, Lc=40.0, Lh=45.0, zc=3.125, maglow=30.0, corrf=None):
+    ''' Select a large number of galaxies from a uniform distribution in redshift and an assumed "true" luminosity function and account for effective completeness '''
     # zmin, zmax = (wavmin - C.wav_rest) / C.wav_rest, (wavmax - C.wav_rest) / C.wav_rest
     reds = np.random.uniform(zmin, zmax, numgal)
     logL = np.random.uniform(Lc, Lh, numlum)
@@ -138,6 +147,7 @@ def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numl
     return reds, lums, comps1df, dL
 
 def calc_new_lums(lums, reds, file_name='N501_with_atm.txt', interp_type='cubic', size_lprime=51):
+    ''' Calculate the observed luminosities based on the true luminosities of the sources (modified by completeness), their redshifts, and the filter transmission curve '''
     logLfuncz, delzfv2, _ = L.getRealLumRed(file_name, interp_type, C.wav_rest)
     _, _, delzf = L.getBoundsTransPDF(logL_width=8.0,wav_rest=C.wav_rest,num_discrete=size_lprime,file_name=file_name)
     logLs = logLfuncz(reds)
@@ -147,13 +157,8 @@ def calc_new_lums(lums, reds, file_name='N501_with_atm.txt', interp_type='cubic'
     # _, _, delzf = L.getBoundsTransPDF(logLs.max(), file_name=file_name)
     return lums - logLs, logLs, delzf, delzfv2
 
-def bin_lums(lums, binnum=10, minlum=41.5, maxlum=43.5):
-    bin_edges = np.linspace(minlum, maxlum, binnum+1)
-    bin_centers = np.array([(bin_edges[i]+bin_edges[i+1])/2.0 for i in range(binnum)])
-    hist, _ = np.histogram(lums, bin_edges)
-    return bin_centers, hist
-
 def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp', varying=0):
+    ''' Show "true" and transmission-corrected luminosity distributions of galaxies'''
     fig, ax = plt.subplots(ncols=2)
     ax[0].hist(lums, bins=bins, color='r', alpha=0.5, density=True, label='Drawn from TLF')
     ax[0].hist(lums_mod, bins=bins, color='b', alpha=0.5, density=True, label='Convolved')
@@ -169,12 +174,8 @@ def plot_hists(lums, lums_mod, delz, al, logL, bins=50, image_dir='TransExp', va
     fig.savefig(op.join(image_dir,f'LumTransEff_delz{delz:0.2f}_al{al}_var{varying}.png'), bbox_inches='tight', dpi=200)
     plt.close('all')
 
-def compareReds(r1, r2):
-    plt.hist(r1, bins=100, color='b', alpha=0.5)
-    plt.hist(r2, bins=100, color='r', alpha=0.5)
-    plt.show()
-
 def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varying=0, image_dir='TransExp', corrf=None):
+    ''' Calculate the luminosity function using the V/V_max method for selected galaxies (taken from a "true" luminosity function and modified based on effective completeness) through both a top-hat filter and the true filter. The ratio of these luminosity function results gives the filter corrections for the V/V_max method '''
     delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type, maglow = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type, args.maglow
     minlum = max(Lc, minlumorig)
     DL = V.cosmo.luminosity_distance(args.redshift).value
@@ -191,9 +192,7 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     # dL_full = cosmo.luminosity_distance(reds).value
     # minlums_accept = calc_lum(maglow, dL_full)
     minlum_use = calc_lum(maglow, dL, args.wav_filt, args.filt_width)
-    # bin_centers_orig, hist_orig = bin_lums(lums)
     lums_mod, logLs, delzf, delzfv2 = calc_new_lums(lums, reds, file_name=file_name, interp_type=interp_type)
-    # bin_centers, hist = bin_lums(lums_mod)
     condtf = lums_mod>=minlum_use
     plot_hists(lums[condth], lums_mod[condtf], delz, al, logLs, varying=varying)
     mkpath(image_dir)
@@ -209,7 +208,6 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     lumlist = [lums[condth], lums_mod[condtf]]
     distlist = [dists[condth], dists[condtf]]
     delReds = [args.del_red, args.delz_eff]
-    # compareReds(reds[condth], reds[condtf])
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
         lumobj = L.LumFuncMCMC(args.redshift, del_red=delReds[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use)
@@ -234,6 +232,7 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     return lumobj.Lavg, corr, minlum_use
 
 def plot_corr(bin_centers, corr, plotname, filtname, image_dir='TransExp', corre=None, lcs=None, bcs=None, corrfull=None, correfull=None, bcmf=43.6):
+    ''' Plot the filter corrections as a function of luminosity '''
     mkpath(image_dir)
     bcmin = np.inf
     bcmax = -np.inf
@@ -259,6 +258,7 @@ def plot_corr(bin_centers, corr, plotname, filtname, image_dir='TransExp', corre
     plt.close('all')
 
 def getOverallCorr(bcall, corrall, correall, num=1001):
+    ''' Combine results of different experiments (with different minimum luminosities to better populate the bright end) '''
     corrfs, correfs = [], []
     corrs, corres = np.zeros((len(bcall), num)), np.zeros((len(bcall), num))
     bcmin, bcmax = np.inf, -np.inf
@@ -284,6 +284,7 @@ def getOverallCorr(bcall, corrall, correall, num=1001):
     return bcs, corrfull, correfull
 
 def showAllCorr():
+    ''' Partnered with getOverallCorr and plot_corr to calculate and plot the corrections in all filters '''
     args = parse_args()
     filter, numgal, delz, varying = args.filt_name, args.numgal, args.delz, args.varying
     alpha_fixed = -1.6
@@ -305,6 +306,8 @@ def showAllCorr():
             if Lc==42.8: bc, co, coe = bc[:-1], co[:-1], coe[:-1]
         bcall.append(bc); corrall.append(co); correall.append(coe)
     bcs, corrfull, correfull = getOverallCorr(bcall, corrall, correall)
+    # cad = {'bcall': bcall, 'corrall': corrall, 'bcs': bcs, 'lcs': Lcvals, 'corre': correall, 'corrfull': corrfull, 'correfull': correfull}
+    # pickle.dump(cad, open(f'FilterCorr{filter}.pickle', 'wb'))
     corrdat = Table()
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
@@ -313,6 +316,7 @@ def showAllCorr():
     plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}_new.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
+    ''' Run code to get transmission experiment for a given filter and minimum luminosity '''
     args = parse_args()
     filter = args.filt_name
     image_dir = 'TransExp'
