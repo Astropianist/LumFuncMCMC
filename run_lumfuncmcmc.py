@@ -98,7 +98,11 @@ def parse_args(argv=None):
                         type=int, default=None)
 
     parser.add_argument("-o0", "--Omega_0",
-                        help='''Effective survey area in square arcseconds''',
+                        help='''Effective survey area in square degrees''',
+                        type=float, default=None)
+    
+    parser.add_argument("-fu", "--frac_use",
+                        help='''Fraction of survey area actually not covered by masks''',
                         type=float, default=None)
 
     parser.add_argument("-mcf", "--min_comp_frac",
@@ -216,6 +220,8 @@ def parse_args(argv=None):
     # Initialize arguments and log
     args = parser.parse_args(args=argv)
     args.log = setup_logging()
+
+    if args.Omega_0 is not None: args.Omega_0 *= 3600**2 #Convert from deg^2 to arcsec^2
 
     # Use config values if none are set in the input
     arg_inputs = ['nwalkers','nsteps','nbins','nboot','line_name','line_plot_name','Omega_0','sch_al','sch_al_lims','Lstar','Lstar_lims','phistar','phistar_lims','Lc','Lh','min_comp_frac','param_percentiles','output_dict','field_name', 'del_red', 'redshift', 'maglow', 'maghigh', 'wav_filt', 'filt_width', 'lum_lim', 'filt_name', 'wav_rest', 'trans_file', 'corr_file', 'alnum', 'lsnum', 'T_EL', 'contam_lim', 'contambin', 'contam_type', 'logL_width', 'lum_min', 'frac_use']
