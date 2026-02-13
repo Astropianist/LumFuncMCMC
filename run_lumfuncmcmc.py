@@ -233,6 +233,7 @@ def parse_args(argv=None):
     if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 3.124, 5014.0, 77.17, -0.2352
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 2.449, 4193.0, 75.46, -0.2876
     else: args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 4.552, 6750.0, 101.31, -0.2138
+    if args.field_name.lower() == 'xmm_lss': args.aper_corr = 0.0
     args.del_red = args.filt_width / args.wav_rest
     args.trans_file = f'{args.filt_name}_Nicole.txt'
     delz = args.del_red * 1.5
