@@ -878,7 +878,7 @@ class LumFuncMCMC:
             fcn = self.trans_vals[:,None,None] * flux_cgs[None]
             mags = cgs2magAB(fcn, self.wav_filt, self.filt_width)
             comps = self.interp_comp_simp.ev(rs[None,:,None], mags)
-            comps[comps<self.min_comp_frac] = 0.0
+            # comps[comps<self.min_comp_frac] = 0.0
             
             for i in range(alnum):
                 # time1 = time()
@@ -918,7 +918,7 @@ class LumFuncMCMC:
             flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
             mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
             comps = self.interp_comp_simp.ev(rs[:,None], mags)
-            comps[comps<self.min_comp_frac] = 0.0
+            # comps[comps<self.min_comp_frac] = 0.0
             
             for i in range(alnum):
                 # time1 = time()

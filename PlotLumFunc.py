@@ -87,7 +87,7 @@ def getIntegInfo(fitpost, rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
 def getIntegInfoProto(fitpostprotorig, zs=[2.4, 3.1, 4.5], rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
     ''' Same as getIntegInfo but considering protoclusters vs non-protoclusters '''
     fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fppo[1][-1] = fppo[1][-1].replace('nw200_ns5000', 'nw250_ns7000')
+    fppo[2][-1] = fppo[2][-1].replace('nw200_ns5000', 'nw250_ns6000')
     # fppo[2] = [fppo[2][i].replace('contam_0.5', 'contam_0.53') for i in range(len(fppo[2]))]
     fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
     fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
@@ -145,7 +145,7 @@ def getnsamples(samples, lnprobcut=7.5):
 def getProtoFiles(fitpostprotorig):
     ''' Read protocluster posterior sample files to get samples '''
     fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fppo[1][-1] = fppo[1][-1].replace('nw200_ns5000', 'nw250_ns7000')
+    fppo[2][-1] = fppo[2][-1].replace('nw200_ns5000', 'nw250_ns6000')
     # fppo[2] = [fppo[2][i].replace('contam_0.5', 'contam_0.53') for i in range(len(fppo[2]))]
     fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
     fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
@@ -196,7 +196,7 @@ def plotLsalProt(fitpostprotorig, reds, cmap_len=256, sigma=1.0):
     ax2.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
     ax2.set_xlabel(r'log L$_*$')
     plt.tight_layout()
-    fig.savefig('COSMOS_Proto_Lsal_comp_corrn.png', bbox_inches='tight', dpi=300)
+    fig.savefig('XMM_Proto_Lsal_comp_corrn.png', bbox_inches='tight', dpi=300)
 
 def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     ''' Plot protoclusters vs non-protocluster luminosity functions in multiple redshifts, along with ratios in a bottom panel '''
@@ -233,7 +233,7 @@ def plotProtoEvol(fitpostprotorig, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.
         xticks = ax[1,i].xaxis.get_major_ticks()
         xticks[0].label1.set_visible(False)
     # plt.tight_layout()
-    fig.savefig("CosmicEvolCOSMOS_PCcorrsnew_subpanel.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolXMM_PCcorrsnew_subpanel.png", bbox_inches='tight', dpi=300)
 
 def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5, only_integ=False):
     ''' Plot comparison of Schechter parameters and integral for protoclusters vs not '''
@@ -274,7 +274,7 @@ def plotProtoEvolProp(fitpostprotorig, reds, dzs, sa=-1.6, llow=42.5, only_integ
     ax2.tick_params(labelcolor='none', which='both', top=False, bottom=False, left=False, right=False)
     ax2.set_xlabel('Redshift')
     plt.tight_layout()
-    fig.savefig("CosmicEvolCOSMOSPropcorrsnewn4col.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolXMMPropcorrsnewn4col.png", bbox_inches='tight', dpi=300)
 
 def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     ''' Plot cosmic evolution of luminosity function '''
@@ -296,7 +296,7 @@ def plotEvolution(fitpostfs, reds, Lmin=42.0, Lmax=43.5, Lnum=1001, sa=-1.6):
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig("CosmicEvolCOSMOS_corrsnew.png", bbox_inches='tight', dpi=300)
+    fig.savefig("CosmicEvolXMM_corrsnew.png", bbox_inches='tight', dpi=300)
 
 def plotDensityEvol(fit_names_orig, reds, dens_vals, Lmin=42.0, Lmax=43.5, Lnum=1001, ymin=1.0e-6, ymax=3.0e-2, sa=-1.6):
     ''' Plot density evolution of luminosity function in different redshifts '''
@@ -407,7 +407,7 @@ def plotStuffNew(fitpostfs, reds, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fi
     ax[0].set_ylim(ymin, ymax)
     plt.tight_layout()
     
-    fig.savefig("FullLitCompcorrsnew_vf.png", bbox_inches='tight', dpi=300)
+    fig.savefig("FullLitCompcorrsnew_vf_xmm.png", bbox_inches='tight', dpi=300)
 
 def plotLumFuncStd(logL, lfs_new, lfs_old, filter, numtot=25, Lmin=42.0, Lmax=43.8, rndsamples=50, ymin=5.0e-7, ymax=3.0e-2, rndfac=5, sobfile='sty378_supp/SC4K_full_LFs_Table_C1.fits', sobothers='sty378_supp/SSC4K_compilation_Table_C2.fits', sobkeys=['IA427 ($z=2.5$)', 'IA505 ($z=3.2$)', 'IA679 ($z=4.6$)'], maxdiff=0.21, stdver=0):
     '''Experiment with effects of uncertainties of completeness and contamination on luminosity function and its uncertainty '''
@@ -540,14 +540,14 @@ def schechter(L, al, phistar, Lstar):
 
 def NewProc():
     ''' Primary code to run all of the pertinent code above to create plots '''
-    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10om09', 'N419_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10om09_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10om09', 'N501_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10om09_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
-    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4om09', 'N673_new_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4om09_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10xmmrun', 'N419_xmm_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10xmmrun_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10xmmrun', 'N501_xmm_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10xmmrun_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
+    fits_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4xmmrun', 'N673_xmm_all_fitposterior_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4xmmrun_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1.dat')
 
-    veffnc_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam', 'N419_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
-    veffnc_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam', 'N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
-    veffnc_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4nocontam', 'N673_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
-    veffdats = [Table.read(veffnc_z24, format='ascii'), Table.read(veffnc_z31, format='ascii'), Table.read(veffnc_z45, format='ascii')]
+    # veffnc_z24 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam', 'N419_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
+    # veffnc_z31 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam', 'N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
+    # veffnc_z45 = op.join('LFMCMCOdin', 'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4nocontam', 'N673_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.68_cb4nocontam_nb50_nw200_ns5000_mcf50_ec_2_env0_bin1_c1.dat')
+    # veffdats = [Table.read(veffnc_z24, format='ascii'), Table.read(veffnc_z31, format='ascii'), Table.read(veffnc_z45, format='ascii')]
 
     # fits_z24 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N419_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw120_ns2000_mcf50_ec_2_env0_bin1.dat')
     # fits_z31 = op.join('LFMCMCOdin', 'ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn', 'N501_new_all_fitposterior_ODIN_fsa1_sa-1.60_mcf50_ll45.0_ec2_contam_0.5_cb10corrsn_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1.dat')
@@ -556,8 +556,8 @@ def NewProc():
     reds = [2.4, 3.1, 4.5]
     # plotEvolution([fits_z24, fits_z31, fits_z45], reds)
     plotProtoEvol([fits_z24, fits_z31, fits_z45], reds)
-    # plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5)
-    # plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.32, 43.45, 43.67], llims_low=[42.20, 42.36, 42.50], veffdats=veffdats)
+    plotProtoEvolProp([fits_z24, fits_z31, fits_z45], reds, dzs=[0.062, 0.063, 0.083], llow=42.5)
+    # plotStuffNew([fits_z24, fits_z31, fits_z45], reds, llims=[43.32, 43.45, 43.67], llims_low=[42.20, 42.36, 42.50])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.34, 2.16, 3.2, 12.22], [0, 1.49, 2.17, 3.18, 9.53], [0, 1.74, 2.79, 4.17, 15.41]])
     # plotDensityEvol([fits_z24, fits_z31, fits_z45], reds, [[0, 1.59, 2.78, 12.22], [0, 1.70, 2.77, 9.53], [0, 2.07, 3.63, 15.41]])
     # getIntegInfo(fits_z24, llow=42.5)
@@ -565,7 +565,7 @@ def NewProc():
     # getIntegInfo(fits_z45, llow=42.5)
     # plotLLComp(dat_z45)
 
-    # plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
+    plotLsalProt([fits_z24, fits_z31, fits_z45], reds)
 
 def plotMultVeff(*filenames):
     ''' Plot multiple V/V_max results '''
@@ -589,7 +589,39 @@ def plotMultVeff(*filenames):
     fig.savefig(f'VeffComp_{namefull}.png', bbox_inches='tight', dpi=300)
     plt.close('all')
 
+def plotDiffFields(fit1, fit2, filter, f1='COSMOS', f2='XMM-LSS', Lmin=42.0, Lmax=43.5, Lnum=1001):
+    logL = np.linspace(Lmin, Lmax, Lnum)
+    samples = []
+    for fpf in [fit1, fit2]:
+        dat = Table.read(fpf,format='ascii')
+        samples.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
+        del dat
+    fig, ax = plt.subplots()
+    add_LumFunc_plot(ax)
+    for sampi, fi in zip(samples, [f1, f2]):
+        coli = next(orig_palette)
+        nsamples = getnsamples(sampi)
+        lf, lfbest = getSamples(logL, nsamples)
+        ax.plot(logL, lfbest, linestyle='-', color=coli, label=fi)
+        for lfi in lf:
+            ax.plot(logL, lfi, linestyle='-', color=coli, alpha=0.05, label='')
+    ax.set_xlim(Lmin, Lmax)
+    ax.set_ylim(1.0e-6, 3.0e-2)
+    ax.legend(loc='best', frameon=False)
+    fig.savefig(f"LFComp_{f1}_{f2}_{filter}.png", bbox_inches='tight', dpi=300)
+    plt.close('all')
+
+def getDiffFields(filter):
+    if filter=='N673': cl, cb = 0.68, 4
+    else: cl, cb = 0.5, 10
+    base_dir = 'LFMCMCOdin'
+    next_dir_base = f'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_{cl}_cb{cb}'
+    base1, base2 = 'om09', 'xmmrun'
+    fit1, fit2 = glob(op.join(base_dir, next_dir_base+base1, f'{filter}*fitp*.dat'))[0], glob(op.join(base_dir, next_dir_base+base2, f'{filter}*fitp*.dat'))[0]
+    plotDiffFields(fit1, fit2, filter=filter)
+
 if __name__ == '__main__':
-    NewProc()
+    # NewProc()
     # plotMultVeff('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata/N501_new_trial_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata_nb50_nw200_ns4000_mcf50_ec_2_env0_bin1_c1.dat', 'LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew/N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1_c1.dat')
     # plotLumFuncCombo('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10lumminnv')
+    getDiffFields(filter='N673')

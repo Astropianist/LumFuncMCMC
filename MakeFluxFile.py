@@ -251,5 +251,5 @@ def main(filter='N501', field='Cosmos'):
     dat.write(f'Lya{filter}{field}Fluxes.dat', format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main('N501', field='XMMLSS')
+    main('N673', field='XMMLSS')
     # getIntRem('N419')

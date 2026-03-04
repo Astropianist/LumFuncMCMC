@@ -276,9 +276,9 @@ def test_funcs(func=doubpv2, p0=(-1.0, 40.0, -3.0, 42.5)):
     ''' Just testing double power law on fitting the luminosity function; the new contamination method removes the need for this as the Schechter curve fits well '''
     args = parse_args()
     dir_name_first = 'LFMCMCOdin'
-    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec2_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_ml{args.lum_min}_ll{args.lum_lim}_ec2_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
     dir_name = op.join(dir_name_first, output_filename)
-    vfile = '%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), 2, args.environment, 1, args.corr)
+    vfile = '%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, 2, args.environment, 1, args.corr)
     dat = Table.read(vfile, format='ascii')
     lum, lf, lfe = dat['Luminosity'], dat['BinLF'], dat['BinLFErr']
     loglf = np.log10(lf)
@@ -473,7 +473,7 @@ def getVeffCombo(args=None, numtot=25):
     assert args.trans_only
     ecnum = 2
     dir_name_first = 'LFMCMCOdin'
-    output_filename_orig = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    output_filename_orig = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_ml{args.lum_min}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
     i = 0
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -488,8 +488,8 @@ def getVeffCombo(args=None, numtot=25):
     for j in range(numtot):
         args.num_err = j
         flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e = read_input_file(args)
-        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
 
         beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=args.filt_name, extra_text=args.extra_text)
 
@@ -508,7 +508,7 @@ def getVeffCombo(args=None, numtot=25):
     output_filename = output_filename_orig + '_combo'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
-    T.write('%s/%s_VeffLF_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr),
+    T.write('%s/%s_VeffLF_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr),
             overwrite=True, format='ascii.fixed_width_two_line')
     print("Finished writing VeffLF file")
 
@@ -527,10 +527,10 @@ def main(args=None):
     elif args.norm_only: ecnum = 3
     else: ecnum = 0
     dir_name_first = 'LFMCMCOdin'
-    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_ml{args.lum_min}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}'
     if args.top_hat: output_filename += '_th'
     if args.num_err>=0: output_filename += f'_{args.num_err}'
-    # if args.filt_name=='N673': output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_mcf{int(100*args.min_comp_frac)}_ll{args.lum_lim}_ec{ecnum}'
+    # if args.filt_name=='N673': output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_ml{args.lum_min}_ll{args.lum_lim}_ec{ecnum}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
     
@@ -555,8 +555,8 @@ def main(args=None):
             for kk in range(k+1, len(flux)):
                 print(f"For k={k} and kk={kk}:", ks_2samp(flux[k], flux[kk]))
     for i in range(len(flux)):
-        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
-        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
+        alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
+        vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}.pickle'
         if args.top_hat: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_th.pickle'), vgal_file_name.replace('.pickle', f'_th.pickle')
         if args.num_err>=0: alls_file_name, vgal_file_name = alls_file_name.replace('.pickle', f'_{args.num_err}.pickle'), vgal_file_name.replace('.pickle', f'_{args.num_err}.pickle')
         print("Alls file name:", alls_file_name)
@@ -578,9 +578,9 @@ def main(args=None):
             else: als, lss, likes = LFmod.calclikeLsal(alnum=args.alnum, lsnum=args.lsnum)
             alls_output = {}
             alls_output['Alphas'], alls_output['Lstars'], alls_output['likelihoods'] = als, lss, likes
-            # pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_env{args.environment}_bin{i}.pickle', 'wb'))
+            # pickle.dump(alls_output, open(f'Likes_alls_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_fl{args.flux_lim}_env{args.environment}_bin{i}.pickle', 'wb'))
 
-            # alls_input = pickle.load(open(f'Likes_alls_field{args.field_name}_z{args.redshift}_mcf{args.min_comp_frac}_fl{args.flux_lim}_better.pickle', 'rb'))
+            # alls_input = pickle.load(open(f'Likes_alls_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_fl{args.flux_lim}_better.pickle', 'rb'))
             pickle.dump(alls_output, open(alls_file_name, 'wb'))
             continue
         if args.vgal:
@@ -600,27 +600,27 @@ def main(args=None):
                 if args.environment==1: labels_env.append(fr'{dens_vals[i]:0.2f} $\leq \sigma <$ {dens_vals[i+1]:0.2f}')
                 else: labels_env.append(f'Protocluster: {i}')
                 continue
-            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'], varying=args.varying)
+            LFmod.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'], varying=args.varying)
             if args.output_dict['VeffLF']:
                 T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                             names=['Luminosity', 'BinLF', 'BinLFErr'])
-                T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr),
+                T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr),
                         overwrite=True, format='ascii.fixed_width_two_line')
                 print("Finished writing VeffLF file")
             continue
 
         # If the run has already been completed and there is a fitposterior file, don't bother with fitting everything again
-        fn = '%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1)
+        fn = '%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1)
         if op.isfile(fn):
             dat = Table.read(fn,format='ascii')
             LFmod.samples = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
             if args.output_dict['triangle plot']:
-                LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
+                LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
                 print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
             else:
                 LFmod.set_median_fit()
                 print("Finished setting median fit and V_eff parameters")
-            # LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
+            # LFmod.triangle_plot('%s/triangle_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1), imgtype = args.output_dict['image format'])
             if args.environment: 
                 lavg.append(LFmod.Lavg); lfbinorig.append(LFmod.lfbinorig); var.append(LFmod.var); minlums.append(LFmod.minlum)
                 lumlf.append(LFmod.lum); bestlf.append(LFmod.medianLF)
@@ -628,7 +628,7 @@ def main(args=None):
                 else: labels_env.append(f'Protocluster: {i}')
             # T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
             #             names=['Luminosity', 'BinLF', 'BinLFErr'])
-            # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_mcf%d.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac)),
+            # T.write('%s/VeffLF_%s_nb%d_nw%d_ns%d_ml%0.2f.dat' % (dir_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min),
             #         overwrite=True, format='ascii.fixed_width_two_line')
             # print("Finished writing VeffLF file")
             continue
@@ -653,7 +653,7 @@ def main(args=None):
         print("Finished fitting model and about to create outputs")
         #### Get desired outputs ####
         if args.output_dict['triangle plot']:
-            LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
+            LFmod.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'])
             print("Finished making Triangle Plot with Best-fit LF (and V_eff-method-based data)")
         else:
             LFmod.set_median_fit()
@@ -661,19 +661,19 @@ def main(args=None):
         names.append('Ln Prob')
         if args.output_dict['fitposterior']: 
             T = Table(LFmod.samples, names=names)
-            T.write('%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1),
+            T.write('%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1),
                     overwrite=True, format='ascii.fixed_width_two_line')
             print("Finished writing fitposterior file")
         if args.output_dict['bestfitLF']:
             T = Table([LFmod.lum, LFmod.lum_e, LFmod.medianLF],
                         names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
-            T.write('%s/%s_bestfitLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1),
+            T.write('%s/%s_bestfitLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1),
                     overwrite=True, format='ascii.fixed_width_two_line')
             print("Finished writing bestfitLF file")
         if args.output_dict['VeffLF']:
             T = Table([LFmod.Lavg, LFmod.lfbinorig, np.sqrt(LFmod.var)],
                         names=['Luminosity', 'BinLF', 'BinLFErr'])
-            T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, i+1, args.corr),
+            T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr),
                     overwrite=True, format='ascii.fixed_width_two_line')
             print("Finished writing VeffLF file")
 
@@ -701,7 +701,7 @@ def main(args=None):
             print("Finished writing settings to file")
     
     if args.environment:
-        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlums, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_mcf%d_ec_%d_env%d_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, int(100*args.min_comp_frac), ecnum, args.environment, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
+        LFmod.plotVeffEnv(lavg, lfbinorig, var, minlums, labels_env, '%s/%s_Veff_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_split_%d_c%d_bins' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, args.num_env_bins, args.corr), imgtype=args.output_dict['image format'], lflums=lumlf, lfs=bestlf)
 
 if __name__ == '__main__':
     args = parse_args()
