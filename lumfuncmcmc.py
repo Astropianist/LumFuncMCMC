@@ -364,6 +364,47 @@ def makeCompFunc(DL, file_name='cosmos_completeness_grid_extrap.pickle', binnum=
     plot_Comp(interp_comp_simp, mag, comp, dist, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max)
     return interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf
 
+def makeCompFuncMag(DL, file_name='shela_completeness_n501_region1.pickle', binnum=5, filter='N501', contam_lim=0.01, contam_type='L_LCA', density_frac=1.0, use_contam=True, aper_corr=0.0, interp_type='linear', label='', mag_min=28., mag_max=20., wave=1215.67, dwave=73.0):
+    ''' Determine a magnitude-only effective completeness curve.
+
+    The pickle file should contain two 1D arrays:
+      - magnitude: one of [Mags, mag, mags, Magnitude]
+      - completeness: one of [Comp, comp, Completeness, completeness]
+    '''
+    with open(file_name,'rb') as f:
+        dat = pickle.load(f)
+
+    mag_key, comp_key = None, None
+    for key in ['Mags', 'mag', 'mags', 'Magnitude']:
+        if key in dat:
+            mag_key = key
+            break
+    for key in ['Comp', 'comp', 'Completeness', 'completeness']:
+        if key in dat:
+            comp_key = key
+            break
+    if mag_key is None or comp_key is None:
+        raise KeyError(f'Could not find magnitude/completeness keys in {file_name}')
+
+    mag = np.array(dat[mag_key][:-1], dtype=float) + aper_corr
+    comp = np.array(dat[comp_key][:-1], dtype=float)
+    inds = np.argsort(mag)
+    mag, comp = mag[inds], comp[inds]
+
+    comp_orig = interp1d(mag, comp, kind=interp_type, bounds_error=False, fill_value=(comp[0], comp[-1]))
+    if use_contam:
+        cf, chf, clf, nbcontam = getContamination(filter=filter, binnum=binnum, contam_lim=contam_lim, contam_type=contam_type, density_frac=density_frac, mag_corr=0.0)
+        comp_use_arr = comp / cf(mag)
+        comp_use_arr[mag<nbcontam] = comp[mag<nbcontam] / contam_lim
+    else:
+        nbcontam, cf = -99.0, None
+        comp_use_arr = comp
+    comp_use_arr = np.clip(comp_use_arr, 0.0, 1.0e3)
+    comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], comp_use_arr[-1]))
+    # comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], 0.0))
+    plot_Comp(comp_use, mag, comp, None, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max, label=label)
+    return comp_use, comp_orig, comp_use, nbcontam, cf
+
 def cgs2magAB(cgs, wave, dwave):
     ''' cgs flux to AB magnitude conversion '''
     Flam = cgs/dwave
@@ -439,26 +480,30 @@ def normalFunc(x,mu,sig):
     ''' Normal probability distribution function '''
     return 1.0/(np.sqrt(2.0*np.pi)*sig) * np.exp(-(x-mu)**2/(2.0*sig**2))
 
-def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=1215.67, dwave=73.0):
+def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=1215.67, dwave=73.0, label=''):
     ''' Plot (effective) completeness curve '''
     magarr = np.linspace(mag_min, mag_max, 31)
     cgs = magAB2cgs(magarr, wave=wave, dwave=dwave)
     lumarr = cgs2lum(cgs, DL)
     lumvals = cgs2lum(magAB2cgs(mag, wave=wave, dwave=dwave), DL)
-    cmap = plt.cm.plasma
-    norm = plt.Normalize(vmin=dist.min(), vmax=dist.max())
-    colors = cmap(norm(dist))
     fig, ax = plt.subplots(figsize=(6,6))
-    for i, d in enumerate(dist):
-        # ax.scatter(lumvals, comp[i], c=colors[i], s=10)
-        ax.plot(lumarr, compf.ev(d, magarr), color=colors[i])
+    if dist is not None:
+        cmap = plt.cm.plasma
+        norm = plt.Normalize(vmin=dist.min(), vmax=dist.max())
+        colors = cmap(norm(dist))
+        for i, d in enumerate(dist):
+            # ax.scatter(lumvals, comp[i], c=colors[i], s=10)
+            ax.plot(lumarr, compf.ev(d, magarr), color=colors[i])
+    else:
+        ax.plot(lumarr, compf(magarr), 'b-', label=label)
+        ax.legend(loc='best')
     ax.set_yscale('log')
     ax.set_xlim(lumarr.min(), lumarr.max())
     ax.set_ylim(1.0e-3, 2.2)
-    # ax.legend(loc='best',fontsize='x-small')
-    cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
-    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
-    cb.set_label('Distance from center (arcmin)', fontsize='large')
+    if dist is not None:
+        cbar_ax = fig.add_axes([0.9, 0.15, 0.05, 0.7])
+        cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+        cb.set_label('Distance from center (arcmin)', fontsize='large')
     ax.set_xlabel(r'Log Luminosity (erg s$^{-1}$)', fontsize='large')
     ax.set_ylabel('Effective Completeness', fontsize='large')
     fig.savefig(f'{fn}_EffComp.png',bbox_inches='tight',dpi=300)
@@ -467,7 +512,7 @@ def plot_Comp(compf, mag, comp, dist, DL, fn, mag_min=28., mag_max=20., wave=121
 
 class LumFuncMCMC:
     ''' A class to facilitate the calculation of the luminosity function given input fluxes and other information '''
-    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0], extra_text='', frac_use=1.0):
+    def __init__(self, z, del_red=None, flux=None, flux_e=None, nb=None, nb_e=None, line_name="OIII", line_plot_name=r'[OIII] $\lambda 5007$', lum=None, lum_e=None, Omega_0=43200., nbins=50, nboot=100, sch_al=-1.6, sch_al_lims=[-3.0,1.0], Lstar=42.5, Lstar_lims=[40.0,45.0], phistar=-3.0, phistar_lims=[-8.0,5.0], Lc=40.0, Lh=46.0, nwalkers=100, nsteps=1000, fix_sch_al=False, min_comp_frac=0.5, diff_rand=True, field_name='COSMOS', interp_comp=None, interp_comp_simp=None, interp_comp_simp_orig=None, dist_orig=None, dist=None, maglow=26.0, maghigh=19.0, magnum=25, distnum=100, comps=None, size_ln=1001, wav_filt=5015.0, filt_width=73.0, binned_stat_num=50, err_corr=False, wav_rest=1215.67, size_ln_conv=41, size_lprime=51, logL_width=2.0, trans_only=False, norm_only=False, trans_file='N501_Nicole.txt', maxlum=None, minlum=None, transsim=False, corrf=None, corref=None, flux_lim=15.0, T_EL=1.0, alls_file_name=None, vgal_file_name=None, weight=None, contam_lim=0.01, contambin=5, cgscontam=1.0, cf=None, contam_type='L_LCA', varying=False, density_frac=1.0, aper_corr=0.0, beta=[1.0, 0.0], extra_text='', frac_use=1.0, minlum2=None, frac1=1.0, frac2=None, comps2=None, interp_comp_simp2=None, comp_region=None):
         ''' Initialize LumFuncMCMC class
 
         Init
@@ -549,14 +594,18 @@ class LumFuncMCMC:
         self.field_name = field_name
         self.dist, self.dist_orig, self.distnum = dist, dist_orig, distnum
         self.maglow, self.maghigh, self.magnum = maglow, maghigh, magnum
-        self.comps, self.size_ln, self.wav_filt = comps, size_ln, wav_filt
+        self.comps, self.size_ln, self.wav_filt, self.comps2 = comps, size_ln, wav_filt, comps2
+        self.interp_comp_simp2 = interp_comp_simp2
+        self.comp2df = None
+        self.comp_region = comp_region
         self.size_ln_conv, self.size_lprime = size_ln_conv, size_lprime
         self.filt_width, self.binned_stat_num = filt_width, binned_stat_num
         self.err_corr, self.wav_rest, self.logL_width = err_corr, wav_rest, logL_width
         self.trans_only, self.norm_only = trans_only, norm_only
         self.transf, self.logL_discrete, self.delzf = getBoundsTransPDF(logL_width=self.logL_width,wav_rest=self.wav_rest,num_discrete=self.size_lprime,file_name=trans_file)
         # self.filt_width_eff = self.del_red_eff * self.wav_rest
-        self.maxlum, self.minlum, self.transsim = maxlum, minlum, transsim
+        self.maxlum, self.minlum, self.transsim, self.minlum2 = maxlum, minlum, transsim, minlum2
+        self.frac1, self.frac2 = frac1, frac2
         self.corrf, self.corref = corrf, corref
         self.flux_lim = flux_lim*1.0e-17 #In cgs
         self.logLfuncz, self.delzfv2, self.ztmax = getRealLumRed(file_name=trans_file, wav_rest=self.wav_rest, delznum=self.size_lprime)
@@ -633,17 +682,21 @@ class LumFuncMCMC:
         # distgrid = np.sort(np.random.choice(self.dist_orig, size=self.distnum))
         self.distgrid = np.linspace(self.dist_orig.min(), self.dist_orig.max(), num=self.distnum)
         self.distg, self.magg = np.meshgrid(self.distgrid, self.maggrid, indexing='ij')
-        comps = self.interp_comp_simp.ev(self.distg, self.magg)
-        cond = self.comps<=self.min_comp_frac + compcut
-        minlums = cgs2lum(self.flux[cond], self.DL)
-        if self.minlum is None:
-            self.minlum = np.median(minlums)
-            inds = np.argsort(self.dist[cond])
-            distuse = self.dist[cond][inds]
-            self.minlumf = interp1d(distuse, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
-        else: self.minlumf = lambda x: self.minlum*np.ones_like(x)
-        comp_avg_dist = np.average(comps,axis=0)
-        self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
+        if self.interp_comp_simp2 is None:
+            comps = self.interp_comp_simp.ev(self.distg, self.magg)
+            cond = self.comps<=self.min_comp_frac + compcut
+            minlums = cgs2lum(self.flux[cond], self.DL)
+            if self.minlum is None:
+                self.minlum = np.median(minlums)
+                inds = np.argsort(self.dist[cond])
+                distuse = self.dist[cond][inds]
+                self.minlumf = interp1d(distuse, minlums, fill_value=(minlums[0], minlums[-1]), bounds_error=False)
+            else: self.minlumf = lambda x: self.minlum*np.ones_like(x)
+            comp_avg_dist = np.average(comps,axis=0)
+            self.comp1df = interp1d(self.maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
+        else:
+            self.comp1df = self.interp_comp_simp
+            self.comp2df = self.interp_comp_simp2
         self.comps1d = self.comp1df(self.mags)
         self.Omega_arr = self.weight * Omega(self.lum,self.DL,self.comps,self.Omega_0,self.wav_filt,self.filt_width)
         self.logL = np.linspace(self.minlum,self.Lh,self.size_ln)
@@ -678,7 +731,10 @@ class LumFuncMCMC:
         ########### Things for new version of transmission convolution ###########
         cgs = lum2cgs(self.logL, self.DL)
         mags = cgs2magAB(cgs, self.wav_filt, self.filt_width)
-        self.Omega_full = self.Omega_0_sr * np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
+        if hasattr(self.interp_comp_simp, 'ev'):
+            self.Omega_full = self.Omega_0_sr * np.average(self.interp_comp_simp.ev(self.dist[:,None], mags), axis=0)
+        else:
+            self.Omega_full = self.Omega_0_sr * self.comp1df(mags)
         self.trans_vals = 10**(-self.logLfuncz(self.zarr)) / self.T_EL
         self.trans_mult = self.trans_vals * self.dVdzs
         # self.ptransmult = self.Omega_0_sr * self.comps_full[:,None] * self.trans_mult
@@ -770,6 +826,8 @@ class LumFuncMCMC:
 
     def calclikeLsal(self, alnum=50, lsnum=50):
         ''' Get log likelihood values for the alpha and L* parameters (shape part of the luminosity function) on a grid'''
+        if self.comp_region is not None or (hasattr(self, 'comp2df') and self.comp2df is not None):
+            return self.calclikeLsalShela(p=self.comp_region, alnum=alnum, lsnum=lsnum)
         self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
         self.Lmed = (bin_edges[:-1] + bin_edges[1:])/2.0
         als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
@@ -813,6 +871,63 @@ class LumFuncMCMC:
                 #     self.plotPracLumFunc(truenorm, phimednorm, phiobsuse, als[i], lss[j], likes[i,j])
         return als, lss, likes
 
+    def calclikeLsalShela(self, p=None, alnum=50, lsnum=50):
+        ''' Get log likelihood values for alpha and L* for the non-circular (SHELA) completeness model.
+
+        Parameters
+        ----------
+        p : array-like of bool/int
+            Region membership per source. False/0 uses completeness function 1;
+            True/1 uses completeness function 2.
+        '''
+        self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
+        self.Lmed = (bin_edges[:-1] + bin_edges[1:])/2.0
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+
+        if p is None:
+            p = self.comp_region
+        if p is None:
+            p = np.zeros(self.lum.size, dtype=bool)
+        else:
+            p = np.asarray(p).astype(bool)
+            if p.size != self.lum.size:
+                raise ValueError("Length of region array p must match number of sources.")
+
+        flux_cgs_orig = lum2cgs(self.logL, self.DL)
+        flux_cgs = flin(self.beta, flux_cgs_orig)
+        cond_bad = flux_cgs < flux_cgs_orig
+        flux_cgs[cond_bad] = flux_cgs_orig[cond_bad]
+        mags = cgs2magAB(flux_cgs, self.wav_filt, self.filt_width)
+
+        # Region-1 completeness curve (required)
+        if self.comp1df is None:
+            raise ValueError("self.comp1df is not set. Build region-1 completeness before calling calclikeLsalShela.")
+        compgrid1 = self.comp1df(mags)
+
+        # Region-2 completeness curve (fallback to region-1 if not supplied)
+        if hasattr(self, 'comp2df') and self.comp2df is not None:
+            compgrid2 = self.comp2df(mags)
+        else:
+            compgrid2 = compgrid1
+
+        compgrid = np.where(p[:,None], compgrid2[None,:], compgrid1[None,:])
+
+        ldo = self.lum.size
+        likes = np.zeros((alnum, lsnum))
+        for i in range(alnum):
+            print(f"Got to i={i} in main al ls loop")
+            for j in range(lsnum):
+                tlf = TrueLumFuncNoPhi(self.logL_trans_integ, als[i], lss[j])
+                phimed = trapezoid(tlf*self.trans_conv[None], self.logL_trans_integ, axis=1)
+                phiobs = compgrid * phimed
+                phiobsnorm = phiobs / trapezoid(phiobs, self.logL, axis=1)[:,None]
+                likeij = np.zeros(ldo)
+                for k in range(ldo):
+                    likeij[k] = np.interp(self.lum[k], self.logL, phiobsnorm[k])
+                likes[i,j] = np.log(likeij).sum()
+        return als, lss, likes
+
     def calclikeLsalTH(self, alnum=50, lsnum=50):
         ''' Calculate alpha, L* likelihood with a perfect top-hat filter '''
         self.normhist, bin_edges = np.histogram(self.lum, bins=self.nbins, density=True)
@@ -849,6 +964,8 @@ class LumFuncMCMC:
     
     def calcVgalPhistar(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
         ''' Calculate number of observed galaxies predicted by Schechter parameters if phi* = 1 (log phi* = 0)'''
+        if self.frac2 is not None or (hasattr(self, 'comp2df') and self.comp2df is not None):
+            return self.calcVgalPhistarShela(alnum=alnum, lsnum=lsnum, rnum=rnum, exceed=exceed)
         fac_sr_to_arcmin = np.pi / 180. / 60.
         integ_mult = 2 * np.pi * fac_sr_to_arcmin**2
         # self.getminlum_z_func()
@@ -928,6 +1045,64 @@ class LumFuncMCMC:
                 # time2 = time()
                 # print(f"Time to go through one vgal calculation: {time2-time1}")
                 # breakpoint()
+        return als, lss, vgal
+
+    def calcVgalPhistarShela(self, alnum=50, lsnum=50, rnum=100, exceed=1.5):
+        ''' Calculate expected observed counts (phi*=1) for non-circular SHELA geometry.
+
+        The angular integral is replaced by area-fraction weighting:
+            int dOmega -> Omega_0_sr * (frac1 * C1 + frac2 * C2)
+        where C1 and C2 are completeness models for the two regions.
+        '''
+        als = np.linspace(self.sch_al_lims[0], self.sch_al_lims[1], alnum)
+        lss = np.linspace(self.Lstar_lims[0], self.Lstar_lims[1], lsnum)
+        vgal = np.zeros((alnum, lsnum))
+
+        if self.comp1df is None:
+            raise ValueError("self.comp1df is not set. Build region-1 completeness before calling calcVgalPhistarShela.")
+        compf1 = self.comp1df
+        compf2 = self.comp2df if hasattr(self, 'comp2df') and self.comp2df is not None else compf1
+
+        frac1 = 1.0 if self.frac1 is None else float(self.frac1)
+        frac2 = 0.0 if self.frac2 is None else float(self.frac2)
+        frac_norm = frac1 + frac2
+        if frac_norm <= 0:
+            frac1, frac2 = 1.0, 0.0
+        else:
+            frac1, frac2 = frac1/frac_norm, frac2/frac_norm
+
+        mlh = cgs2lum(self.flux_lim, self.DL)
+        ml1 = self.minlum if self.minlum is not None else self.Lc
+        ml2 = self.minlum2 if self.minlum2 is not None else ml1
+
+        for j in range(lsnum):
+            print(f"Got to j={j} in main al ls loop")
+            logL1 = np.linspace(ml1, max(ml1, min(mlh, lss[j] + exceed)), num=self.size_ln)
+            logL2 = np.linspace(ml2, max(ml2, min(mlh, lss[j] + exceed)), num=self.size_ln)
+
+            flux1_orig = lum2cgs(logL1, self.DL)
+            flux1 = flin(self.beta, flux1_orig)
+            cond_bad1 = flux1 < flux1_orig
+            flux1[cond_bad1] = flux1_orig[cond_bad1]
+
+            flux2_orig = lum2cgs(logL2, self.DL)
+            flux2 = flin(self.beta, flux2_orig)
+            cond_bad2 = flux2 < flux2_orig
+            flux2[cond_bad2] = flux2_orig[cond_bad2]
+
+            mags1 = cgs2magAB(self.trans_vals[:,None] * flux1[None], self.wav_filt, self.filt_width)
+            mags2 = cgs2magAB(self.trans_vals[:,None] * flux2[None], self.wav_filt, self.filt_width)
+            comps1 = compf1(mags1)
+            comps2 = compf2(mags2)
+
+            for i in range(alnum):
+                tlf1 = TrueLumFuncNoPhi(logL1, als[i], lss[j])
+                tlf2 = TrueLumFuncNoPhi(logL2, als[i], lss[j])
+                integ1 = self.dVdzs[:,None] * comps1 * tlf1[None]
+                integ2 = self.dVdzs[:,None] * comps2 * tlf2[None]
+                v1 = trapezoid(trapezoid(integ1, logL1, axis=1), self.zarr)
+                v2 = trapezoid(trapezoid(integ2, logL2, axis=1), self.zarr)
+                vgal[i,j] = self.Omega_0_sr * (frac1 * v1 + frac2 * v2)
         return als, lss, vgal
 
     def setup_logging(self):

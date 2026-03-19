@@ -5,15 +5,20 @@ import numpy as np
 import os.path as op
 import logging
 from astropy.table import Table
+from astropy.io import fits
+from astropy.wcs import WCS
+from astropy.wcs.utils import proj_plane_pixel_scales
 from scipy.interpolate import interp1d
 from scipy.stats import ks_2samp
-from lumfuncmcmc import LumFuncMCMC, makeCompFunc, makeCompFuncSamp, cgs2magAB, magAB2cgs, cgs2lum, lum2cgs
+from lumfuncmcmc import LumFuncMCMC, makeCompFunc, makeCompFuncMag, makeCompFuncSamp, cgs2magAB, magAB2cgs, cgs2lum, lum2cgs
 import VmaxLumFunc as V
 from scipy import odr
 import configLF
 from distutils.dir_util import mkpath
 import pickle
 from scipy.optimize import curve_fit
+import glob
+import re
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -200,6 +205,14 @@ def parse_args(argv=None):
     parser.add_argument("-tf", "--filt_name",
                          help='''Filter name''',
                          type=str, default=None)
+
+    parser.add_argument("--interp_name_r1",
+                        help='''Region-1 (non-overlap) completeness pickle (SHELA mode)''',
+                        type=str, default=None)
+
+    parser.add_argument("--interp_name_r2",
+                        help='''Region-2 (overlap) completeness pickle (SHELA mode)''',
+                        type=str, default=None)
     
     parser.add_argument("-ct", "--contam_type",
                          help='''How to calculate contamination''',
@@ -239,7 +252,7 @@ def parse_args(argv=None):
     if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 3.124, 5014.0, 77.17, -0.2352
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 2.449, 4193.0, 75.46, -0.2876
     else: args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 4.552, 6750.0, 101.31, -0.2138
-    if args.field_name.lower() == 'xmm_lss': args.aper_corr = 0.0
+    if args.field_name.lower() != 'cosmos': args.aper_corr = 0.0
     args.del_red = args.filt_width / args.wav_rest
     args.trans_file = f'{args.filt_name}_Nicole.txt'
     delz = args.del_red * 1.5
@@ -362,6 +375,99 @@ def getContCorr(flux, fluxe, nb, nbe, filter='N501', extra_text=''):
     plt.close(fig)
     return out.beta
 
+def _infer_shela_field_from_filename(filename):
+    match = re.search(r'(SHELA_P\d+)', op.basename(filename))
+    return match.group(1) if match is not None else None
+
+def _get_shela_fits_filename(args):
+    field = _infer_shela_field_from_filename(args.filename)
+    if field is None:
+        field = args.field_name
+    pattern = f'{field}_{args.filt_name}_voronoi_sd_maglim_25.*.fits'
+    matches = sorted(glob.glob(pattern))
+    if len(matches) == 0:
+        raise FileNotFoundError(f'Could not find SHELA FITS file matching {pattern}')
+    return matches[0]
+
+def _resolve_shela_comp_files(args):
+    ''' Resolve region-1 and region-2 completeness pickle files.
+
+    Priority:
+      1) args.interp_name_r1 / args.interp_name_r2 if provided
+      2) infer from args.interp_name using common suffixes
+    '''
+    fn1 = getattr(args, 'interp_name_r1', None)
+    fn2 = getattr(args, 'interp_name_r2', None)
+    if fn1 is not None and fn2 is not None and op.exists(fn1) and op.exists(fn2):
+        return fn1, fn2
+
+    base = args.interp_name
+    if base is None:
+        raise ValueError('interp_name is None; cannot infer SHELA region completeness files.')
+    stem, ext = op.splitext(base)
+    candidates = [
+        (f'{stem}_region1{ext}', f'{stem}_region2{ext}'),
+        (f'{stem}_nonoverlap{ext}', f'{stem}_overlap{ext}'),
+        (f'{stem}_r1{ext}', f'{stem}_r2{ext}'),
+    ]
+    for c1, c2 in candidates:
+        if op.exists(c1) and op.exists(c2):
+            return c1, c2
+    raise FileNotFoundError(
+        'Could not resolve region completeness pickle files. '
+        'Provide --interp_name_r1 and --interp_name_r2 or use one of '
+        'the supported suffix pairs: _region1/_region2, _nonoverlap/_overlap, _r1/_r2.'
+    )
+
+def _get_shela_region_info(args, datfile):
+    ''' Compute source regions and area fractions from SHELA FITS mask/exptime. '''
+    fits_fn = _get_shela_fits_filename(args)
+    if 'RA' not in datfile.colnames or 'DEC' not in datfile.colnames:
+        raise KeyError('SHELA mode requires RA and DEC columns in input catalog.')
+    ra = np.asarray(datfile['RA'], dtype=float)
+    dec = np.asarray(datfile['DEC'], dtype=float)
+
+    with fits.open(fits_fn) as hdul:
+        mask = np.asarray(hdul[2].data)
+        exptime = np.asarray(hdul[3].data)
+        wcs = WCS(hdul[3].header)
+
+    pos = exptime > 0
+    if np.count_nonzero(pos) == 0:
+        raise ValueError(f'Exposure map in {fits_fn} has no pixels with EXPTIME > 0.')
+    thr = 1.5 * np.median(exptime[pos])
+
+    x, y = wcs.wcs_world2pix(ra, dec, 0)
+    xi = np.rint(x).astype(int)
+    yi = np.rint(y).astype(int)
+    inside = (xi >= 0) & (xi < exptime.shape[1]) & (yi >= 0) & (yi < exptime.shape[0])
+    src_exptime = np.zeros(ra.size, dtype=float)
+    src_exptime[inside] = exptime[yi[inside], xi[inside]]
+    src_valid = inside & (src_exptime > 0)
+    src_region2 = src_valid & (src_exptime >= thr)
+
+    pix_scales_deg = proj_plane_pixel_scales(wcs)
+    area_per_pix_deg2 = abs(pix_scales_deg[0] * pix_scales_deg[1])
+    unmasked = mask == 0
+    r2_pix = unmasked & pos & (exptime >= thr)
+    r1_pix = unmasked & pos & (~r2_pix)
+    area1_deg2 = np.count_nonzero(r1_pix) * area_per_pix_deg2
+    area2_deg2 = np.count_nonzero(r2_pix) * area_per_pix_deg2
+    area_tot_deg2 = area1_deg2 + area2_deg2
+    if area_tot_deg2 <= 0:
+        raise ValueError(f'Computed zero unmasked area for {fits_fn}.')
+    frac1, frac2 = area1_deg2/area_tot_deg2, area2_deg2/area_tot_deg2
+
+    return {
+        'fits_file': fits_fn,
+        'threshold': thr,
+        'source_valid': src_valid,
+        'source_region2': src_region2,
+        'frac1': frac1,
+        'frac2': frac2,
+        'omega0_deg2': area_tot_deg2,
+    }
+
 def read_input_file(args):
     """ Function to read in input ascii file with properly named columns.
     Columns should include a (linear) flux (header 'LineorBandName_flux') 
@@ -394,6 +500,10 @@ def read_input_file(args):
     """
     
     fluxs, fluxes, dists, distos, compss, denss, areas, nbs, nbes = [], [], [], [], [], [], [], [], []
+    comp_regions = []
+    interp_comp_simp2 = []
+    frac1_list, frac2_list, omega0_list = [], [], []
+
     datfile = Table.read(args.filename,format='ascii')
     DL = V.cosmo.luminosity_distance(args.redshift).value
     if args.environment: numbins = args.num_env_bins
@@ -401,71 +511,136 @@ def read_input_file(args):
     density_frac = getDensityFrac(args, datfile)
     interp_comp, interp_comp_simp_orig, interp_comp_simp, nbcontam, cf = [], [], [], [], []
     flux_lim, cgscontam = [], []
+
+    shela_mode = ('shela' in str(args.field_name).lower()) or ('SHELA_' in op.basename(args.filename))
+    shela_info = None
+    if shela_mode:
+        shela_info = _get_shela_region_info(args, datfile)
+        args.Omega_0 = shela_info['omega0_deg2'] * 3600.0**2
+        comp_file_r1, comp_file_r2 = _resolve_shela_comp_files(args)
+        print(f"SHELA mode enabled with FITS: {shela_info['fits_file']}")
+        print(f"SHELA EXPTIME threshold: {shela_info['threshold']}")
+        print(f"SHELA area fractions: frac1={shela_info['frac1']:0.4f}, frac2={shela_info['frac2']:0.4f}")
+        print(f"SHELA Omega_0 (deg^2): {shela_info['omega0_deg2']:0.6f}")
+
     for i in range(numbins):
-        if args.num_err<0: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type, file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, density_frac=density_frac[i], aper_corr=args.aper_corr, use_contam=not args.dont_use_contam)
-        else: interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFuncSamp(args.num_err, DL, filter=args.filt_name, file_name=args.interp_name.replace('extrap', 'extrap_samp'), contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, aper_corr=args.aper_corr)
-        interp_comp.append(interp_compi); interp_comp_simp.append(interp_comp_simpi); interp_comp_simp_orig.append(interp_comp_simp_origi); nbcontam.append(nbcontami); cf.append(cfi)
+        if shela_mode:
+            interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFuncMag(DL,
+                file_name=comp_file_r1,
+                binnum=args.contambin,
+                filter=args.filt_name,
+                contam_type=args.contam_type,
+                contam_lim=args.contam_lim,
+                density_frac=density_frac[i],
+                aper_corr=args.aper_corr,
+                use_contam=not args.dont_use_contam,
+                label='Region 1', mag_min=27.9, mag_max=21.8, wave=args.wav_filt, dwave=args.filt_width
+            )
+            _, _, interp_comp_simpi2, _, _ = makeCompFuncMag(DL,
+                file_name=comp_file_r2,
+                binnum=args.contambin,
+                filter=args.filt_name,
+                contam_type=args.contam_type,
+                contam_lim=args.contam_lim,
+                density_frac=density_frac[i],
+                aper_corr=args.aper_corr,
+                use_contam=not args.dont_use_contam,
+                label='Region 2', mag_min=27.9, mag_max=21.8, wave=args.wav_filt, dwave=args.filt_width
+            )
+        else:
+            if args.num_err<0:
+                interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFunc(
+                    DL, binnum=args.contambin, filter=args.filt_name, contam_type=args.contam_type,
+                    file_name=args.interp_name, contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5,
+                    density_frac=density_frac[i], aper_corr=args.aper_corr, use_contam=not args.dont_use_contam
+                )
+            else:
+                interp_compi, interp_comp_simp_origi, interp_comp_simpi, nbcontami, cfi = makeCompFuncSamp(
+                    args.num_err, DL, filter=args.filt_name, file_name=args.interp_name.replace('extrap', 'extrap_samp'),
+                    contam_lim=args.contam_lim, mag_max=21.8, mag_min=29.5, aper_corr=args.aper_corr
+                )
+            interp_comp_simpi2 = None
+
+        interp_comp.append(interp_compi)
+        interp_comp_simp.append(interp_comp_simpi)
+        interp_comp_simp_orig.append(interp_comp_simp_origi)
+        interp_comp_simp2.append(interp_comp_simpi2)
+        nbcontam.append(nbcontami)
+        cf.append(cfi)
         if args.lum_lim<0.0: flux_limi = np.inf
         else: flux_limi = lum2cgs(args.lum_lim, DL) * 1.0e17
-        # else: flux_limi = 10**args.lum_lim / (4.0*np.pi*(3.086e24*DL)**2) * 1.0e17 #From log luminosity to 1.0e-17 cgs flux
         print("Original flux limit:", flux_limi)
         cgscontami = magAB2cgs(nbcontami, args.wav_filt, args.filt_width)
         flux_limi = min(flux_limi, cgscontami*1.0e17)
         print("Final flux limit:", flux_limi)
         lum_limi = cgs2lum(flux_limi*1.0e-17, DL)
         print("Final luminosity limit:", lum_limi)
-        flux_lim.append(flux_limi); cgscontam.append(cgscontami)
-    fluxfull, fluxefull, distfull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e'], datfile['dist']
+        flux_lim.append(flux_limi)
+        cgscontam.append(cgscontami)
+
+    fluxfull, fluxefull = datfile[f'{args.line_name}_flux'], datfile[f'{args.line_name}_flux_e']
+    distfull = datfile['dist'] if 'dist' in datfile.colnames else np.zeros(len(datfile))
     nbfull, nbefull = datfile['NB_flux'], datfile['NB_flux_e']
     dens = datfile['Density']
     pc = datfile['Protocluster']
-    
+
     pers = np.linspace(0., 100., numbins+1)
     dens_vals = np.percentile(dens, pers)
     dens_vals[-1] += 1.0e-6 # Need to include max value in one of the bins
     weights = np.ones(numbins)
-    # cond_init = np.logical_and(fluxfull>0.0, fluxfull<flux_lim)
-    # mag = cgs2magAB(1.0e-17*fluxfull[cond_init], args.wav_filt, args.filt_width)
-    # comps = interp_comp_simp.ev(distfull[cond_init], mag)
-    # cond = comps>=args.min_comp_frac
-    # densfull = dens[cond_init][cond]
-    # densfullavg = np.median(densfull)
-    # density_frac = np.ones(numbins)
+
     for i in range(numbins):
         cond_env = np.logical_and(dens>=dens_vals[i], dens<dens_vals[i+1])
         if args.environment==2: cond_env = abs(pc-i)<1.0e-6
         flux, fluxe, dist = fluxfull[cond_env], fluxefull[cond_env], distfull[cond_env]
         nb, nbe = nbfull[cond_env], nbefull[cond_env]
-        # flux, fluxe = nb*1.0, nbe*1.0
-        # nb, nbe = flux*1.0, fluxe*1.0
         cond_init = np.logical_and(flux>0.0, nb<flux_lim[i])
+
+        region2 = None
+        if shela_mode:
+            valid = shela_info['source_valid'][cond_env]
+            cond_init = np.logical_and(cond_init, valid)
+            region2 = shela_info['source_region2'][cond_env][cond_init]
+
         lum = cgs2lum(1.0e-17*flux[cond_init], DL)
-        lumb = cgs2lum(1.0e-17*flux[flux>=flux_lim[i]], DL)
         mag = cgs2magAB(1.0e-17*nb[cond_init], args.wav_filt, args.filt_width)
-        comps = interp_comp_simp[i].ev(dist[cond_init], mag)
-        # compsorig = interp_comp_simp_orig.ev(dist[cond_init], mag)
-        if args.lum_min>0: cond = lum>=args.lum_min
-        else: cond = comps>=args.min_comp_frac
+        if shela_mode:
+            comp1 = interp_comp_simp[i](mag)
+            comp2 = interp_comp_simp2[i](mag)
+            comps = np.where(region2, comp2, comp1)
+        else:
+            comps = interp_comp_simp[i].ev(dist[cond_init], mag)
+
+        if args.lum_min>0:
+            cond = lum>=args.lum_min
+        else:
+            cond = comps>=args.min_comp_frac
         fluxmin = lum2cgs(args.lum_min, DL)*1.0e17
         plotFluxDistribRaw(flux[cond_init][cond], flux[cond_init][~cond], flux[nb>=flux_lim[i]], fluxmin, filt_name=args.filt_name, extra_text=args.extra_text)
-        # plotLumDistribRaw(lum[cond], lum[~cond], lumb, filt_name=args.filt_name)
+
         densi = dens[cond_env][cond_init][cond]
-        # densiavg = np.median(densi)
-        # density_frac[i] = densfullavg / densiavg
         areai = 1/densi
         vals = np.percentile(areai, [5,95])
         conda = np.logical_and(areai>=vals[0],areai<=vals[-1])
 
         fluxs.append(flux[cond_init][cond]); fluxes.append(fluxe[cond_init][cond]); dists.append(dist[cond_init][cond]); distos.append(dist[cond_init]); compss.append(comps[cond]); denss.append(densi); areas.append(areai[conda].sum())
         nbs.append(nb[cond_init][cond]); nbes.append(nbe[cond_init][cond])
-    # FluxesRaw = {'KeptFlux': flux[cond_init][cond], 'FaintFlux': flux[cond_init][~cond], 'BrightFlux': flux[nb>=flux_lim[i]], 'Fluxmin': fluxmin}
-    # pickle.dump(FluxesRaw, open(f'Figure1RawFluxes{args.filt_name}.pickle', 'wb'))
-    
+        if shela_mode:
+            comp_regions.append(region2[cond])
+            frac1_list.append(shela_info['frac1'])
+            frac2_list.append(shela_info['frac2'])
+            omega0_list.append(shela_info['omega0_deg2'] * 3600.0**2)
+        else:
+            comp_regions.append(None)
+            frac1_list.append(1.0)
+            frac2_list.append(None)
+            omega0_list.append(args.Omega_0)
+
     areas = np.array(areas)
     for i in range(numbins):
         weights[i] = areas[i]/areas.sum()
     print("Weights for different density regions:", weights)
-    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf, density_frac, nbs, nbes
+    return fluxs, fluxes, None, None, dists, interp_comp, interp_comp_simp_orig, interp_comp_simp, distos, compss, dens_vals, denss, flux_lim, weights, cgscontam, cf, density_frac, nbs, nbes, comp_regions, interp_comp_simp2, frac1_list, frac2_list, omega0_list
 
 def getVeffCombo(args=None, numtot=25):
     ''' Do V/V_max method with several iterations of completeness and contamination (to consider uncertainties in those quantities) '''
@@ -487,7 +662,7 @@ def getVeffCombo(args=None, numtot=25):
     
     for j in range(numtot):
         args.num_err = j
-        flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e = read_input_file(args)
+        flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e, comp_region, interp_comp_simp2, frac1, frac2, omega0 = read_input_file(args)
         alls_file_name = f'Likes_alls_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_ll{args.lum_lim}_env{args.environment}_neb{len(flux)}_bin{i}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
         vgal_file_name = f'Likes_vgal_field{args.field_name}_z{args.redshift}_ml{args.lum_min}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_{j}.pickle'
 
@@ -496,7 +671,7 @@ def getVeffCombo(args=None, numtot=25):
         if args.lum_min>0: minlum = args.lum_min
         else: minlum = None
         # Initialize LumFuncMCMC class
-        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=1, frac_use=args.frac_use)
+        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=omega0[i],nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], interp_comp_simp2=interp_comp_simp2[i], comp_region=comp_region[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=1, frac_use=args.frac_use, frac1=frac1[i], frac2=frac2[i])
         print("Initialized LumFuncMCMC class")
         LFmod.VeffLF(combo=True)
         lums, phis = np.concatenate((lums, LFmod.lum)), np.concatenate((phis, LFmod.phifunc))
@@ -535,7 +710,7 @@ def main(args=None):
     mkpath(dir_name)
     
     # Read input file into arrays
-    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e = read_input_file(args)
+    flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e, comp_region, interp_comp_simp2, frac1, frac2, omega0 = read_input_file(args)
     print("Read Input File")
     if args.corr: 
         corrfile = Table.read(args.corr_file, format='ascii')
@@ -569,7 +744,7 @@ def main(args=None):
         if args.lum_min>0: minlum = args.lum_min
         else: minlum = None
         # Initialize LumFuncMCMC class
-        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=args.Omega_0,nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=args.veff_only, frac_use=args.frac_use)
+        LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=omega0[i],nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], interp_comp_simp2=interp_comp_simp2[i], comp_region=comp_region[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=args.veff_only, frac_use=args.frac_use, frac1=frac1[i], frac2=frac2[i])
         print("Initialized LumFuncMCMC class")
         _ = LFmod.get_params()
 

@@ -12,6 +12,9 @@ from scipy.interpolate import RegularGridInterpolator as RGI
 from scipy.interpolate import CloughTocher2DInterpolator as CTI
 from scipy.interpolate import NearestNDInterpolator as NNI
 import os.path as op
+import glob
+import re
+import matplotlib.pyplot as plt
 
 c = 3.0e18 # Speed of light in Angstroms/s
 cosmos_center = SkyCoord('10h00m24s', '2d10m55s')
@@ -108,6 +111,34 @@ def make_voronoi_interpolators(fits_filename):
 
     return surfden_func, protocluster_func, area_zero_mask_deg2
 
+def _infer_shela_field_token(filename):
+    match = re.search(r'(SHELA_P\d+)', op.basename(filename))
+    return match.group(1) if match is not None else None
+
+def _plot_line_flux_comparison(ulf_vals, catalog_line_flux_cgs, out_png):
+    '''Plot measured line flux vs catalog-estimated line flux (both in 1e-17 cgs).'''
+    x = np.asarray(unumpy.nominal_values(ulf_vals), dtype=float)
+    y = np.asarray(catalog_line_flux_cgs, dtype=float) * 1.0e17
+    cond = np.isfinite(x) & np.isfinite(y)
+    x, y = x[cond], y[cond]
+    if x.size == 0:
+        return
+    lo = min(np.min(x), np.min(y))
+    hi = max(np.max(x), np.max(y))
+    if hi <= lo:
+        hi = lo + 1.0
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.scatter(x, y, s=8, alpha=0.7, color='tab:blue')
+    ax.plot([lo, hi], [lo, hi], 'k--', lw=1.4, label='1-1')
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_xlabel(r'Measured line flux ($10^{-17}$ erg cm$^{-2}$ s$^{-1}$)')
+    ax.set_ylabel(r'Catalog estimated line flux ($10^{-17}$ erg cm$^{-2}$ s$^{-1}$)')
+    ax.legend(loc='best', frameon=False)
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+
 def getDist(ra1, dec1, ra2, dec2):
     dra = ((ra1 - ra2)
                 * np.cos(np.pi/180.*dec2) * 60.)
@@ -143,8 +174,12 @@ def getLineFlux(fn='LAE_catalog_COSMOS_gr-n501_SE_2024_03_06_expanded.csv', tfn=
     field = fn.split('_')[2]
     dat = Table.read(fn, format='ascii')
     name, ra, dec = dat['index'], dat['RA'], dat['DEC']
-    coords = SkyCoord(ra, dec, unit='degree')
-    sep = coords.separation(center).arcmin
+    is_shela = _infer_shela_field_token(fn) is not None
+    if is_shela:
+        sep = np.zeros_like(ra, dtype=float)
+    else:
+        coords = SkyCoord(ra, dec, unit='degree')
+        sep = coords.separation(center).arcmin
     col = fn.split('-')[0].split('_')[-1]
     filt = fn.split('-')[1].split('_')[0]
     filtf, filtfe = dat[f'{filt} flux (ujy)'], dat[f'{filt} flux err (ujy)']
@@ -156,19 +191,36 @@ def getLineFlux(fn='LAE_catalog_COSMOS_gr-n501_SE_2024_03_06_expanded.csv', tfn=
     fac_flux = 1.0e-29 * c/wav_filt**2 * Tint/Tc * 1.0e17
     ulf = fac_flux * (ufiltf - ugrf)
     unb = fac_flux * ufiltf
-    if field.lower()=='cosmos': dlaef, pcf = getLAEDensity(band=filt.upper(), field=field)
-    else: dlaef, pcf, area_not_mask = make_voronoi_interpolators(f'XMM_{filt.upper()}_voronoi_sd_maglim_25.4_01_2026.fits')
-    if field.lower()!='cosmos': 
+    if field.lower()=='cosmos':
+        dlaef, pcf = getLAEDensity(band=filt.upper(), field=field)
+    else:
+        shela_token = _infer_shela_field_token(fn)
+        if shela_token is not None:
+            fits_pattern = f'{shela_token}_{filt.upper()}_voronoi_sd_maglim_25.*.fits'
+            fits_matches = sorted(glob.glob(fits_pattern))
+            if len(fits_matches)==0:
+                raise FileNotFoundError(f'Could not find FITS file matching {fits_pattern}')
+            fits_name = fits_matches[0]
+        else:
+            fits_name = f'XMM_{filt.upper()}_voronoi_sd_maglim_25.4_01_2026.fits'
+        dlaef, pcf, area_not_mask = make_voronoi_interpolators(fits_name)
+    if field.lower()!='cosmos':
         dlaes, pcs = dlaef(ra, dec), pcf(ra, dec)
         print("Area not covered by mask", area_not_mask)
-        area_tot = np.pi*2.4**2
-        print("Area of circle with radius 2.4 deg", area_tot)
-        print("Fraction of the circular area occupied by sources", area_not_mask/area_tot)
+        if not is_shela:
+            area_tot = np.pi*2.4**2
+            print("Area of circle with radius 2.4 deg", area_tot)
+            print("Fraction of the circular area occupied by sources", area_not_mask/area_tot)
     else:
         try: dlaes = dlaef.ev(ra, dec)
         except: dlaes = dlaef(np.column_stack((ra, dec)))
         dlaes[dlaes<0] = 0.0
         pcs = pcf(np.column_stack((ra, dec)))
+    if 'estimated line flux (cgs)' in dat.colnames:
+        out_plot = op.basename(fn).replace('.csv', '_lineflux_comparison.png')
+        _plot_line_flux_comparison(ulf, dat['estimated line flux (cgs)'], out_plot)
+    else:
+        print('Column "estimated line flux (cgs)" not found; skipping line-flux comparison plot.')
     return name, ra, dec, unumpy.nominal_values(ulf), unumpy.std_devs(ulf), unumpy.nominal_values(unb), unumpy.std_devs(unb), dlaes, pcs, sep
 
 def getLAEDensity(band='N501', field='COSMOS'):
@@ -234,13 +286,21 @@ def main(filter='N501', field='Cosmos'):
     elif filter=='N419': col, wav ='rg', 4193.0
     else: col, wav = 'gi', 6750.0
     if field=='Cosmos': date, hs = '2024_08_01', 'half_stacks_'
-    else: date, hs = '2024_09_19', ''
+    elif 'SHELA' in field.upper():
+        date, hs = '2024_09_19', ''
+    else:
+        date, hs = '2024_09_19', ''
     fn = f'LAE_catalog_{field}_{col}-{filter.lower()}_SE_{hs}{date}_expanded.csv'
     tfn = f'{filter}_Nicole.txt'
-    names, ras, decs, lyf, lyfe, nbf, nbfe, dlaes, pcs, seps = getLineFlux(fn=fn, tfn=tfn, wav_filt=wav, center=xmmlss_center)
+    if field=='Cosmos':
+        center_use = cosmos_center
+    else:
+        center_use = xmmlss_center
+    names, ras, decs, lyf, lyfe, nbf, nbfe, dlaes, pcs, seps = getLineFlux(fn=fn, tfn=tfn, wav_filt=wav, center=center_use)
     dat = Table()
     dat['Galaxy_name'] = names
     dat['RA'] = ras
+    dat['DEC'] = decs
     dat['Dec'] = decs
     dat['Lya_flux'] = lyf
     dat['Lya_flux_e'] = lyfe
@@ -251,5 +311,5 @@ def main(filter='N501', field='Cosmos'):
     dat.write(f'Lya{filter}{field}Fluxes.dat', format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main('N673', field='XMMLSS')
+    main('N501', field='XMMLSS')
     # getIntRem('N419')
