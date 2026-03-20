@@ -51,6 +51,7 @@ def parse_args():
 
     parser.add_argument("-it", "--interp_type", help='''Method for interpolation''', type=str, default='cubic')
     parser.add_argument("-tf", "--filt_name", help='''Filter name''', type=str, default='N501')
+    parser.add_argument("-fn", "--field_name", help='''Field name''', type=str, default='COSMOS')
     parser.add_argument("-dz", "--delz", help='''Width in redshift distribution''', type=float, default=0.1)
     parser.add_argument("-ml", "--maglow", help='''Low magnitude used for simulation''', type=float, default=30.)
     parser.add_argument("-v", "--varying", help='''Vary the volume used in Veff''', action='count', default=0)
@@ -62,8 +63,8 @@ def parse_args():
     parser.add_argument("-ng", "--numgal", help='''Number of galaxies selected for experiment''', type=int, default=100000)
     parser.add_argument("-bn", "--binnum", help='''Number of bins for Veff and correction''', type=int, default=20)
     args = parser.parse_args()
-    args.field_name = 'COSMOS'
     args.interp_name = f'{args.field_name.lower()}_completeness_{args.filt_name.lower()}_grid_extrap.pickle'
+    if 'shela' in args.field_name.lower(): args.interp_name = args.interp_name.replace('.pickle', '_region1.pickle')
     if args.filt_name=='N501': args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 3.124, 5014.0, 77.17, 0.0705
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 2.449, 4193.0, 75.46, 0.0688
     else: args.redshift, args.wav_filt, args.filt_width, args.delz_eff = 4.552, 6750.0, 101.31, 0.0922
@@ -114,7 +115,7 @@ def get1DComp(interp_comp, maghigh=19., maglow=30., magnum=25, distnum=100):
     comps = interp_comp.ev(distg, magg)
     # comps = comps.reshape(distnum, magnum)
     comp_avg_dist = np.median(comps, axis=0)
-    comps1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], 0))
+    comps1df = interp1d(maggrid, comp_avg_dist, bounds_error=False, fill_value=(comp_avg_dist[0], comp_avg_dist[-1]))
     return comps1df
 
 def calc_mags(logL, dL, wav_filt, filt_width):
@@ -136,7 +137,8 @@ def select_gal(args, al, ls, phis, zmin, zmax, interp_comp, numgal=1000000, numl
     reds = np.random.uniform(zmin, zmax, numgal)
     logL = np.random.uniform(Lc, Lh, numlum)
     tlf_orig = L.TrueLumFunc(logL, al, ls, phis)
-    comps1df = get1DComp(interp_comp, maglow=maglow)
+    if 'shela' in args.field_name.lower(): comps1df = interp_comp
+    else: comps1df = get1DComp(interp_comp, maglow=maglow)
     dL = V.cosmo.luminosity_distance(zc).value
     mags = calc_mags(logL, dL, args.wav_filt, args.filt_width)
     tlf = tlf_orig * comps1df(mags)
@@ -179,7 +181,8 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     delz, file_name, numgal, numlum, binnum, min_comp_frac, interp_type, maglow = args.delz, args.trans_file, args.numgal, args.numgal, args.binnum, args.min_comp_frac, args.interp_type, args.maglow
     minlum = max(Lc, minlumorig)
     DL = V.cosmo.luminosity_distance(args.redshift).value
-    interp_comp, interp_comp_simp_orig, interp_comp_simp, _, _ = L.makeCompFunc(DL, filter=args.filt_name, file_name=args.interp_name, use_contam=True)
+    if 'shela' in args.field_name.lower(): interp_comp, interp_comp_simp_orig, interp_comp_simp, _, _ = L.makeCompFuncMag(DL, filter=args.filt_name, file_name=args.interp_name, use_contam=True)
+    else: interp_comp, interp_comp_simp_orig, interp_comp_simp, _, _ = L.makeCompFunc(DL, filter=args.filt_name, file_name=args.interp_name, use_contam=True)
     # cgscontam = L.magAB2cgs(nbcontam, args.wav_filt, args.filt_width)
     R = np.sqrt(C.Omega_0_sqarcmin/np.pi)
     dists = R * np.sqrt(np.random.rand(numlum))
@@ -210,7 +213,7 @@ def get_corrections(args, al, ls, phis, Lc=40.0, Lh=45.0, minlumorig=41.5, varyi
     delReds = [args.del_red, args.delz_eff]
     lf, vars = [], []
     for i, lumi in enumerate(lumlist):
-        lumobj = L.LumFuncMCMC(args.redshift, del_red=delReds[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use)
+        lumobj = L.LumFuncMCMC(args.redshift, del_red=delReds[i], lum=lumi, Omega_0=C.Omega_0, sch_al=al, Lstar=ls, phistar=phis, fix_sch_al=True, min_comp_frac=min_comp_frac, dist_orig=distlist[i], dist=distlist[i], logL_width=logLs.max(), transsim=True, minlum=minlum_use, maxlum=maxlum, nbins=binnum, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp, weight=1.0, trans_file=args.trans_file, maglow=maglow, maghigh=C.maghigh, frac_use=C.frac_use, field_name=args.field_name)
 
         lumobj.VeffLF(varying=varying)
         lf.append(lumobj.lfbinorig)
@@ -322,9 +325,21 @@ def main():
     image_dir = 'TransExp'
     mkpath(image_dir)
     alpha_fixed, delz, varying, Lc, numgal, binnum = args.alpha_fixed, args.delz, args.varying, args.Lc, args.numgal, args.binnum
-    if filter=='N501': this_work = [-2.25, 42.79, -3.39]
-    elif filter=='N419': this_work = [-2.52, 42.80, -3.80]
-    else: this_work = [-2.08, 43.11, -3.81]
+    if filter=='N501': 
+        if args.field_name.lower() == 'cosmos': this_work = [-2.25, 42.79, -3.39]
+        elif args.field_name.lower() == 'xmmlss': this_work = [-1.98, 42.77, -3.18]
+        elif args.field_name.lower() == 'shela_p12': this_work = [-1.46, 42.62, -2.96]
+        elif args.field_name.lower() == 'shela_p56': this_work = [-1.65, 42.63, -2.98]
+        else: this_work = [-1.74, 42.69, -3.06]
+    elif filter=='N419': 
+        if args.field_name.lower() == 'cosmos': this_work = [-2.52, 42.80, -3.80]
+        elif args.field_name.lower() == 'xmmlss': this_work = [-2.19, 42.69, -3.25]
+        elif args.field_name.lower() == 'shela_p12': this_work = [-2.43, 42.78, -3.57]
+        elif args.field_name.lower() == 'shela_p56': this_work = [-1.76, 42.51, -3.08]
+        else: this_work = [-2.03, 42.59, -3.13]
+    else: 
+        if args.field_name.lower() == 'cosmos': this_work = [-2.08, 43.11, -3.81]
+        else: this_work = [-1.77, 43.08, -3.57]
     # plotTransCurve('N501_Nicole.txt', image_dir='', lam_min=4900., lam_max=5125.)
     # plotTransCurve('N673_Nicole.txt', image_dir='', lam_min=6600., lam_max=6900.)
     # plotTransCurve('N419_Nicole.txt', image_dir='', lam_min=4100., lam_max=4300.)
@@ -337,13 +352,13 @@ def main():
     else: 
         corrf = None
     bin_centers, corr_n501, minlum_use = get_corrections(args, *this_work, varying=varying, Lc=Lc, corrf=corrf)
-    plot_corr(bin_centers, corr_n501, f'{filter}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.png', filter, image_dir=image_dir, )
+    plot_corr(bin_centers, corr_n501, f'{filter}{args.field_name}CorrVeff_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.png', filter, image_dir=image_dir)
 
     # Write corrections to a file
     dat = Table()
     dat['logL'], dat['Corr'], dat['CorrErr'] = bin_centers, unumpy.nominal_values(corr_n501), unumpy.std_devs(corr_n501)
-    dat.write(op.join(image_dir, f'{filter}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.dat'), format='ascii', overwrite=True)
+    dat.write(op.join(image_dir, f'{filter}{args.field_name}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    # main()
-    showAllCorr()
+    main()
+    # showAllCorr()

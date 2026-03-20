@@ -402,7 +402,7 @@ def makeCompFuncMag(DL, file_name='shela_completeness_n501_region1.pickle', binn
     comp_use_arr = np.clip(comp_use_arr, 0.0, 1.0e3)
     comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], comp_use_arr[-1]))
     # comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], 0.0))
-    plot_Comp(comp_use, mag, comp, None, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max, label=label)
+    # plot_Comp(comp_use, mag, comp, None, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max, label=label)
     return comp_use, comp_orig, comp_use, nbcontam, cf
 
 def cgs2magAB(cgs, wave, dwave):
@@ -646,7 +646,9 @@ class LumFuncMCMC:
         print("Finished getting fluxes and luminosities")
         if self.nb is None: self.mags = cgs2magAB(self.flux, self.wav_filt, self.filt_width) # For the completeness
         else: self.mags = cgs2magAB(self.nb, self.wav_filt, self.filt_width)
-        if self.comps is None: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
+        if self.comps is None: 
+            if 'shela' in self.field_name.lower(): self.comps = self.interp_comp(self.mags)
+            else: self.comps = self.interp_comp_simp.ev(self.dist, self.mags)
         
         # Modify fluxes based on contamination limit
         self.alls_file_name, self.vgal_file_name = alls_file_name, vgal_file_name
