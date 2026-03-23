@@ -294,9 +294,9 @@ def showAllCorr():
     if filter=='N501': ml = 41.58
     elif filter=='N419': ml = 41.47
     else: ml = 41.83
-    image_dir = op.join('TransExp', 'NewMethod2')
+    image_dir = op.join('TransExp', 'xmmlss')
     Lcvals = [41.0, 42.0, 42.5, 42.8]
-    fn_base = f'{filter}Corr_ng{numgal}_bn20_al{alpha_fixed}_delz{delz:0.2f}_ml{ml:0.2f}'
+    fn_base = f'{filter}{args.field_name}Corr_ng{numgal}_bn20_al{alpha_fixed}_delz{delz:0.2f}_ml{ml:0.2f}'
     bcall, corrall, correall = [], [], []
     for Lc in Lcvals:
         # if Lc < 40.9: fn = op.join(image_dir, fn_base+'.dat')
@@ -306,7 +306,9 @@ def showAllCorr():
         cond = ~np.isnan(co)
         if Lc > ml: bc, co, coe = bc[cond][1:], co[cond][1:], coe[cond][1:]
         if filter=='N419': 
-            if Lc==42.8: bc, co, coe = bc[:-1], co[:-1], coe[:-1]
+            if Lc==42.8 or Lc==42.0: bc, co, coe = bc[:-1], co[:-1], coe[:-1]
+        if filter=='N501': 
+            if Lc==41.0 or Lc==42.5: bc, co, coe = bc[:-1], co[:-1], coe[:-1]
         bcall.append(bc); corrall.append(co); correall.append(coe)
     bcs, corrfull, correfull = getOverallCorr(bcall, corrall, correall)
     # cad = {'bcall': bcall, 'corrall': corrall, 'bcs': bcs, 'lcs': Lcvals, 'corre': correall, 'corrfull': corrfull, 'correfull': correfull}
@@ -315,8 +317,8 @@ def showAllCorr():
     corrdat['logL'] = bcs
     corrdat['Corr'] = corrfull
     corrdat['CorrErr'] = correfull
-    corrdat.write(op.join(image_dir, f'CorrFull{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}.dat'), format='ascii', overwrite=True)
-    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}_delz{delz:0.2f}_ngal{numgal}_var{varying}_new.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
+    corrdat.write(op.join(image_dir, f'CorrFull{filter}{args.field_name}_delz{delz:0.2f}_ngal{numgal}_var{varying}.dat'), format='ascii', overwrite=True)
+    plot_corr(bcall, corrall, plotname=f'MixCorrsOverall{filter}{args.field_name}_delz{delz:0.2f}_ngal{numgal}_var{varying}_new.png', filtname=filter, image_dir=image_dir, corre=correall, lcs=Lcvals, bcs=bcs, corrfull=corrfull, correfull=correfull)
 
 def main():
     ''' Run code to get transmission experiment for a given filter and minimum luminosity '''
@@ -360,5 +362,5 @@ def main():
     dat.write(op.join(image_dir, f'{filter}{args.field_name}Corr_ng{numgal}_bn{binnum}_al{alpha_fixed}_delz{delz:0.2f}_ml{minlum_use:0.2f}_Lc{Lc}_corr{args.corrf}_var{varying}_new.dat'), format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main()
-    # showAllCorr()
+    # main()
+    showAllCorr()

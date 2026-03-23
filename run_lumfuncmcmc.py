@@ -256,8 +256,8 @@ def parse_args(argv=None):
     args.del_red = args.filt_width / args.wav_rest
     args.trans_file = f'{args.filt_name}_Nicole.txt'
     delz = args.del_red * 1.5
-    if args.varying: args.corr_file = f'CorrFull{args.filt_name}_delz{delz:0.2f}_ngal2500000.dat'
-    else: args.corr_file = f'CorrFull{args.filt_name}_delz{delz:0.2f}_ngal2500000_var0.dat'
+    if args.varying: args.corr_file = f'CorrFull{args.filt_name}{args.field_name.upper()}_delz{delz:0.2f}_ngal2500000.dat'
+    else: args.corr_file = f'CorrFull{args.filt_name}{args.field_name.upper()}_delz{delz:0.2f}_ngal2500000_var0.dat'
     # args.corr_file = op.join('TransExp', f'{args.filt_name}Corr_ng100000_bn20_al-1.1_delz0.08_ml41.83_Lc40.0_corr0_var1.dat')
     return args
 

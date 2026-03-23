@@ -111,6 +111,41 @@ def make_voronoi_interpolators(fits_filename):
 
     return surfden_func, protocluster_func, area_zero_mask_deg2
 
+def get_exptime_areas(fits_filename):
+    '''
+    Compute XMM/SHELA map areas from EXPTIME and MASK extensions.
+
+    Parameters
+    ----------
+    fits_filename : str
+        Multi-extension FITS file (e.g., XMM_N???_voronoi_sd_maglim_25.4_01_2026.fits)
+        where extension 2 is MASK and extension 3 is EXPTIME.
+
+    Returns
+    -------
+    area_exptime_gt0_deg2 : float
+        Total area (deg^2) with EXPTIME > 0, including masked regions.
+    area_exptime_gt0_unmasked_deg2 : float
+        Total area (deg^2) with EXPTIME > 0 and MASK == 0.
+    '''
+    with fits.open(fits_filename) as hdul:
+        mask = np.asarray(hdul[2].data)
+        exptime = np.asarray(hdul[3].data)
+        wcs = WCS(hdul[3].header)
+
+    pix_scales_deg = proj_plane_pixel_scales(wcs)  # deg / pixel
+    area_per_pix_deg2 = abs(pix_scales_deg[0] * pix_scales_deg[1])
+
+    exptime_gt0 = exptime > 0
+    unmasked = mask == 0
+
+    n_exptime_gt0 = np.count_nonzero(exptime_gt0)
+    n_exptime_gt0_unmasked = np.count_nonzero(exptime_gt0 & unmasked)
+
+    area_exptime_gt0_deg2 = n_exptime_gt0 * area_per_pix_deg2
+    area_exptime_gt0_unmasked_deg2 = n_exptime_gt0_unmasked * area_per_pix_deg2
+    return area_exptime_gt0_deg2, area_exptime_gt0_unmasked_deg2
+
 def _infer_shela_field_token(filename):
     match = re.search(r'(SHELA_P\d+)', op.basename(filename))
     return match.group(1) if match is not None else None
@@ -311,5 +346,7 @@ def main(filter='N501', field='Cosmos'):
     dat.write(f'Lya{filter}{field}Fluxes.dat', format='ascii', overwrite=True)
 
 if __name__ == '__main__':
-    main('N501', field='XMMLSS')
+    # main('N501', field='XMMLSS')
     # getIntRem('N419')
+   area1, area2 = get_exptime_areas('XMM_N673_voronoi_sd_maglim_25.4_01_2026.fits')
+   print(area1, area2)
