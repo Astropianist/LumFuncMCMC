@@ -128,6 +128,10 @@ def parse_args(argv=None):
     
     parser.add_argument("-dz", "--del_red",
                         help='''Redshift of sample (narrow-band)''',
+                        type=float, default=None)
+
+    parser.add_argument("-lw", "--logL_width",
+                        help='''Width of log luminosity range considered for transmission effects''',
                         type=float, default=None)  
 
     parser.add_argument("-sa", "--sch_al",

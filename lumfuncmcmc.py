@@ -400,8 +400,8 @@ def makeCompFuncMag(DL, file_name='shela_completeness_n501_region1.pickle', binn
         nbcontam, cf = -99.0, None
         comp_use_arr = comp
     comp_use_arr = np.clip(comp_use_arr, 0.0, 1.0e3)
-    comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], comp_use_arr[-1]))
-    # comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], 0.0))
+    # comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], comp_use_arr[-1]))
+    comp_use = interp1d(mag, comp_use_arr, kind=interp_type, bounds_error=False, fill_value=(comp_use_arr[0], 0.0))
     # plot_Comp(comp_use, mag, comp, None, DL, filter, wave=wave, dwave=dwave, mag_min=mag_min, mag_max=mag_max, label=label)
     return comp_use, comp_orig, comp_use, nbcontam, cf
 

@@ -9,6 +9,7 @@ from matplotlib.colors import ListedColormap
 from astropy.table import Table 
 from astropy.io import fits
 import os.path as op
+import re
 from itertools import cycle
 from glob import glob
 import seaborn as sns
@@ -86,14 +87,10 @@ def getIntegInfo(fitpost, rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
 
 def getIntegInfoProto(fitpostprotorig, zs=[2.4, 3.1, 4.5], rndsamples=100, llow=42.0, lhigh=46.0, sa=-1.6):
     ''' Same as getIntegInfo but considering protoclusters vs non-protoclusters '''
-    fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fppo[2][-1] = fppo[2][-1].replace('nw200_ns5000', 'nw250_ns6000')
-    # fppo[2] = [fppo[2][i].replace('contam_0.5', 'contam_0.53') for i in range(len(fppo[2]))]
-    fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
-    fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
     protint, proteu, protel, npint, npeu, npel = np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs))
     protlint, protleu, protlel, nplint, npleu, nplel = np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs)), np.zeros(len(zs))
-    for i, fpp, fpnp, z in zip(np.arange(len(zs)), fitpostprot, fitpostnotprot, zs):
+    for i, env0_path, z in zip(np.arange(len(zs)), fitpostprotorig, zs):
+        fpnp, fpp = resolve_proto_fit_pair_from_env0(env0_path)
         print(f"Protoclusters at z={z}: ")
         nvi, lvi = getIntegInfo(fpp, rndsamples=rndsamples, llow=llow, lhigh=lhigh, sa=sa)
         protint[i], proteu[i], protel[i] = nvi[1], nvi[2]-nvi[1], nvi[1]-nvi[0]
@@ -142,17 +139,76 @@ def getnsamples(samples, lnprobcut=7.5):
         lnprobcut *= 2.0
     return nsamples
 
+def find_fitposterior_env0(run_dir, filter_prefix, env_mark='env0', bin_mark='bin1'):
+    '''Locate fitposterior for env0 / bin1 in a run directory (same idea as getDiffFields glob).'''
+    patterns = [
+        op.join(run_dir, f'{filter_prefix}*_fitposterior*{env_mark}*{bin_mark}*.dat'),
+        op.join(run_dir, f'{filter_prefix}*fitposterior*{env_mark}*{bin_mark}*.dat'),
+        op.join(run_dir, f'{filter_prefix}*fitp*{env_mark}*{bin_mark}*.dat'),
+    ]
+    matches = []
+    for p in patterns:
+        matches.extend(glob(p))
+    matches = sorted(set(matches))
+    if not matches:
+        raise FileNotFoundError(
+            f'No fitposterior in {run_dir} matching {filter_prefix} {env_mark} {bin_mark}'
+        )
+    return matches[-1]
+
+def _nw_ns_token(filename):
+    m = re.search(r'nw\d+_ns\d+', filename)
+    return m.group(0) if m else None
+
+def resolve_proto_fit_pair_from_env0(env0_fit_path):
+    '''From env0 bin1 "all" fitposterior, find matching env2 bin1 (not PC) and bin2 (PC) chains.
+
+    Handles varying MCMC lengths (nw200_ns5000 vs nw250_ns7000, etc.) by pairing bin1/bin2
+    files that share the same nw/ns token when possible.
+    Returns
+    -------
+    path_not_pc, path_pc : str
+        env2 bin1 (field / not in protocluster), env2 bin2 (protocluster)
+    '''
+    run_dir = op.dirname(env0_fit_path)
+    sub2 = op.join(run_dir, '2')
+    base = op.basename(env0_fit_path)
+    filt = base.split('_')[0]
+
+    fn_np = base.replace('env0', 'env2').replace('_all_', '_pc_')
+    path_np = op.join(sub2, fn_np)
+    path_pc = path_np.replace('bin1', 'bin2')
+    if op.isfile(path_np) and op.isfile(path_pc):
+        return path_np, path_pc
+
+    chain_key = _nw_ns_token(base)
+    cand_bin1 = sorted(glob(op.join(sub2, f'{filt}*_fitposterior*env2*bin1*.dat')))
+    pairs = []
+    for p1 in cand_bin1:
+        p2 = p1.replace('bin1', 'bin2')
+        if op.isfile(p2):
+            pairs.append((p1, p2))
+    if not pairs:
+        raise FileNotFoundError(
+            f'No env2 PC/non-PC fitposterior pair in {sub2} for filter {filt}'
+        )
+    if chain_key:
+        for p1, p2 in pairs:
+            if chain_key in p1:
+                return p1, p2
+    return pairs[-1]
+
 def getProtoFiles(fitpostprotorig):
-    ''' Read protocluster posterior sample files to get samples '''
-    fppo = [fpp.split('/') for fpp in fitpostprotorig]
-    fppo[2][-1] = fppo[2][-1].replace('nw200_ns5000', 'nw250_ns6000')
-    # fppo[2] = [fppo[2][i].replace('contam_0.5', 'contam_0.53') for i in range(len(fppo[2]))]
-    fitpostnotprot = [op.join(fpp[0], fpp[1], '2', fpp[2].replace('env0', 'env2').replace('_all_', '_pc_')) for fpp in fppo]
-    fitpostprot = [fp.replace('bin1', 'bin2') for fp in fitpostnotprot]
+    ''' Read protocluster posterior sample files to get samples.
+
+    fitpostprotorig : list of str
+        Paths to env0 bin1 *all* fitposterior files (one per field/redshift run).
+    '''
     samples_prot, samples_notprot = [], []
-    for fpf, fpnf in zip(fitpostprot, fitpostnotprot):
-        dat = Table.read(fpf, format='ascii')
-        dat2 = Table.read(fpnf, format='ascii')
+    for env0_path in fitpostprotorig:
+        fpnp, fp_p = resolve_proto_fit_pair_from_env0(env0_path)
+        dat = Table.read(fp_p, format='ascii')
+        dat2 = Table.read(fpnp, format='ascii')
         samples_prot.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
         samples_notprot.append(np.lib.recfunctions.structured_to_unstructured(dat2.as_array()))
         del dat, dat2
@@ -589,17 +645,37 @@ def plotMultVeff(*filenames):
     fig.savefig(f'VeffComp_{namefull}.png', bbox_inches='tight', dpi=300)
     plt.close('all')
 
-def plotDiffFields(fit1, fit2, filter, f1='COSMOS', f2='XMM-LSS', Lmin=42.0, Lmax=43.5, Lnum=1001):
+def plotDiffFields(fit1=None, fit2=None, filter='N501', f1='COSMOS', f2='XMM-LSS', Lmin=42.0, Lmax=43.5, Lnum=1001, fits=None, field_names=None, out_name=None):
+    ''' Compare LF posteriors for an arbitrary number of fields.
+
+    Backward-compatible usage:
+        plotDiffFields(fit1, fit2, filter='N501', f1='COSMOS', f2='XMM-LSS')
+
+    New usage:
+        plotDiffFields(fits=[fit1, fit2, fit3], field_names=['COSMOS', 'XMM-LSS', 'SHELA P12'], filter='N501')
+    '''
     logL = np.linspace(Lmin, Lmax, Lnum)
+    if fits is None:
+        fits = [fit1]
+        if fit2 is not None:
+            fits.append(fit2)
+    if field_names is None:
+        if len(fits) == 2:
+            field_names = [f1, f2]
+        else:
+            field_names = [f'Field{i+1}' for i in range(len(fits))]
+    if len(field_names) != len(fits):
+        raise ValueError("field_names length must match number of fit files")
+
     samples = []
-    for fpf in [fit1, fit2]:
+    for fpf in fits:
         dat = Table.read(fpf,format='ascii')
         samples.append(np.lib.recfunctions.structured_to_unstructured(dat.as_array()))
         del dat
     fig, ax = plt.subplots()
     add_LumFunc_plot(ax)
-    for sampi, fi in zip(samples, [f1, f2]):
-        coli = next(orig_palette)
+    for i, (sampi, fi) in enumerate(zip(samples, field_names)):
+        coli = orig_palette_arr[i % len(orig_palette_arr)]
         nsamples = getnsamples(sampi)
         lf, lfbest = getSamples(logL, nsamples)
         ax.plot(logL, lfbest, linestyle='-', color=coli, label=fi)
@@ -608,20 +684,94 @@ def plotDiffFields(fit1, fit2, filter, f1='COSMOS', f2='XMM-LSS', Lmin=42.0, Lma
     ax.set_xlim(Lmin, Lmax)
     ax.set_ylim(1.0e-6, 3.0e-2)
     ax.legend(loc='best', frameon=False)
-    fig.savefig(f"LFComp_{f1}_{f2}_{filter}.png", bbox_inches='tight', dpi=300)
+    if out_name is None:
+        name_stub = '_'.join([fi.replace(' ', '-') for fi in field_names])
+        out_name = f"LFComp_{name_stub}_{filter}.png"
+    fig.savefig(out_name, bbox_inches='tight', dpi=300)
     plt.close('all')
 
+def plotDiffFieldsProto(filter='N501', Lmin=42.0, Lmax=43.5, Lnum=1001, fits_env0=None, field_names=None, out_name=None, sa=-1.6):
+    ''' Compare LF posteriors across fields, with protocluster (env2 bin2) vs non-protocluster (env2 bin1).
+
+    fits_env0 : list of str
+        One env0 bin1 *all* fitposterior path per field; proto/field chains are resolved via
+        resolve_proto_fit_pair_from_env0 (handles different nw/ns between env0 and env2).
+    field_names : list of str
+        Legend labels per field.
+    '''
+    logL = np.linspace(Lmin, Lmax, Lnum)
+    if fits_env0 is None or field_names is None:
+        raise ValueError('fits_env0 and field_names are required')
+    if len(fits_env0) != len(field_names):
+        raise ValueError('fits_env0 and field_names must have the same length')
+    fig, ax = plt.subplots()
+    add_LumFunc_plot(ax)
+    for i, (env0_path, fnlabel) in enumerate(zip(fits_env0, field_names)):
+        path_field, path_pc = resolve_proto_fit_pair_from_env0(env0_path)
+        col = orig_palette_arr[i % len(orig_palette_arr)]
+        for lfpath, linestyle, role in (
+            (path_field, ':', 'field'),
+            (path_pc, '-', 'PC'),
+        ):
+            dat = Table.read(lfpath, format='ascii')
+            samp = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
+            del dat
+            nsamples = getnsamples(samp)
+            lf, lfbest = getSamples(logL, nsamples, sa=sa)
+            ax.plot(logL, lfbest, linestyle=linestyle, color=col, label=f'{fnlabel} ({role})')
+            for lfi in lf:
+                ax.plot(logL, lfi, linestyle=linestyle, color=col, alpha=0.05, label='')
+    ax.set_xlim(Lmin, Lmax)
+    ax.set_ylim(1.0e-6, 3.0e-2)
+    ax.legend(loc='best', frameon=False, fontsize='small')
+    if out_name is None:
+        name_stub = '_'.join([fi.replace(' ', '-') for fi in field_names])
+        out_name = f'LFCompProto_{name_stub}_{filter}.png'
+    fig.savefig(out_name, bbox_inches='tight', dpi=300)
+    plt.close('all')
+
+def _run_dir_suffixes_for_filter(filter):
+    if filter == 'N673':
+        return ['om09', 'xmm2'], ['COSMOS', 'XMM-LSS']
+    return (
+        ['om09', 'xmm2', 'shela_p12', 'shela_p56', 'shela_p78'],
+        ['COSMOS', 'XMM-LSS', 'SHELA P12', 'SHELA P56', 'SHELA P78'],
+    )
+
+def _ml_contam_cb_for_filter(filter):
+    if filter == 'N673':
+        return 42.50, 0.68, 4
+    if filter == 'N419':
+        return 42.20, 0.5, 10
+    return 42.36, 0.5, 10
+
 def getDiffFields(filter):
-    if filter=='N673': cl, cb = 0.68, 4
-    else: cl, cb = 0.5, 10
+    ml, cl, cb = _ml_contam_cb_for_filter(filter)
     base_dir = 'LFMCMCOdin'
-    next_dir_base = f'ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_{cl}_cb{cb}'
-    base1, base2 = 'om09', 'xmmrun'
-    fit1, fit2 = glob(op.join(base_dir, next_dir_base+base1, f'{filter}*fitp*.dat'))[0], glob(op.join(base_dir, next_dir_base+base2, f'{filter}*fitp*.dat'))[0]
-    plotDiffFields(fit1, fit2, filter=filter)
+    next_dir_base = f'ODIN_fsa0_sa-1.49_ml{ml}_ll45.0_ec2_contam_{cl}_cb{cb}'
+    bases, fields = _run_dir_suffixes_for_filter(filter)
+    fits = []
+    field_names = []
+    for i, base in enumerate(bases):
+        run_dir = op.join(base_dir, next_dir_base + base)
+        fits.append(find_fitposterior_env0(run_dir, filter))
+        field_names.append(fields[i])
+    plotDiffFields(fits=fits, field_names=field_names, filter=filter)
+
+def getDiffFieldsProto(filter):
+    ml, cl, cb = _ml_contam_cb_for_filter(filter)
+    base_dir = 'LFMCMCOdin'
+    next_dir_base = f'ODIN_fsa0_sa-1.49_ml{ml}_ll45.0_ec2_contam_{cl}_cb{cb}'
+    bases, fields = _run_dir_suffixes_for_filter(filter)
+    fits_env0 = []
+    for base in bases:
+        run_dir = op.join(base_dir, next_dir_base + base)
+        fits_env0.append(find_fitposterior_env0(run_dir, filter))
+    plotDiffFieldsProto(filter=filter, fits_env0=fits_env0, field_names=fields)
 
 if __name__ == '__main__':
     # NewProc()
     # plotMultVeff('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata/N501_new_trial_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata_nb50_nw200_ns4000_mcf50_ec_2_env0_bin1_c1.dat', 'LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew/N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1_c1.dat')
     # plotLumFuncCombo('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10lumminnv')
-    getDiffFields(filter='N673')
+    # getDiffFields(filter='N419')
+    getDiffFieldsProto(filter='N673')
