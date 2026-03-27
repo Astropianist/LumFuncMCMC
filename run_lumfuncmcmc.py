@@ -3,6 +3,7 @@
 import argparse as ap
 import numpy as np
 import os.path as op
+import copy
 import logging
 from astropy.table import Table
 from astropy.io import fits
@@ -19,6 +20,7 @@ import pickle
 from scipy.optimize import curve_fit
 import glob
 import re
+from MakeFluxFile import get_exptime_areas
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -257,6 +259,7 @@ def parse_args(argv=None):
     elif args.filt_name=='N419': args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 2.449, 4193.0, 75.46, -0.2876
     else: args.redshift, args.wav_filt, args.filt_width, args.aper_corr = 4.552, 6750.0, 101.31, -0.2138
     if args.field_name.lower() != 'cosmos': args.aper_corr = 0.0
+    if 'shela' in args.field_name.lower(): args.frac_use = 1.0
     args.del_red = args.filt_width / args.wav_rest
     args.trans_file = f'{args.filt_name}_Nicole.txt'
     delz = args.del_red * 1.5
@@ -692,6 +695,299 @@ def getVeffCombo(args=None, numtot=25):
             overwrite=True, format='ascii.fixed_width_two_line')
     print("Finished writing VeffLF file")
 
+def _combo_field_configs(filter_name):
+    filt = filter_name.upper()
+    if filt in ['N419', 'N501']:
+        return [
+            {'field_name': 'COSMOS', 'filename': f'Lya{filt}COSMOSFluxes.dat', 'extra_text': 'om09'},
+            {'field_name': 'xmm_lss', 'filename': f'Lya{filt}XMMLSSFluxes.dat', 'extra_text': 'xmm2'},
+            {'field_name': 'shela_p12', 'filename': f'Lya{filt}SHELA_P12Fluxes.dat', 'extra_text': 'shela_p12'},
+            {'field_name': 'shela_p56', 'filename': f'Lya{filt}SHELA_P56Fluxes.dat', 'extra_text': 'shela_p56'},
+            {'field_name': 'shela_p78', 'filename': f'Lya{filt}SHELA_P78Fluxes.dat', 'extra_text': 'shela_p78'},
+        ]
+    return [
+        {'field_name': 'COSMOS', 'filename': f'Lya{filt}COSMOSFluxes.dat', 'extra_text': 'om09'},
+        {'field_name': 'xmm_lss', 'filename': f'Lya{filt}XMMLSSFluxes.dat', 'extra_text': 'xmm2'},
+    ]
+
+def _field_specific_geometry(args_field):
+    '''Set Omega_0 and frac_use for a field config in combo mode.'''
+    fname = args_field.field_name.lower()
+    if 'xmm' in fname:
+        fits_fn = f'XMM_{args_field.filt_name.upper()}_voronoi_sd_maglim_25.4_01_2026.fits'
+        area_exptime_gt0_deg2, area_exptime_gt0_unmasked_deg2 = get_exptime_areas(fits_fn)
+        args_field.Omega_0 = area_exptime_gt0_deg2 * 3600.0**2
+        if area_exptime_gt0_deg2 > 0:
+            args_field.frac_use = area_exptime_gt0_unmasked_deg2 / area_exptime_gt0_deg2
+        else:
+            args_field.frac_use = 1.0
+    return args_field
+
+def _get_cosmos_corr_functions(args_field):
+    '''Use COSMOS correction as fallback correction for combo Veff.'''
+    if not args_field.corr:
+        return None, None
+    corr_file = f'CorrFull{args_field.filt_name}COSMOS_delz{args_field.del_red*1.5:0.2f}_ngal2500000_var0.dat'
+    if not op.exists(corr_file):
+        return None, None
+    corrfile = Table.read(corr_file, format='ascii')
+    logL, corr, corre = corrfile['logL'], corrfile['Corr'], corrfile['CorrErr']
+    cond = np.logical_and(np.isfinite(corr), np.isfinite(corre))
+    if np.count_nonzero(cond) == 0:
+        return None, None
+    corrf = interp1d(logL[cond], corr[cond], kind='linear', bounds_error=False, fill_value=(corr[cond][0], corr[cond][-1]))
+    corref = interp1d(logL[cond], corre[cond], kind='linear', bounds_error=False, fill_value=(corre[cond][0], corre[cond][-1]))
+    return corrf, corref
+
+def _get_field_corr_functions(args_field):
+    '''Load correction function for a specific field (if available).'''
+    if not args_field.corr:
+        return None, None
+    fname = args_field.field_name.lower()
+    if fname == 'cosmos':
+        token = 'COSMOS'
+    elif 'xmm' in fname:
+        token = 'XMMLSS'
+    elif 'shela_p12' in fname:
+        token = 'SHELA_P12'
+    elif 'shela_p56' in fname:
+        token = 'SHELA_P56'
+    elif 'shela_p78' in fname:
+        token = 'SHELA_P78'
+    else:
+        token = args_field.field_name.upper()
+    corr_file = f'CorrFull{args_field.filt_name}{token}_delz{args_field.del_red*1.5:0.2f}_ngal2500000_var0.dat'
+    if not op.exists(corr_file):
+        return None, None
+    corrfile = Table.read(corr_file, format='ascii')
+    logL, corr, corre = corrfile['logL'], corrfile['Corr'], corrfile['CorrErr']
+    cond = np.logical_and(np.isfinite(corr), np.isfinite(corre))
+    if np.count_nonzero(cond) == 0:
+        return None, None
+    corrf = interp1d(logL[cond], corr[cond], kind='linear', bounds_error=False, fill_value=(corr[cond][0], corr[cond][-1]))
+    corref = interp1d(logL[cond], corre[cond], kind='linear', bounds_error=False, fill_value=(corre[cond][0], corre[cond][-1]))
+    return corrf, corref
+
+def _plot_combo_veff_debug(constituents, master, outname):
+    '''Debug plot: combined Veff versus constituent field Veff curves.'''
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.set_yscale('log')
+    ax.set_xlabel(r"$\log$ L (erg s$^{-1}$)")
+    ax.set_ylabel(r"$\phi_{\rm{true}}$ (Mpc$^{-3}$ dex$^{-1}$)")
+
+    # Plot constituent fields
+    for j, (label, Lavg, lfbinorig, var) in enumerate(constituents):
+        col = f'C{j % 10}'
+        cond = lfbinorig > 0
+        ax.errorbar(
+            Lavg[cond],
+            lfbinorig[cond],
+            yerr=np.sqrt(var[cond]),
+            fmt='o',
+            ms=4,
+            color=col,
+            alpha=0.65,
+            label=label
+        )
+
+    # Plot combined result
+    condc = master.lfbinorig > 0
+    ax.errorbar(
+        master.Lavg[condc],
+        master.lfbinorig[condc],
+        yerr=np.sqrt(master.var[condc]),
+        fmt='ks',
+        ms=5,
+        label='combined'
+    )
+    ax.legend(loc='best', frameon=False, fontsize='small')
+    fig.tight_layout()
+    fig.savefig(outname, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+
+def runFieldCombo(args=None):
+    '''Combine all fields for one filter for both MCMC and Veff pathways.'''
+    if args is None: args = parse_args()
+
+    # Match main() output naming convention, but mark as combined-fields run.
+    if args.err_corr: ecnum = 1
+    elif args.trans_only: ecnum = 2
+    elif args.norm_only: ecnum = 3
+    else: ecnum = 0
+    dir_name_first = 'LFMCMCOdin'
+    output_filename = f'ODIN_fsa{args.fix_sch_al}_sa{args.sch_al:0.2f}_ml{args.lum_min}_ll{args.lum_lim}_ec{ecnum}_contam_{args.contam_lim}_cb{args.contambin}{args.extra_text}_combofields'
+    if args.top_hat: output_filename += '_th'
+    if args.num_err>=0: output_filename += f'_{args.num_err}'
+    dir_name = op.join(dir_name_first, output_filename)
+    mkpath(dir_name)
+
+    # Read all fields once.
+    field_cfgs = _combo_field_configs(args.filt_name)
+    field_payloads = []
+    for cfg in field_cfgs:
+        a = copy.deepcopy(args)
+        a.field_name = cfg['field_name']
+        a.filename = cfg['filename']
+        a.extra_text = cfg['extra_text']
+        # Match parse_args() field-dependent aperture correction behavior.
+        if a.field_name.lower() != 'cosmos':
+            a.aper_corr = 0.0
+        a.interp_name = f'{a.field_name.lower()}_completeness_{a.filt_name.lower()}_grid_extrap.pickle'
+        if 'shela' in a.field_name.lower():
+            a.interp_name_r1 = a.interp_name.replace('.pickle', '_region1.pickle')
+            a.interp_name_r2 = a.interp_name.replace('.pickle', '_region2.pickle')
+        a = _field_specific_geometry(a)
+        payload = read_input_file(a)
+        field_payloads.append((a, payload))
+
+    n_bins = len(field_payloads[0][1][0])
+    for a, payload in field_payloads:
+        if len(payload[0]) != n_bins:
+            raise ValueError('All fields must have same number of environment bins in combo mode.')
+
+    for i in range(n_bins):
+        models = []
+        for a, payload in field_payloads:
+            flux, flux_e, lum, lum_e, dist, interp_comp, interp_comp_simp_orig, interp_comp_simp, dist_orig, comps, dens_vals, dens, flux_lim, weights, cgscontam, cf, density_frac, nb, nb_e, comp_region, interp_comp_simp2, frac1, frac2, omega0 = payload
+            alls_file_name = f'Likes_alls_field{a.field_name}_z{a.redshift}_ml{a.lum_min}_ll{a.lum_lim}_env{a.environment}_neb{len(flux)}_bin{i}_contam_{a.contam_lim}_cb{a.contambin}{a.extra_text}.pickle'
+            vgal_file_name = f'Likes_vgal_field{a.field_name}_z{a.redshift}_ml{a.lum_min}_contam_{a.contam_lim}_cb{a.contambin}{a.extra_text}.pickle'
+            beta = getContCorr(flux[i], flux_e[i], nb[i], nb_e[i], filter=a.filt_name, extra_text=a.extra_text)
+            minlum = a.lum_min if a.lum_min>0 else None
+            logL_width_i = 0.5 if i==1 else a.logL_width
+            # SHELA omega0 is already computed from unmasked effective area;
+            # do not apply an additional mask fraction factor.
+            frac_use_i = 1.0 if 'shela' in a.field_name.lower() else a.frac_use
+            corrf_i, corref_i = _get_field_corr_functions(a)
+            LFmod = LumFuncMCMC(a.redshift, del_red=a.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=a.line_name, line_plot_name=a.line_plot_name, Omega_0=omega0[i], nbins=a.nbins, nboot=a.nboot, sch_al=a.sch_al, sch_al_lims=a.sch_al_lims, Lstar=a.Lstar, Lstar_lims=a.Lstar_lims, phistar=a.phistar, phistar_lims=a.phistar_lims, Lc=a.Lc, Lh=a.Lh, nwalkers=a.nwalkers, nsteps=a.nsteps, fix_sch_al=a.fix_sch_al, min_comp_frac=a.min_comp_frac, field_name=a.field_name, diff_rand=not a.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], interp_comp_simp2=interp_comp_simp2[i], comp_region=comp_region[i], dist_orig=dist_orig[i], dist=dist[i], maglow=a.maglow, maghigh=a.maghigh, comps=comps[i], wav_filt=a.wav_filt, filt_width=a.filt_width, wav_rest=a.wav_rest, err_corr=a.err_corr, trans_only=a.trans_only, norm_only=a.norm_only, trans_file=a.trans_file, corrf=corrf_i, corref=corref_i, flux_lim=flux_lim[i], logL_width=logL_width_i, T_EL=a.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=a.contam_lim, contambin=a.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=a.varying, density_frac=density_frac[i], aper_corr=a.aper_corr, beta=beta, extra_text=a.extra_text, minlum=minlum, transsim=a.veff_only, frac_use=frac_use_i, frac1=frac1[i], frac2=frac2[i])
+            models.append(LFmod)
+
+        master = models[0]
+        if args.veff_only:
+            lums, phis = np.zeros(0), np.zeros(0)
+            vol_weights = []
+            corr_pairs = []
+            debug_rows = []
+            omega_combo = np.zeros(0)
+            constituent_curves = []
+            for m, (a_field, _) in zip(models, field_payloads):
+                # Compute per-field phifunc for combo assembly.
+                m.VeffLF(varying=args.varying, combo=True)
+                # For debug constituent curves, mirror single-field behavior.
+                cf_i, cfe_i = m.corrf, m.corref
+                m.VeffLF(varying=args.varying)
+                constituent_curves.append((a_field.field_name, m.Lavg.copy(), m.lfbinorig.copy(), m.var.copy()))
+                # Per-field scalar effective volume term for combo weighting.
+                vol_i = m.volume * m.Omega_0_sr * m.frac_use * m.weight
+                vol_weights.append(max(float(vol_i), 0.0))
+                corr_pairs.append((cf_i, cfe_i))
+                lums, phis = np.concatenate((lums, m.lum)), np.concatenate((phis, m.phifunc))
+                debug_rows.append((a_field.field_name, m.N, float(m.Omega_0), float(m.volume), float(m.frac_use), float(m.weight), float(vol_i), m.lum.size))
+                if m.lum.size > 0:
+                    print(f'[combo veff]   {a_field.field_name} lum      min/med/max = {np.min(m.lum):0.6e} / {np.median(m.lum):0.6e} / {np.max(m.lum):0.6e}; sum={np.sum(m.lum):0.6e}')
+                if m.comps is not None and np.size(m.comps) > 0:
+                    print(f'[combo veff]   {a_field.field_name} comps    min/med/max = {np.min(m.comps):0.6e} / {np.median(m.comps):0.6e} / {np.max(m.comps):0.6e}; sum={np.sum(m.comps):0.6e}')
+                if m.Omega_arr.size > 0:
+                    print(f'[combo veff]   {a_field.field_name} Omega_arr min/med/max = {np.min(m.Omega_arr):0.6e} / {np.median(m.Omega_arr):0.6e} / {np.max(m.Omega_arr):0.6e}')
+                if m.phifunc.size > 0:
+                    print(f'[combo veff]   {a_field.field_name} phifunc   min/med/max = {np.min(m.phifunc):0.6e} / {np.median(m.phifunc):0.6e} / {np.max(m.phifunc):0.6e}')
+            vol_weights = np.array(vol_weights, dtype=float)
+            sum_vol = vol_weights.sum()
+            print(f'[combo veff] bin={i+1}, varying={args.varying}, total_objects={lums.size}, total_volume={sum_vol:0.6e}')
+            for fld, nobj, om0, vol, fuse, wt, voli, nlum in debug_rows:
+                print(f'[combo veff]   field={fld:10s} N={nobj:5d} lumN={nlum:5d} Omega_0={om0:0.6e} volume={vol:0.6e} frac_use={fuse:0.6f} weight={wt:0.6f} vol_eff={voli:0.6e}')
+
+            # Rescale per-field contribution by v_i / v_tot (equivalent to Omega_arr * v_tot/v_i).
+            if sum_vol > 0:
+                lums_scaled, phis_scaled = np.zeros(0), np.zeros(0)
+                for m, v_i in zip(models, vol_weights):
+                    if v_i <= 0:
+                        scale = 0.0
+                        omega_i = m.Omega_arr
+                    else:
+                        scale = v_i / sum_vol
+                        omega_i = m.Omega_arr * (sum_vol / v_i)
+                    omega_combo = np.concatenate((omega_combo, omega_i))
+                    lums_scaled = np.concatenate((lums_scaled, m.lum))
+                    phis_scaled = np.concatenate((phis_scaled, m.phifunc * scale))
+                lums, phis = lums_scaled, phis_scaled
+            else:
+                omega_combo = np.concatenate([m.Omega_arr for m in models]) if len(models) else np.zeros(0)
+
+            if omega_combo.size > 0:
+                print(f'[combo veff]   Omega_arr min/med/max = {np.min(omega_combo):0.6e} / {np.median(omega_combo):0.6e} / {np.max(omega_combo):0.6e}')
+
+            # Correction: weighted field correction if available; else COSMOS fallback.
+            valid_pairs = [(w, cp[0], cp[1]) for w, cp in zip(vol_weights, corr_pairs) if cp[0] is not None and cp[1] is not None]
+            if valid_pairs:
+                wsum = np.sum([v[0] for v in valid_pairs])
+                if wsum <= 0: wsum = 1.0
+                def corrf_combo(x):
+                    xv = np.asarray(x)
+                    out = np.zeros_like(xv, dtype=float)
+                    for w, cf_i, _ in valid_pairs:
+                        out += (w/wsum) * cf_i(xv)
+                    return out
+                def corref_combo(x):
+                    xv = np.asarray(x)
+                    out2 = np.zeros_like(xv, dtype=float)
+                    for w, _, cfe_i in valid_pairs:
+                        out2 += ((w/wsum) * cfe_i(xv))**2
+                    return np.sqrt(out2)
+                master.corrf, master.corref = corrf_combo, corref_combo
+            else:
+                master.corrf, master.corref = _get_cosmos_corr_functions(field_payloads[0][0])
+            master.VeffLF(varying=args.varying, phifunc=phis, lum=lums)
+            if master.phifunc.size > 0:
+                print(f'[combo veff]   phifunc min/med/max = {np.min(master.phifunc):0.6e} / {np.median(master.phifunc):0.6e} / {np.max(master.phifunc):0.6e}')
+            master.plotVeff('%s/%s_Veff_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), imgtype = args.output_dict['image format'], varying=args.varying, recompute=False)
+            dbg_name = '%s/%s_VeffDebug_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.png' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr)
+            _plot_combo_veff_debug(constituent_curves, master, dbg_name)
+            if args.output_dict['VeffLF']:
+                T = Table([master.Lavg, master.lfbinorig, np.sqrt(master.var)], names=['Luminosity', 'BinLF', 'BinLFErr'])
+                T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), overwrite=True, format='ascii.fixed_width_two_line')
+            continue
+
+        master.likeallsf_list = [m.likeallsf for m in models]
+        master.vgalf_list = [m.vgalf for m in models]
+        master.N_list = [m.N for m in models]
+        master.frac_use_list = [m.frac_use for m in models]
+        master.weight_list = [m.weight for m in models]
+        master.N = int(np.sum(master.N_list))
+
+        # Build output products analogous to main().
+        names = master.get_param_names()
+        percentiles = args.param_percentiles
+        labels = ['Line'] + [name + '_%02d' % per for name in names for per in percentiles]
+        formats = {label: '%0.3f' for label in labels}
+        formats['Line'] = '%s'
+        master.table = Table(names=labels, dtype=['S10'] + ['f8']*(len(labels)-1))
+        master.fit_model()
+
+        if args.output_dict['triangle plot']:
+            master.triangle_plot('%s/%s_triangle_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), imgtype=args.output_dict['image format'])
+        else:
+            master.set_median_fit()
+        names.append('Ln Prob')
+        if args.output_dict['fitposterior']:
+            T = Table(master.samples, names=names)
+            T.write('%s/%s_fitposterior_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1), overwrite=True, format='ascii.fixed_width_two_line')
+        if args.output_dict['bestfitLF']:
+            T = Table([master.lum, master.lum_e, master.medianLF], names=['Luminosity', 'Luminosity_Err', 'MedianLF'])
+            T.write('%s/%s_bestfitLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1), overwrite=True, format='ascii.fixed_width_two_line')
+        if args.output_dict['VeffLF']:
+            T = Table([master.Lavg, master.lfbinorig, np.sqrt(master.var)], names=['Luminosity', 'BinLF', 'BinLFErr'])
+            T.write('%s/%s_VeffLF_%s_nb%d_nw%d_ns%d_ml%0.2f_ec_%d_env%d_bin%d_c%d.dat' % (dir_name, args.output_name, output_filename, args.nbins, args.nwalkers, args.nsteps, args.lum_min, ecnum, args.environment, i+1, args.corr), overwrite=True, format='ascii.fixed_width_two_line')
+        master.table.add_row([args.line_name] + [0.]*(len(labels)-1))
+        master.add_fitinfo_to_table(percentiles)
+        if args.output_dict['parameters']:
+            master.table.write('%s/%s_%s_env%d_bin%d.dat' %(dir_name, args.output_name, output_filename, args.environment, i+1), format='ascii.fixed_width_two_line', formats=formats, overwrite=True)
+        if args.output_dict['settings']:
+            filename = open('%s/%s_%s_env%d_bin%d.dat.args' %(dir_name, args.output_name, output_filename, args.environment, i+1), 'w')
+            try: del args.log
+            except: pass
+            filename.write(str(vars(args)))
+            filename.close()
+
 def main(args=None):
     """ Read input file, run luminosity function routine, and create the appropriate output """
     # Get Inputs
@@ -752,6 +1048,15 @@ def main(args=None):
         # Initialize LumFuncMCMC class
         LFmod = LumFuncMCMC(args.redshift, del_red = args.del_red, flux=flux[i], flux_e=flux_e[i], nb=nb[i], nb_e=nb_e[i], lum=lum, lum_e=lum_e, line_name=args.line_name, line_plot_name=args.line_plot_name, Omega_0=omega0[i],nbins=args.nbins, nboot=args.nboot, sch_al=args.sch_al, sch_al_lims=args.sch_al_lims, Lstar=args.Lstar, Lstar_lims=args.Lstar_lims, phistar=args.phistar, phistar_lims=args.phistar_lims, Lc=args.Lc, Lh=args.Lh, nwalkers=args.nwalkers, nsteps=args.nsteps, fix_sch_al=args.fix_sch_al, min_comp_frac=args.min_comp_frac, field_name=args.field_name, diff_rand=not args.same_rand, interp_comp=interp_comp, interp_comp_simp=interp_comp_simp[i], interp_comp_simp2=interp_comp_simp2[i], comp_region=comp_region[i], dist_orig=dist_orig[i], dist=dist[i], maglow=args.maglow, maghigh=args.maghigh, comps=comps[i], wav_filt=args.wav_filt, filt_width=args.filt_width, wav_rest=args.wav_rest, err_corr=args.err_corr, trans_only=args.trans_only, norm_only=args.norm_only, trans_file=args.trans_file, corrf=corrf, corref=corref, flux_lim=flux_lim[i], logL_width=args.logL_width, T_EL=args.T_EL, alls_file_name=alls_file_name, vgal_file_name=vgal_file_name, weight=weights[i], contam_lim=args.contam_lim, contambin=args.contambin, cgscontam=cgscontam[i], interp_comp_simp_orig=interp_comp_simp_orig[i], cf=cf[i], varying=args.varying, density_frac=density_frac[i], aper_corr=args.aper_corr, beta=beta, extra_text=args.extra_text, minlum=minlum, transsim=args.veff_only, frac_use=args.frac_use, frac1=frac1[i], frac2=frac2[i])
         print("Initialized LumFuncMCMC class")
+        if args.veff_only:
+            vol_eff_dbg = LFmod.volume * LFmod.Omega_0_sr * LFmod.frac_use * LFmod.weight
+            print(f'[main veff]   field={args.field_name:10s} bin={i+1} N={LFmod.N:5d} lumN={LFmod.lum.size:5d} Omega_0={LFmod.Omega_0:0.6e} volume={LFmod.volume:0.6e} frac_use={LFmod.frac_use:0.6f} weight={LFmod.weight:0.6f} vol_eff={vol_eff_dbg:0.6e}')
+            if LFmod.lum.size > 0:
+                print(f'[main veff]   {args.field_name} lum      min/med/max = {np.min(LFmod.lum):0.6e} / {np.median(LFmod.lum):0.6e} / {np.max(LFmod.lum):0.6e}; sum={np.sum(LFmod.lum):0.6e}')
+            if LFmod.comps is not None and np.size(LFmod.comps) > 0:
+                print(f'[main veff]   {args.field_name} comps    min/med/max = {np.min(LFmod.comps):0.6e} / {np.median(LFmod.comps):0.6e} / {np.max(LFmod.comps):0.6e}; sum={np.sum(LFmod.comps):0.6e}')
+            if LFmod.Omega_arr.size > 0:
+                print(f'[main veff]   {args.field_name} Omega_arr min/med/max = {np.min(LFmod.Omega_arr):0.6e} / {np.median(LFmod.Omega_arr):0.6e} / {np.max(LFmod.Omega_arr):0.6e}')
         _ = LFmod.get_params()
 
         if args.alls:
@@ -886,6 +1191,6 @@ def main(args=None):
 
 if __name__ == '__main__':
     args = parse_args()
-    if args.combo: getVeffCombo(args=args)
+    if args.combo: runFieldCombo(args=args)
     else: main(args=args)
     # test_funcs()

@@ -8,7 +8,7 @@ nboot = 100 #Number of bootstrap experiments for determining error for V/V_max c
 line_name="Lya"
 line_plot_name=r'${\rm{Ly\alpha}}$'
 Omega_0_sqarcmin = 36000.0 #Total area of survey in arcmin^2
-frac_use = 1.0 #Fraction of survey area actually usable for science
+frac_use = 0.9 #Fraction of survey area actually usable for science
 conv_minsec = 3600 #Sq arcmin to Sq arcsec
 Omega_0 = Omega_0_sqarcmin*conv_minsec #Effective survey area in arcsec^2
 

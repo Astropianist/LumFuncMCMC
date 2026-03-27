@@ -704,29 +704,51 @@ def plotDiffFieldsProto(filter='N501', Lmin=42.0, Lmax=43.5, Lnum=1001, fits_env
         raise ValueError('fits_env0 and field_names are required')
     if len(fits_env0) != len(field_names):
         raise ValueError('fits_env0 and field_names must have the same length')
-    fig, ax = plt.subplots()
-    add_LumFunc_plot(ax)
+    fig, ax = plt.subplots(
+        nrows=2,
+        ncols=1,
+        sharex=True,
+        figsize=(8, 8),
+        height_ratios=[0.5, 0.5]
+    )
+    add_LumFunc_plot(ax[0], ax2=ax[1])
+    ax[1].set_ylabel(r'$\phi_{\rm PC}/\phi_{\rm field}$')
+    ax[1].set_ylim(0.0, 6.0)
+    ax[1].axhline(1.0, color='k', linestyle='--', linewidth=1.0, alpha=0.7)
     for i, (env0_path, fnlabel) in enumerate(zip(fits_env0, field_names)):
         path_field, path_pc = resolve_proto_fit_pair_from_env0(env0_path)
         col = orig_palette_arr[i % len(orig_palette_arr)]
-        for lfpath, linestyle, role in (
-            (path_field, ':', 'field'),
-            (path_pc, '-', 'PC'),
-        ):
-            dat = Table.read(lfpath, format='ascii')
-            samp = np.lib.recfunctions.structured_to_unstructured(dat.as_array())
-            del dat
-            nsamples = getnsamples(samp)
-            lf, lfbest = getSamples(logL, nsamples, sa=sa)
-            ax.plot(logL, lfbest, linestyle=linestyle, color=col, label=f'{fnlabel} ({role})')
-            for lfi in lf:
-                ax.plot(logL, lfi, linestyle=linestyle, color=col, alpha=0.05, label='')
-    ax.set_xlim(Lmin, Lmax)
-    ax.set_ylim(1.0e-6, 3.0e-2)
-    ax.legend(loc='best', frameon=False, fontsize='small')
+        dat_field = Table.read(path_field, format='ascii')
+        samp_field = np.lib.recfunctions.structured_to_unstructured(dat_field.as_array())
+        del dat_field
+        dat_pc = Table.read(path_pc, format='ascii')
+        samp_pc = np.lib.recfunctions.structured_to_unstructured(dat_pc.as_array())
+        del dat_pc
+
+        ns_field = getnsamples(samp_field)
+        ns_pc = getnsamples(samp_pc)
+        lf_field, lfbest_field = getSamples(logL, ns_field, sa=sa)
+        lf_pc, lfbest_pc = getSamples(logL, ns_pc, sa=sa)
+
+        ax[0].plot(logL, lfbest_field, linestyle=':', color=col, label=f'{fnlabel} (field)')
+        ax[0].plot(logL, lfbest_pc, linestyle='-', color=col, label=f'{fnlabel} (PC)')
+        for lff, lfp in zip(lf_field[:75], lf_pc[:75]):
+            ax[0].plot(logL, lff, linestyle=':', color=col, alpha=0.05, label='')
+            ax[0].plot(logL, lfp, linestyle='-', color=col, alpha=0.05, label='')
+            ratio_i = np.divide(lfp, lff, out=np.full_like(lfp, np.nan), where=lff>0)
+            ax[1].plot(logL, ratio_i, linestyle='-', color=col, alpha=0.05, label='')
+
+        ratio_best = np.divide(lfbest_pc, lfbest_field, out=np.full_like(lfbest_pc, np.nan), where=lfbest_field>0)
+        ax[1].plot(logL, ratio_best, linestyle='-', color=col, label=fnlabel)
+
+    ax[0].set_xlim(Lmin, Lmax)
+    ax[0].set_ylim(1.0e-6, 3.0e-2)
+    ax[0].legend(loc='best', frameon=False, fontsize='x-small', ncol=2)
+    ax[1].legend(loc='best', frameon=False, fontsize='small')
     if out_name is None:
         name_stub = '_'.join([fi.replace(' ', '-') for fi in field_names])
         out_name = f'LFCompProto_{name_stub}_{filter}.png'
+    plt.subplots_adjust(hspace=0.04)
     fig.savefig(out_name, bbox_inches='tight', dpi=300)
     plt.close('all')
 
@@ -774,4 +796,4 @@ if __name__ == '__main__':
     # plotMultVeff('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata/N501_new_trial_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10newdata_nb50_nw200_ns4000_mcf50_ec_2_env0_bin1_c1.dat', 'LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew/N501_new_all_VeffLF_ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10corrsnew_nb50_nw150_ns3000_mcf50_ec_2_env0_bin1_c1.dat')
     # plotLumFuncCombo('LFMCMCOdin/ODIN_fsa0_sa-1.49_mcf50_ll45.0_ec2_contam_0.5_cb10lumminnv')
     # getDiffFields(filter='N419')
-    getDiffFieldsProto(filter='N673')
+    getDiffFieldsProto(filter='N419')

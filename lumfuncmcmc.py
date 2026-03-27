@@ -1197,6 +1197,20 @@ class LumFuncMCMC:
     
     def lnlike_trans_v2(self):
         ''' Version of ln likelihood used for our analysis '''
+        # Combined-field mode: sum shape terms and expected counts across fields.
+        if hasattr(self, 'likeallsf_list') and self.likeallsf_list is not None:
+            like_alls = 0.0
+            num_tot = 0.0
+            for i, lf_i in enumerate(self.likeallsf_list):
+                vg_i = self.vgalf_list[i].ev(self.sch_al, self.Lstar)
+                frac_i = self.frac_use_list[i]
+                wt_i = self.weight_list[i]
+                like_alls += lf_i.ev(self.sch_al, self.Lstar)
+                num_tot += 10**self.phistar * frac_i * vg_i * wt_i
+            n_tot = np.sum(self.N_list) if hasattr(self, 'N_list') else self.N
+            like_phi = poisson_lnpmf(n_tot, int(num_tot))
+            return like_alls + like_phi
+
         like_alls = self.likeallsf.ev(self.sch_al, self.Lstar)
         vgals = self.vgalf.ev(self.sch_al, self.Lstar)
         num = 10**self.phistar * self.frac_use * vgals * self.weight
@@ -1459,9 +1473,11 @@ class LumFuncMCMC:
         for lh in leg.legend_handles:
             lh.set_alpha(1)
 
-    def plotVeff(self, outname, imgtype='png', varying=False):
+    def plotVeff(self, outname, imgtype='png', varying=False, recompute=True):
         ''' Plot V/V_max method results'''
-        self.VeffLF(varying=varying)
+        if recompute or not hasattr(self, 'lfbinorig'):
+            self.VeffLF(varying=varying)
+        if not hasattr(self, 'nfreeparams'): self.nfreeparams = 3
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         self.VeffPlotCommands(ax)
