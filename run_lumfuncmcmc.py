@@ -820,6 +820,9 @@ def runFieldCombo(args=None):
     if args.num_err>=0: output_filename += f'_{args.num_err}'
     dir_name = op.join(dir_name_first, output_filename)
     mkpath(dir_name)
+    if args.environment:
+        dir_name = op.join(dir_name, str(args.num_env_bins))
+        mkpath(dir_name)
 
     # Read all fields once.
     field_cfgs = _combo_field_configs(args.filt_name)

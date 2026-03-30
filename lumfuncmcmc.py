@@ -614,6 +614,8 @@ class LumFuncMCMC:
         self.T_EL, self.weight = T_EL, weight
         self.varying, self.extra_text = varying, extra_text
         self.aper_corr, self.beta = aper_corr, beta
+        if self.fix_sch_al: self.nfreeparams = 2
+        else: self.nfreeparams = 3
         
         self.setDLdVdz()
         print("Finished DL, dVdz")
@@ -1477,7 +1479,6 @@ class LumFuncMCMC:
         ''' Plot V/V_max method results'''
         if recompute or not hasattr(self, 'lfbinorig'):
             self.VeffLF(varying=varying)
-        if not hasattr(self, 'nfreeparams'): self.nfreeparams = 3
         fig, ax = plt.subplots()
         self.add_LumFunc_plot(ax)
         self.VeffPlotCommands(ax)
